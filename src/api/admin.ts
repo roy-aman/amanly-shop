@@ -1,0 +1,142 @@
+import { buildQuery, request } from '@/lib/http';
+import type {
+  AdminCreateUserRequest,
+  CategoryResponse,
+  ChangeUserRolesRequest,
+  CreateCategoryRequest,
+  CreateProductRequest,
+  OrderPaymentStatus,
+  OrderResponse,
+  OrderStatus,
+  OrderSummaryResponse,
+  Page,
+  ProductImageRequest,
+  ProductResponse,
+  ProductSearchParams,
+  ProductStatus,
+  ProductSummaryResponse,
+  StoreSettingsResponse,
+  UpdateCategoryRequest,
+  UpdatePaymentSettingsRequest,
+  UpdateProductRequest,
+  UpdateWhatsappSettingsRequest,
+  UserResponse,
+} from '@/lib/types';
+
+const A = '/api/v1/admin';
+
+// ── Products / inventory (ADMIN, STAFF) ───────────────────────────────
+export const adminProducts = {
+  list(params: ProductSearchParams = {}): Promise<Page<ProductSummaryResponse>> {
+    return request('GET', `${A}/products${buildQuery(params as Record<string, unknown>)}`, { auth: true });
+  },
+  get(id: string): Promise<ProductResponse> {
+    return request('GET', `${A}/products/${id}`, { auth: true });
+  },
+  create(body: CreateProductRequest): Promise<ProductResponse> {
+    return request('POST', `${A}/products`, { body, auth: true });
+  },
+  update(id: string, body: UpdateProductRequest): Promise<ProductResponse> {
+    return request('PUT', `${A}/products/${id}`, { body, auth: true });
+  },
+  changeStatus(id: string, status: ProductStatus): Promise<ProductResponse> {
+    return request('PATCH', `${A}/products/${id}/status`, { body: { status }, auth: true });
+  },
+  setStock(id: string, quantity: number): Promise<ProductResponse> {
+    return request('PATCH', `${A}/products/${id}/stock`, { body: { quantity }, auth: true });
+  },
+  addImages(id: string, images: ProductImageRequest[]): Promise<ProductResponse> {
+    return request('POST', `${A}/products/${id}/images`, { body: images, auth: true });
+  },
+  deleteImage(id: string, imageId: string): Promise<ProductResponse> {
+    return request('DELETE', `${A}/products/${id}/images/${imageId}`, { auth: true });
+  },
+  remove(id: string): Promise<void> {
+    return request('DELETE', `${A}/products/${id}`, { auth: true }); // ADMIN only
+  },
+};
+
+// ── Categories (ADMIN, STAFF; delete ADMIN only) ──────────────────────
+export const adminCategories = {
+  list(): Promise<CategoryResponse[]> {
+    return request('GET', `${A}/categories`, { auth: true });
+  },
+  create(body: CreateCategoryRequest): Promise<CategoryResponse> {
+    return request('POST', `${A}/categories`, { body, auth: true });
+  },
+  update(id: string, body: UpdateCategoryRequest): Promise<CategoryResponse> {
+    return request('PUT', `${A}/categories/${id}`, { body, auth: true });
+  },
+  remove(id: string): Promise<void> {
+    return request('DELETE', `${A}/categories/${id}`, { auth: true });
+  },
+};
+
+// ── Orders (ADMIN, STAFF) ─────────────────────────────────────────────
+export interface AdminOrderListParams {
+  page?: number;
+  size?: number;
+  sort?: string;
+  status?: OrderStatus;
+  paymentStatus?: OrderPaymentStatus;
+  userId?: string;
+  dateFrom?: string; // ISO date (yyyy-MM-dd)
+  dateTo?: string; // ISO date (yyyy-MM-dd), inclusive
+  search?: string;
+}
+
+export const adminOrders = {
+  list(params: AdminOrderListParams = {}): Promise<Page<OrderSummaryResponse>> {
+    return request('GET', `${A}/orders${buildQuery(params as Record<string, unknown>)}`, { auth: true });
+  },
+  get(id: string): Promise<OrderResponse> {
+    return request('GET', `${A}/orders/${id}`, { auth: true });
+  },
+  updateStatus(id: string, status: OrderStatus): Promise<OrderResponse> {
+    return request('PATCH', `${A}/orders/${id}/status`, { body: { status }, auth: true });
+  },
+  updatePaymentStatus(id: string, paymentStatus: OrderPaymentStatus): Promise<OrderResponse> {
+    return request('PATCH', `${A}/orders/${id}/payment-status`, { body: { paymentStatus }, auth: true });
+  },
+};
+
+// ── Users / teams (ADMIN only) ────────────────────────────────────────
+export const adminUsers = {
+  list(params: { search?: string; page?: number; size?: number; sort?: string } = {}): Promise<Page<UserResponse>> {
+    return request('GET', `${A}/users${buildQuery(params)}`, { auth: true });
+  },
+  get(id: string): Promise<UserResponse> {
+    return request('GET', `${A}/users/${id}`, { auth: true });
+  },
+  create(body: AdminCreateUserRequest): Promise<UserResponse> {
+    return request('POST', `${A}/users`, { body, auth: true });
+  },
+  changeRoles(id: string, roles: ChangeUserRolesRequest['roles']): Promise<UserResponse> {
+    return request('PATCH', `${A}/users/${id}/roles`, { body: { roles }, auth: true });
+  },
+  lock(id: string, reason?: string): Promise<UserResponse> {
+    return request('PATCH', `${A}/users/${id}/lock`, { body: { reason: reason ?? null }, auth: true });
+  },
+  unlock(id: string): Promise<UserResponse> {
+    return request('PATCH', `${A}/users/${id}/unlock`, { auth: true });
+  },
+  enable(id: string): Promise<UserResponse> {
+    return request('PATCH', `${A}/users/${id}/enable`, { auth: true });
+  },
+  disable(id: string, reason?: string): Promise<UserResponse> {
+    return request('PATCH', `${A}/users/${id}/disable`, { body: { reason: reason ?? null }, auth: true });
+  },
+};
+
+// ── Store settings (ADMIN only) ───────────────────────────────────────
+export const adminStore = {
+  get(): Promise<StoreSettingsResponse> {
+    return request('GET', `${A}/store`, { auth: true });
+  },
+  updatePayment(body: UpdatePaymentSettingsRequest): Promise<StoreSettingsResponse> {
+    return request('PUT', `${A}/store/payment-settings`, { body, auth: true });
+  },
+  updateWhatsapp(body: UpdateWhatsappSettingsRequest): Promise<StoreSettingsResponse> {
+    return request('PUT', `${A}/store/whatsapp-settings`, { body, auth: true });
+  },
+};
