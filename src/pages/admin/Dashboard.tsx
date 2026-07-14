@@ -15,7 +15,8 @@ import { adminOrders, adminProducts, adminUsers } from '@/api/admin';
 import type { OrderSummaryResponse } from '@/lib/types';
 import { formatDate, money } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
-import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui';
+import { Card, EmptyState, PageHeader } from '@/components/ui';
+import { DashboardSkeleton } from '@/components/RouteSkeletons';
 import { OrderStatusBadge } from '@/components/StatusBadge';
 import StatCard from '@/components/admin/StatCard';
 
@@ -62,7 +63,7 @@ export default function Dashboard() {
   const chartData = useMemo(() => groupByDay(orders), [orders]);
   const recentOrders = orders.slice(0, 8);
 
-  if (ordersQ.isLoading || productsQ.isLoading) return <PageLoader />;
+  if (ordersQ.isLoading || productsQ.isLoading) return <DashboardSkeleton />;
 
   return (
     <div>

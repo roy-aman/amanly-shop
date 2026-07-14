@@ -6,6 +6,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import { ToastProvider } from '@/context/ToastContext';
 import { TooltipProvider } from '@/components/ui';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import App from './App';
 import './index.css';
 
@@ -27,7 +28,9 @@ createRoot(document.getElementById('root')!).render(
           <AuthProvider>
             <CartProvider>
               <TooltipProvider>
-                <App />
+                <ErrorBoundary>
+                  <App />
+                </ErrorBoundary>
               </TooltipProvider>
             </CartProvider>
           </AuthProvider>

@@ -7,7 +7,9 @@ import { ApiError } from '@/lib/http';
 import type { OrderPaymentStatus, OrderStatus } from '@/lib/types';
 import { formatDateTime, money, titleCase } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, EmptyState, Modal, PageHeader, PageLoader } from '@/components/ui';
+import { Button, Card, EmptyState, Modal, PageHeader } from '@/components/ui';
+import { DetailSkeleton } from '@/components/RouteSkeletons';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 
 const NEXT_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -57,7 +59,9 @@ export default function AdminOrderDetail() {
     },
   });
 
-  if (isLoading) return <PageLoader />;
+  useDocumentTitle(order ? `Order #${order.id.slice(0, 8)}` : 'Order');
+
+  if (isLoading) return <DetailSkeleton />;
   if (isError || !order) {
     return (
       <EmptyState

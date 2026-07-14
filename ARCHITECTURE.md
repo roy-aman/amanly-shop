@@ -130,6 +130,36 @@ New deps: `@radix-ui/react-{tabs,dropdown-menu,tooltip,dialog,accordion,alert-di
 ### `@/components/guards`
 `RequireAuth`, `RequireStaff` (STAFF|ADMIN), `RequireAdmin` — used as route elements wrapping `<Outlet/>`.
 
+### App-wide UX infrastructure (WP-1.4)
+Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reuse these on every new page.
+
+- **Code splitting:** *every* page is `React.lazy`-loaded (storefront, auth, admin). Each route element is
+  wrapped by a small `Page` helper in `App.tsx` that provides the `<Suspense>` boundary and an optional
+  per-route document title. New pages: add a `lazy(() => import(...))` + a `<Route element={<Page …>}>`.
+- **`@/components/RouteSkeletons`** — page-shaped `<Suspense>`/loading fallbacks built from the WP-1.2
+  `Skeleton*` primitives: `StoreListSkeleton`, `ProductDetailSkeleton`, `ListSkeleton` (`{action?,rows?}`),
+  `DetailSkeleton`, `FormSkeleton` (`{fields?}`), `DashboardSkeleton`, `AuthFormSkeleton`, plus the pieces
+  `PageHeaderSkeleton`, `ProductGridSkeleton` (`{count?}`), `RowsSkeleton` (`{rows?}`), and a re-exported
+  `SkeletonTable`. Used both as the route fallback (matched to page type) **and** the in-page data-loading
+  branch — pages that keep their own header/filters swap only the body (`SkeletonTable`/`RowsSkeleton`).
+- **`@/lib/useDocumentTitle`** — `useDocumentTitle(title?)` sets `document.title` to `Royal Commerce — <title>`
+  (bare brand when falsy). `RouteTitle {title}` is the declarative form used for static route titles in
+  `App.tsx`; `TITLE_BASE` is the brand prefix. **Phase 2:** dynamic pages set specific titles from loaded data,
+  e.g. `useDocumentTitle(product?.name ?? 'Product')` (see ProductDetail/OrderDetail/ProductForm for the pattern).
+- **`@/components/ScrollToTop`** — mounted once in `App` above `<Routes>`. Scrolls to top on PUSH/REPLACE
+  navigations (the persistent layouts never unmount, so the browser won't); defers to native anchor behavior
+  when a `#hash` is present and lets the browser restore scroll on POP (back/forward).
+- **`@/components/ErrorBoundary`** — `ErrorBoundary` wraps `<App/>` in `main.tsx`; renders a branded 500 screen
+  (`EmptyState` + "Reload page" / "Go home") on uncaught render errors. Recovery uses a hard reload / `<a href>`
+  (not SPA nav) and does not depend on Router context. Console-logs the error (Sentry deferred to WP-7.5).
+- **`@/pages/NotFound`** — branded 404 (`EmptyState`). Used for `*` in **both** StoreLayout (also the global
+  fallback) and AdminLayout; accepts `{homeTo?, homeLabel?}` (admin passes `/admin` / "Back to dashboard").
+- **Toasts** (`ToastContext`): restyled to design-system tokens — semantic icon tint + left accent bar per kind
+  (`success/danger/warning/info`), `z-toast`, `aria-live="polite"` region with `role="alert"` for error/warning
+  and `role="status"` for success/info. The `useToast()` API (`success/error/info/warning/push`) is unchanged.
+- `LinkButton` still has **no `onClick`** (not needed by WP-1.4 — the error screen uses `Button` + a plain
+  anchor). If a future navigate-and-close pattern needs it, add it as an optional prop.
+
 ## Canonical route map (use these exact paths in all links/navigate)
 
 Store (in `StoreLayout`): `/` Home, `/products` catalog, `/products/:slug` detail, `/cart`, `/checkout`,

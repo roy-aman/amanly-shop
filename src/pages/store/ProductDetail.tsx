@@ -9,7 +9,9 @@ import { money } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
-import { Button, Badge, Card, Field, Input, PageLoader, EmptyState, LinkButton } from '@/components/ui';
+import { Button, Badge, Card, Field, Input, EmptyState, LinkButton } from '@/components/ui';
+import { ProductDetailSkeleton } from '@/components/RouteSkeletons';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
 const MAX_QTY = 20;
 
@@ -37,7 +39,9 @@ export default function ProductDetail() {
     return [...product.images].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.sortOrder - b.sortOrder);
   }, [product]);
 
-  if (productQuery.isLoading) return <PageLoader />;
+  useDocumentTitle(product?.name ?? 'Product');
+
+  if (productQuery.isLoading) return <ProductDetailSkeleton />;
 
   if (productQuery.isError) {
     const err = productQuery.error;

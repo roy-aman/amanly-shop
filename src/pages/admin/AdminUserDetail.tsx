@@ -7,7 +7,9 @@ import { ApiError } from '@/lib/http';
 import type { RoleName } from '@/lib/types';
 import { formatDateTime } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
-import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, PageLoader } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader } from '@/components/ui';
+import { DetailSkeleton } from '@/components/RouteSkeletons';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { UserStatusBadge } from '@/components/StatusBadge';
 
 const ALL_ROLES: RoleName[] = ['CUSTOMER', 'STAFF', 'ADMIN'];
@@ -87,7 +89,9 @@ export default function AdminUserDetail() {
     onError: onError('Could not reactivate user'),
   });
 
-  if (isLoading) return <PageLoader />;
+  useDocumentTitle(user?.fullName ?? 'User');
+
+  if (isLoading) return <DetailSkeleton />;
   if (isError || !user) {
     return (
       <EmptyState

@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronDown,
@@ -54,6 +54,7 @@ export default function StoreLayout() {
   const { cart, itemCount } = useCart();
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -82,7 +83,9 @@ export default function StoreLayout() {
     const q = value.trim();
     if (!q) return;
     setMobileOpen(false);
-    navigate(`/products?search=${encodeURIComponent(q)}`);
+    // The header search debounces per keystroke; replace (rather than push) while
+    // already browsing the catalog so refining a query doesn't spam the history stack.
+    navigate(`/products?search=${encodeURIComponent(q)}`, { replace: location.pathname === '/products' });
   }
 
   function submitNewsletter(e: React.FormEvent) {

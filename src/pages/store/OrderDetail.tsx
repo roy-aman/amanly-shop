@@ -7,7 +7,9 @@ import { ApiError } from '@/lib/http';
 import { money, formatDateTime, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, EmptyState, LinkButton, Modal, PageHeader, PageLoader } from '@/components/ui';
+import { Button, Card, EmptyState, LinkButton, Modal, PageHeader } from '@/components/ui';
+import { DetailSkeleton } from '@/components/RouteSkeletons';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
 export default function OrderDetail() {
   const { id = '' } = useParams();
@@ -24,6 +26,8 @@ export default function OrderDetail() {
 
   const order = orderQuery.data;
 
+  useDocumentTitle(order ? `Order #${order.id.slice(0, 8)}` : 'Order');
+
   async function handleCancel() {
     setCancelling(true);
     try {
@@ -39,7 +43,7 @@ export default function OrderDetail() {
     }
   }
 
-  if (orderQuery.isLoading) return <PageLoader />;
+  if (orderQuery.isLoading) return <DetailSkeleton />;
 
   if (orderQuery.isError || !order) {
     const err = orderQuery.error;

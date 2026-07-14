@@ -5,7 +5,8 @@ import { updateCartItem, removeCartItem, clearCart } from '@/api/cart';
 import { money } from '@/lib/format';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, EmptyState, LinkButton, PageHeader, PageLoader, Spinner } from '@/components/ui';
+import { Button, Card, EmptyState, LinkButton, PageHeader, Spinner } from '@/components/ui';
+import { ListSkeleton } from '@/components/RouteSkeletons';
 
 export default function Cart() {
   const { cart, loading, refresh } = useCart();
@@ -51,7 +52,7 @@ export default function Cart() {
     }
   }
 
-  if (loading && !cart) return <PageLoader />;
+  if (loading && !cart) return <ListSkeleton action />;
 
   const items = cart?.items ?? [];
   const currency = cart?.currency ?? 'USD';

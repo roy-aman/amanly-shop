@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Sparkles, Tag } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
 import { listCategories, listProducts } from '@/api/catalog';
-import { LinkButton, PageLoader, EmptyState } from '@/components/ui';
+import { LinkButton, EmptyState, Skeleton } from '@/components/ui';
+import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import ProductCard from '@/components/ProductCard';
 
 export default function Home() {
@@ -53,7 +54,11 @@ export default function Home() {
           </Link>
         </div>
         {categoriesQuery.isLoading ? (
-          <PageLoader />
+          <div className="flex flex-wrap gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 w-32 rounded-xl" />
+            ))}
+          </div>
         ) : categories.length === 0 ? (
           <p className="text-sm text-slate-500">No categories yet.</p>
         ) : (
@@ -81,7 +86,7 @@ export default function Home() {
           </Link>
         </div>
         {productsQuery.isLoading ? (
-          <PageLoader />
+          <ProductGridSkeleton />
         ) : products.length === 0 ? (
           <EmptyState
             title="No products yet"

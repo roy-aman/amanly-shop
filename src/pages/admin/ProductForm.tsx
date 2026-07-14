@@ -10,7 +10,9 @@ import type {
   UpdateProductRequest,
 } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, Field, Input, PageHeader, PageLoader, Select, Textarea } from '@/components/ui';
+import { Button, Card, Field, Input, PageHeader, Select, Textarea } from '@/components/ui';
+import { FormSkeleton } from '@/components/RouteSkeletons';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -117,6 +119,8 @@ export default function ProductForm() {
     });
   }, [productQ.data]);
 
+  useDocumentTitle(isEdit ? productQ.data?.name ?? 'Edit product' : 'New product');
+
   // Auto-suggest slug from name until the user edits it (create mode only).
   const suggestedSlug = useMemo(() => slugify(form.name), [form.name]);
   useEffect(() => {
@@ -205,7 +209,7 @@ export default function ProductForm() {
     }
   }
 
-  if (isEdit && productQ.isLoading) return <PageLoader />;
+  if (isEdit && productQ.isLoading) return <FormSkeleton />;
 
   const categories = categoriesQ.data ?? [];
   const saving = createMutation.isPending || updateMutation.isPending;

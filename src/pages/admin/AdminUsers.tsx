@@ -7,7 +7,7 @@ import { ApiError } from '@/lib/http';
 import type { RoleName } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
-import { Badge, Button, Card, EmptyState, Field, Input, PasswordInput, Modal, PageHeader, PageLoader, Pagination } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Field, Input, PasswordInput, Modal, PageHeader, Pagination, SkeletonTable } from '@/components/ui';
 import { UserStatusBadge } from '@/components/StatusBadge';
 
 const ALL_ROLES: RoleName[] = ['CUSTOMER', 'STAFF', 'ADMIN'];
@@ -112,7 +112,7 @@ export default function AdminUsers() {
         </div>
 
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={8} columns={6} />
         ) : isError ? (
           <EmptyState title="Could not load users" message={(error as Error)?.message} />
         ) : rows.length === 0 ? (

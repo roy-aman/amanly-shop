@@ -6,7 +6,8 @@ import { ApiError } from '@/lib/http';
 import type { CategoryResponse, CreateCategoryRequest, UpdateCategoryRequest } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, PageLoader, Select, Textarea } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea } from '@/components/ui';
+import { RowsSkeleton } from '@/components/RouteSkeletons';
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -134,7 +135,7 @@ export default function Categories() {
 
       <Card className="p-4">
         {isLoading ? (
-          <PageLoader />
+          <RowsSkeleton rows={6} />
         ) : isError ? (
           <EmptyState title="Could not load categories" message={(error as Error)?.message} />
         ) : ordered.length === 0 ? (

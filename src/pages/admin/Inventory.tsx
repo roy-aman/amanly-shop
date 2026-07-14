@@ -17,9 +17,9 @@ import {
   LinkButton,
   Modal,
   PageHeader,
-  PageLoader,
   Pagination,
   Select,
+  SkeletonTable,
 } from '@/components/ui';
 import { ProductStatusBadge } from '@/components/StatusBadge';
 
@@ -138,7 +138,7 @@ export default function Inventory() {
         </div>
 
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={8} columns={6} />
         ) : isError ? (
           <EmptyState title="Could not load products" message={(error as Error)?.message} />
         ) : rows.length === 0 ? (

@@ -5,7 +5,8 @@ import { Package } from 'lucide-react';
 import { listOrders } from '@/api/orders';
 import { money, formatDate } from '@/lib/format';
 import { OrderStatusBadge } from '@/components/StatusBadge';
-import { Card, EmptyState, LinkButton, PageHeader, PageLoader, Pagination } from '@/components/ui';
+import { Card, EmptyState, LinkButton, PageHeader, Pagination } from '@/components/ui';
+import { ListSkeleton } from '@/components/RouteSkeletons';
 
 export default function Orders() {
   const [page, setPage] = useState(0);
@@ -18,7 +19,7 @@ export default function Orders() {
 
   const data = ordersQuery.data;
 
-  if (ordersQuery.isLoading) return <PageLoader />;
+  if (ordersQuery.isLoading) return <ListSkeleton />;
 
   if (!data || data.content.length === 0) {
     return (

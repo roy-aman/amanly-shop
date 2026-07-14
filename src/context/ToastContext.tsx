@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, Info, X, XCircle, AlertTriangle } from 'lucide-react';
+import { cn } from '@/components/ui';
 
 type ToastKind = 'success' | 'error' | 'info' | 'warning';
 interface Toast {
@@ -21,11 +22,29 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 let counter = 0;
 
+// Semantic status colors from the design system (§1.4). Icon tint + a subtle
+// left accent bar carry the meaning; the surface itself stays neutral `ink` so
+// the text keeps its contrast.
 const ICONS: Record<ToastKind, ReactNode> = {
-  success: <CheckCircle2 className="h-5 w-5 text-emerald-400" />,
-  error: <XCircle className="h-5 w-5 text-rose-400" />,
-  info: <Info className="h-5 w-5 text-sky-400" />,
-  warning: <AlertTriangle className="h-5 w-5 text-amber-400" />,
+  success: <CheckCircle2 className="h-5 w-5 text-success-400" />,
+  error: <XCircle className="h-5 w-5 text-danger-400" />,
+  info: <Info className="h-5 w-5 text-info-400" />,
+  warning: <AlertTriangle className="h-5 w-5 text-warning-400" />,
+};
+
+const ACCENTS: Record<ToastKind, string> = {
+  success: 'border-l-success-500',
+  error: 'border-l-danger-500',
+  info: 'border-l-info-500',
+  warning: 'border-l-warning-500',
+};
+
+// Errors/warnings interrupt (assertive); success/info are polite status updates.
+const ROLES: Record<ToastKind, 'alert' | 'status'> = {
+  success: 'status',
+  error: 'alert',
+  info: 'status',
+  warning: 'alert',
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -58,21 +77,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-4 z-[100] flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6">
+      <div
+        className="pointer-events-none fixed inset-x-0 top-4 z-toast flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6"
+        aria-live="polite"
+        aria-atomic="false"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="pointer-events-auto flex w-full max-w-sm animate-fade-in items-start gap-3 rounded-xl border border-ink-700 bg-ink-850/95 p-4 shadow-lift backdrop-blur"
-            role="alert"
+            className={cn(
+              'pointer-events-auto flex w-full max-w-sm animate-fade-in items-start gap-3 rounded-2xl border border-l-4 border-ink-700 bg-ink-850/95 p-4 shadow-lift backdrop-blur',
+              ACCENTS[t.kind],
+            )}
+            role={ROLES[t.kind]}
           >
             <div className="mt-0.5 shrink-0">{ICONS[t.kind]}</div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-100">{t.title}</p>
-              {t.message && <p className="mt-0.5 text-sm text-slate-400">{t.message}</p>}
+              <p className="text-body-sm font-semibold text-slate-100">{t.title}</p>
+              {t.message && <p className="mt-0.5 text-body-sm text-slate-400">{t.message}</p>}
             </div>
             <button
               onClick={() => remove(t.id)}
-              className="shrink-0 rounded p-0.5 text-slate-500 hover:text-slate-200"
+              className="shrink-0 rounded p-0.5 text-slate-500 transition hover:text-slate-200"
               aria-label="Dismiss"
             >
               <X className="h-4 w-4" />

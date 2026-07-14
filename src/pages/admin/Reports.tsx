@@ -19,7 +19,8 @@ import { DollarSign, Receipt, TrendingUp } from 'lucide-react';
 import { adminOrders } from '@/api/admin';
 import type { OrderStatus, OrderSummaryResponse, PaymentMethod } from '@/lib/types';
 import { formatDate, money, titleCase } from '@/lib/format';
-import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui';
+import { Card, EmptyState, PageHeader } from '@/components/ui';
+import { DashboardSkeleton } from '@/components/RouteSkeletons';
 import StatCard from '@/components/admin/StatCard';
 
 const CURRENCY = 'USD';
@@ -109,7 +110,7 @@ export default function Reports() {
       .slice(0, 8);
   }, [orders]);
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <DashboardSkeleton />;
   if (isError) {
     return <EmptyState title="Could not load reports" message={(error as Error)?.message} />;
   }

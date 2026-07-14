@@ -5,7 +5,7 @@ import { ShoppingBag } from 'lucide-react';
 import { adminOrders } from '@/api/admin';
 import type { OrderPaymentStatus, OrderStatus } from '@/lib/types';
 import { formatDateTime, money, titleCase } from '@/lib/format';
-import { Card, EmptyState, Input, PageHeader, PageLoader, Pagination, Select } from '@/components/ui';
+import { Card, EmptyState, Input, PageHeader, Pagination, Select, SkeletonTable } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/StatusBadge';
 
 const STATUSES: OrderStatus[] = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
@@ -105,7 +105,7 @@ export default function AdminOrders() {
         </div>
 
         {isLoading ? (
-          <PageLoader />
+          <SkeletonTable rows={8} columns={7} />
         ) : isError ? (
           <EmptyState title="Could not load orders" message={(error as Error)?.message} />
         ) : rows.length === 0 ? (

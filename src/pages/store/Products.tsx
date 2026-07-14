@@ -4,7 +4,8 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { PackageSearch, Search } from 'lucide-react';
 import { listCategories, listProducts } from '@/api/catalog';
 import type { ProductSearchParams } from '@/lib/types';
-import { Field, Input, Select, Pagination, PageLoader, EmptyState, PageHeader } from '@/components/ui';
+import { Field, Input, Select, Pagination, EmptyState, PageHeader } from '@/components/ui';
+import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import ProductCard from '@/components/ProductCard';
 
 const SORTS = [
@@ -134,7 +135,7 @@ export default function Products() {
 
       {/* Results */}
       {productsQuery.isLoading ? (
-        <PageLoader />
+        <ProductGridSkeleton />
       ) : !data || data.content.length === 0 ? (
         <EmptyState
           icon={<PackageSearch className="h-10 w-10" />}

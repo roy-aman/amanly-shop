@@ -6,7 +6,8 @@ import { ApiError } from '@/lib/http';
 import type { OrderStatus, OrderSummaryResponse } from '@/lib/types';
 import { formatDateTime, money } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, PageHeader, PageLoader } from '@/components/ui';
+import { Button, Card, PageHeader } from '@/components/ui';
+import { ListSkeleton } from '@/components/RouteSkeletons';
 
 function OrderCard({
   order,
@@ -68,7 +69,7 @@ export default function Deliverables() {
 
   const isPendingFor = (id: string) => mutation.isPending && mutation.variables?.id === id;
 
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <ListSkeleton />;
 
   return (
     <div>
