@@ -41,6 +41,11 @@ const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
 const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'));
 
+// Dev-only UI-kit showcase. `import.meta.env.DEV` is statically `false` in
+// production builds, so Vite drops both this binding and the dynamic import —
+// the KitchenSink chunk is never emitted into the prod bundle.
+const KitchenSink = import.meta.env.DEV ? lazy(() => import('@/pages/dev/KitchenSink')) : null;
+
 function NotFound() {
   return (
     <div className="py-16">
@@ -65,6 +70,18 @@ export default function App() {
       <Route path="/oauth2-callback" element={<OAuthCallback />} />
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin/forbidden" element={<Forbidden />} />
+
+      {/* Dev-only UI-kit showcase — never registered in production builds. */}
+      {import.meta.env.DEV && KitchenSink && (
+        <Route
+          path="/dev/kitchen-sink"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <KitchenSink />
+            </Suspense>
+          }
+        />
+      )}
 
       {/* Storefront */}
       <Route element={<StoreLayout />}>

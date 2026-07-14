@@ -83,12 +83,46 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `@/context/ToastContext` → `useToast()`: {success(t,m?), error(t,m?), info(t,m?), warning(t,m?), push(kind,t,m?)}.
 
 ### UI kit `@/components/ui`
-`cn(...)`; `Button` {variant:'primary'|'secondary'|'ghost'|'danger'|'outline', size:'sm'|'md'|'lg', loading, fullWidth, ...button attrs};
+Split into a `src/components/ui/` directory (one file per component) behind a barrel — import from `@/components/ui`
+only, never a deep path. Built to `docs/design-system.md` tokens; dark-theme only; every interactive element is
+keyboard-operable with the standard gold focus ring. Radix-backed components (marked ⚛) provide focus-trap/ARIA.
+A dev-only `/dev/kitchen-sink` route renders all of them in every variant (mounted only when `import.meta.env.DEV`;
+tree-shaken out of production).
+
+**Core primitives (unchanged surface):**
+`cn(...)`; `Button` {variant:'primary'|'secondary'|'ghost'|'danger'|'outline', size:'sm'|'md'|'lg', loading, fullWidth, ...button attrs}
+(also exports `ButtonVariant`/`ButtonSize` types + `BUTTON_VARIANTS`/`BUTTON_SIZES`);
 `LinkButton` {to, variant, size, fullWidth, children}; `Field` {label?, error?, hint?, required?, className?, children};
-`Input`/`Textarea`/`Select` (accept `invalid?` + native attrs, className `rc-input` applied); `Card` {className?, children};
-`Badge` {tone:'gold'|'green'|'red'|'blue'|'gray'|'amber'|'purple', children}; `Spinner`, `PageLoader`;
-`EmptyState` {icon?, title, message?, action?}; `Modal` {open, onClose, title, children, footer?, size?:'sm'|'md'|'lg'|'xl'};
-`Pagination` {page(0-based), totalPages, onChange(page)}; `PageHeader` {title, subtitle?, action?}.
+`Input`/`Textarea`/`Select` (accept `invalid?` + native attrs, className `rc-input` applied);
+`PasswordInput` (like `Input`, owns its `type`, adds a show/hide toggle); `Card` {className?, children};
+`Badge` {tone:'gold'|'green'|'red'|'blue'|'gray'|'amber'|'purple', children} (`Tone` type exported; now uses semantic
+success/warning/danger/info tokens — zero visual change); `Spinner`, `PageLoader`;
+`EmptyState` {icon?, title, message?, action?}; `Modal` {open, onClose, title, children, footer?, size?:'sm'|'md'|'lg'|'xl'}
+(legacy hand-rolled dialog, kept as-is); `Pagination` {page(0-based), totalPages, onChange(page)};
+`PageHeader` {title, subtitle?, action?}.
+
+**WP-1.2 additions:**
+- `Skeleton` {className?} + `SkeletonText` {lines?}, `SkeletonCard`, `SkeletonTable` {rows?, columns?}, `SkeletonDetail` — loading placeholders.
+- ⚛ `Tabs` {value?/defaultValue?, onValueChange?} + `TabsList`, `TabsTrigger` {value}, `TabsContent` {value}.
+- ⚛ `DropdownMenu` {trigger, align?, sideOffset?} + `DropdownMenuItem` {onSelect?, destructive?}, `DropdownMenuLabel`, `DropdownMenuSeparator`, `DropdownMenuCheckboxItem` {checked?, onCheckedChange?}.
+- ⚛ `Tooltip` {content, side?, sideOffset?} wrapping a focusable child; `TooltipProvider` {delayDuration?} for app-wide sharing.
+- ⚛ `Drawer` {open?, onOpenChange?, side?:'left'|'right'|'top'|'bottom', title?, description?, footer?} (off-canvas Sheet; used by WP-1.3 mini-cart/mobile-nav) + `DrawerTrigger`, `DrawerClose`, `DrawerSide` type.
+- ⚛ `Accordion` {type?:'single'|'multiple', collapsible?, value?/defaultValue?, onValueChange?} + `AccordionItem` {value, title}.
+- `Breadcrumbs` {items:Crumb[]} where `Crumb` {label, to?} (omit `to` on the current/last crumb).
+- `Stepper` {steps:Step[], current(0-based)} where `Step` {label, description?} — display-only progress.
+- `DataTable<T>` {columns:Column<T>[], data, getRowKey, loading?, loadingRows?, empty?, onRowClick?, rowActions?, stickyHeader?, defaultSort?, sort?/onSortChange? (controlled), containerClassName?}; `Column<T>` {key, header, render?, sortable?, sortAccessor?, align?, className?, headerClassName?}; `SortState`/`SortDir` exported. Sorts internally unless `sort`+`onSortChange` given.
+- ⚛ `ConfirmDialog` {open?, onOpenChange?, trigger?, title, description?, confirmLabel?, cancelLabel?, destructive?, loading?, onConfirm} — AlertDialog; stays open during async, caller closes via onOpenChange.
+- `QuantityStepper` {value, onChange, min?, max?, step?, disabled?, size?} — clamped −/＋ numeric control.
+- `PriceTag` {price, compareAtPrice?, currency?, size?, showDiscountBadge?} — shows compare-at + computed discount % only when compareAt > price.
+- `RatingStars` {value, max?, size?, count?} — display-only (interactive input in WP-3.2).
+- `ImageWithFallback` {src?, alt, wrapperClassName?, fallback?, ...img attrs} — graceful placeholder on missing/broken src; lazy by default.
+- `Carousel` {children(slides), loop?, showDots?, showArrows?, ariaLabel?} — one-per-view, arrow-key navigable.
+- `SearchInput` {defaultValue?, onSearch, delay?(300), placeholder?} — debounced, with clear button.
+- `FilterChip` {children, selected?, onClick?, onRemove?} — toggle and/or removable filter pill.
+- `Stat` {label, value, icon?, delta?:StatDelta, hint?} where `StatDelta` {value, suffix?, positiveIsGood?, label?} — dashboard KPI tile with trend (successor to `admin/StatCard`).
+- `ThemedAreaChart`/`ThemedLineChart`/`ThemedBarChart` {data, xKey, series:ChartSeries[], height?, showGrid?, showLegend?, xTickFormatter?, yTickFormatter?, valueFormatter?} — recharts wrappers themed from tokens; `chartTheme` styles + `CHART_COLORS` palette also exported for bespoke charts.
+
+New deps: `@radix-ui/react-{tabs,dropdown-menu,tooltip,dialog,accordion,alert-dialog}` (headless a11y primitives).
 
 ### `@/components/StatusBadge`
 `OrderStatusBadge`, `PaymentStatusBadge`, `ProductStatusBadge`, `UserStatusBadge` — each takes `{status}`.
