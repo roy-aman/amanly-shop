@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import { ToastProvider } from '@/context/ToastContext';
+import { TooltipProvider } from '@/components/ui';
 import App from './App';
 import './index.css';
 
@@ -25,7 +26,9 @@ createRoot(document.getElementById('root')!).render(
         <ToastProvider>
           <AuthProvider>
             <CartProvider>
-              <App />
+              <TooltipProvider>
+                <App />
+              </TooltipProvider>
             </CartProvider>
           </AuthProvider>
         </ToastProvider>

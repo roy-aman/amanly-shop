@@ -141,6 +141,37 @@ Admin (in `AdminLayout`, guarded): `/admin` dashboard, `/admin/orders`, `/admin/
 `/admin/categories`, `/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`,
 `/admin/forbidden`.
 
+## Layout & navigation chrome (WP-1.3)
+
+The three layout shells own all site chrome; page bodies never render their own header/footer/sidebar.
+`TooltipProvider` is mounted once at the app root (`main.tsx`) so tooltips share one hover-delay timer.
+
+- **`StoreLayout`** (storefront shell):
+  - Sticky header (`z-header`): brand = store name from `getPublicStore().name` (falls back to "Royal Commerce"
+    if the request fails); primary nav (Home, Shop) + a **Categories `DropdownMenu`** built from
+    `getCategoryTree()` (roots + one level of children), each item linking to `/products?categoryId=<id>`;
+    a debounced **`SearchInput`** (desktop) that navigates to `/products?search=<q>`; a cart button showing
+    `useCart().itemCount` that opens a **slide-out mini-cart `Drawer`** (reads `useCart()`, links to `/cart`
+    and `/checkout`); an account **`DropdownMenu`** (login/register when logged out; account/orders/settings/
+    logout — and Admin console when `isStaff` — when logged in, via `useAuth()`).
+  - Mobile: a hamburger opens a left nav `Drawer` (search + nav + categories + account actions).
+  - Footer: link columns (Shop / Account / Policies / Contact), a **newsletter input UI that is stubbed**
+    (no endpoint until WP-6.4 — submit shows a "coming soon" toast, nothing is stored), placeholder social
+    links (`#`) and visual-only payment badges. **Policy links are `#` placeholders until WP-7.6.**
+- **`AdminLayout`** (console shell):
+  - Collapsible desktop sidebar with **grouped nav** (Overview / Catalog / Sales / People / Insights / System)
+    + `lucide-react` icons. Collapse state persists in `localStorage['rc-admin-sidebar-collapsed']`; collapsed
+    mode shows icon-only links with `Tooltip` labels. **Role-gated:** Users + Settings are ADMIN-only
+    (`useAuth().isAdmin`); everything else is STAFF+. Hidden items (and empty groups) are not rendered.
+  - Topbar: mobile menu toggle, store name (`getPublicStore()`), user **`DropdownMenu`** (view storefront,
+    logout). Below it, a **`Breadcrumbs`** slot derived from the route path (pages may refine later).
+  - Mobile: hamburger opens a left `Drawer` with the full grouped nav.
+- **`AuthLayout`** (centered card shell): brand mark + card on the ambient background; unchanged API
+  (`{title, subtitle?, children, footer?}`), lightly restyled to design-system type/elevation tokens.
+
+Data sources are all existing contracts — no new endpoints: `getPublicStore()`, `getCategoryTree()`,
+`useCart()`, `useAuth()`. The router structure and all route guards are unchanged by WP-1.3.
+
 ## Backend limitations to handle gracefully (do not invent endpoints)
 - No saved-address entity → use `@/lib/addressBook` (localStorage) for `/account/addresses` and to prefill checkout.
 - No stats/reports endpoints → derive dashboard & reports client-side by paging `adminOrders.list` /
