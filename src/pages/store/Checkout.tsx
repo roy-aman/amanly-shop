@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CreditCard, MapPin, Plus, Wallet } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
 import { getCart } from '@/api/cart';
 import { placeOrder, verifyRazorpayPayment } from '@/api/orders';
@@ -8,10 +9,22 @@ import { addAddress, listAddresses } from '@/api/addresses';
 import { loadRazorpay } from '@/lib/razorpay';
 import { ApiError } from '@/lib/http';
 import { money } from '@/lib/format';
-import type { AddressResponse, PaymentMethod, ShippingDetails } from '@/lib/types';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import type { AddressRequest, AddressResponse, PaymentMethod, ShippingDetails } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, Field, Input, Textarea, Select, PageLoader, PageHeader } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  LinkButton,
+  PageHeader,
+  PageLoader,
+  Stepper,
+  Textarea,
+  type Step,
+} from '@/components/ui';
 
 interface RazorpayHandlerResponse {
   razorpay_payment_id: string;
@@ -19,8 +32,30 @@ interface RazorpayHandlerResponse {
   razorpay_signature: string;
 }
 
-const EMPTY_FORM = {
-  name: '',
+const STEPS: Step[] = [
+  { label: 'Address', description: 'Where to deliver' },
+  { label: 'Payment', description: 'How you pay' },
+  { label: 'Review', description: 'Confirm & place' },
+];
+
+// Inline "add new address" form — mirrors the Addresses.tsx add UX so the two
+// surfaces stay consistent (label + recipient + lines + makeDefault).
+interface AddressFormState {
+  label: string;
+  recipientName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  makeDefault: boolean;
+}
+
+const EMPTY_ADDRESS: AddressFormState = {
+  label: '',
+  recipientName: '',
   phone: '',
   addressLine1: '',
   addressLine2: '',
@@ -28,11 +63,47 @@ const EMPTY_FORM = {
   state: '',
   postalCode: '',
   country: '',
-  notes: '',
+  makeDefault: false,
 };
 
+function toAddressRequest(form: AddressFormState): AddressRequest {
+  return {
+    label: form.label.trim(),
+    recipientName: form.recipientName.trim(),
+    phone: form.phone.trim() || null,
+    addressLine1: form.addressLine1.trim(),
+    addressLine2: form.addressLine2.trim() || null,
+    city: form.city.trim(),
+    state: form.state.trim() || null,
+    postalCode: form.postalCode.trim(),
+    country: form.country.trim(),
+    makeDefault: form.makeDefault,
+  };
+}
+
+// AddressResponse → the ShippingDetails/ShippingAddressRequest shape placeOrder
+// expects. Note `recipientName` maps to `name`; nullable fields pass through.
+function toShipping(a: AddressResponse): ShippingDetails {
+  return {
+    name: a.recipientName,
+    phone: a.phone,
+    addressLine1: a.addressLine1,
+    addressLine2: a.addressLine2,
+    city: a.city,
+    state: a.state,
+    postalCode: a.postalCode,
+    country: a.country,
+  };
+}
+
+function formatAddress(a: AddressResponse): string {
+  return [a.addressLine1, a.addressLine2, a.city, a.state, a.postalCode, a.country].filter(Boolean).join(', ');
+}
+
 export default function Checkout() {
+  useDocumentTitle('Checkout');
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { refresh } = useCart();
   const toast = useToast();
 
@@ -40,41 +111,54 @@ export default function Checkout() {
   const cartQuery = useQuery({ queryKey: ['cart'], queryFn: getCart });
   const addressesQuery = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
 
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
-  const [saveAddress, setSaveAddress] = useState(false);
-  const [selectedAddressId, setSelectedAddressId] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const savedAddresses = addressesQuery.data ?? [];
-
+  const savedAddresses = useMemo(() => addressesQuery.data ?? [], [addressesQuery.data]);
   const store = storeQuery.data;
   const cart = cartQuery.data;
 
-  // Payment methods available from store config.
-  const methods = useMemo(() => {
-    const opts: { value: PaymentMethod; label: string; desc: string }[] = [];
-    if (store?.codEnabled) opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives' });
-    if (store?.onlinePaymentEnabled)
-      opts.push({ value: 'UPI', label: 'UPI / Online payment', desc: 'Pay securely now via UPI, cards & more' });
-    if (opts.length === 0) opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives' });
-    return opts;
-  }, [store]);
+  // ── Step + form state (lives in the parent so back/forward never loses it) ──
+  const [step, setStep] = useState(0);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [addingAddress, setAddingAddress] = useState(false);
+  const [addForm, setAddForm] = useState<AddressFormState>({ ...EMPTY_ADDRESS });
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
 
-  // Prefill from the default (or first) saved address once they load.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
+  const [notes, setNotes] = useState('');
+
+  const [submitting, setSubmitting] = useState(false);
+  const [placeErrors, setPlaceErrors] = useState<string[]>([]);
+  // Failure-recovery banner after a cancelled/failed online payment.
+  const [paymentIssue, setPaymentIssue] = useState<string | null>(null);
+
+  const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId) ?? null;
+
+  // Payment methods available from store config (gated by the store flags).
+  const codEnabled = !!store?.codEnabled;
+  const onlineEnabled = !!store?.onlinePaymentEnabled;
+  const methods = useMemo(() => {
+    const opts: { value: PaymentMethod; label: string; desc: string; icon: typeof Wallet }[] = [];
+    if (codEnabled)
+      opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
+    if (onlineEnabled)
+      opts.push({ value: 'UPI', label: 'UPI / Online payment', desc: 'Pay securely now via UPI, cards & more', icon: CreditCard });
+    // Neither flag on → fall back to COD so a store is never un-checkoutable.
+    if (opts.length === 0)
+      opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
+    return opts;
+  }, [codEnabled, onlineEnabled]);
+
+  // Preselect the default (or first) saved address once addresses load.
   useEffect(() => {
     if (selectedAddressId || savedAddresses.length === 0) return;
     const def = savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
     setSelectedAddressId(def.id);
-    fillFromAddress(def);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addressesQuery.data]);
+  }, [savedAddresses, selectedAddressId]);
 
-  // Default the selected payment method to the first available.
+  // Keep the payment method valid for the available options (preselect the first).
   useEffect(() => {
-    if (methods.length) setPaymentMethod(methods[0].value);
-  }, [methods]);
+    if (!methods.some((m) => m.value === paymentMethod)) setPaymentMethod(methods[0].value);
+  }, [methods, paymentMethod]);
 
   // Redirect to /cart if the cart is empty.
   useEffect(() => {
@@ -83,73 +167,81 @@ export default function Checkout() {
     }
   }, [cartQuery.isSuccess, cart, navigate]);
 
-  function fillFromAddress(a: AddressResponse) {
-    setForm((f) => ({
-      ...f,
-      name: a.recipientName,
-      phone: a.phone ?? '',
-      addressLine1: a.addressLine1,
-      addressLine2: a.addressLine2 ?? '',
-      city: a.city,
-      state: a.state ?? '',
-      postalCode: a.postalCode,
-      country: a.country,
-    }));
+  // Move keyboard focus to the active step heading when the step changes.
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    stepHeadingRef.current?.focus();
+  }, [step]);
+
+  const addMutation = useMutation({
+    mutationFn: (body: AddressRequest) => addAddress(body),
+    onSuccess: async (created) => {
+      await queryClient.invalidateQueries({ queryKey: ['addresses'] });
+      setSelectedAddressId(created.id);
+      setAddingAddress(false);
+      setAddForm({ ...EMPTY_ADDRESS });
+      setAddErrors({});
+      setAddressError(null);
+      toast.success('Address added');
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.hasFieldErrors()) setAddErrors(e.fieldErrorMap());
+      else toast.error('Could not save address', e instanceof Error ? e.message : 'Please try again.');
+    },
+  });
+
+  function setAdd<K extends keyof AddressFormState>(key: K, value: AddressFormState[K]) {
+    setAddForm((f) => ({ ...f, [key]: value }));
   }
 
-  function set<K extends keyof typeof form>(key: K, value: string) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  function validate(): boolean {
+  function validateAddForm(): boolean {
     const next: Record<string, string> = {};
-    if (!form.name.trim()) next.name = 'Name is required';
-    if (!form.addressLine1.trim()) next.addressLine1 = 'Address is required';
-    if (!form.city.trim()) next.city = 'City is required';
-    if (!form.postalCode.trim()) next.postalCode = 'Postal code is required';
-    if (!form.country.trim()) next.country = 'Country is required';
-    setErrors(next);
+    if (!addForm.label.trim()) next.label = 'Label is required';
+    if (!addForm.recipientName.trim()) next.recipientName = 'Name is required';
+    if (!addForm.addressLine1.trim()) next.addressLine1 = 'Address is required';
+    if (!addForm.city.trim()) next.city = 'City is required';
+    if (!addForm.postalCode.trim()) next.postalCode = 'Postal code is required';
+    if (!addForm.country.trim()) next.country = 'Country is required';
+    setAddErrors(next);
     return Object.keys(next).length === 0;
   }
 
-  function buildShipping(): ShippingDetails {
-    return {
-      name: form.name.trim(),
-      phone: form.phone.trim() || null,
-      addressLine1: form.addressLine1.trim(),
-      addressLine2: form.addressLine2.trim() || null,
-      city: form.city.trim(),
-      state: form.state.trim() || null,
-      postalCode: form.postalCode.trim(),
-      country: form.country.trim(),
-    };
+  function saveNewAddress() {
+    if (!validateAddForm()) return;
+    addMutation.mutate(toAddressRequest(addForm));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validate()) return;
+  // The add form is shown on demand, or forced open when there is nothing to pick.
+  const showAddForm = addingAddress || savedAddresses.length === 0;
 
-    const shippingAddress = buildShipping();
+  function goToPayment() {
+    if (!selectedAddress) {
+      setAddressError(
+        showAddForm ? 'Add and save a delivery address to continue.' : 'Please select a delivery address.',
+      );
+      return;
+    }
+    setAddressError(null);
+    setStep(1);
+  }
+
+  async function handlePlaceOrder() {
+    if (!selectedAddress) {
+      setStep(0);
+      setAddressError('Please select a delivery address.');
+      return;
+    }
+    const shippingAddress = toShipping(selectedAddress);
+    setPlaceErrors([]);
+    setPaymentIssue(null);
     setSubmitting(true);
     try {
-      const order = await placeOrder({ shippingAddress, notes: form.notes.trim() || null, paymentMethod });
-
-      if (saveAddress) {
-        const s = shippingAddress;
-        // Best-effort — a failure to save the address must not fail the placed order.
-        void addAddress({
-          label: s.city || s.name || 'Address',
-          recipientName: s.name,
-          phone: s.phone,
-          addressLine1: s.addressLine1,
-          addressLine2: s.addressLine2,
-          city: s.city,
-          state: s.state,
-          postalCode: s.postalCode,
-          country: s.country,
-          makeDefault: false,
-        }).catch(() => undefined);
-      }
+      const order = await placeOrder({ shippingAddress, notes: notes.trim() || null, paymentMethod });
 
       if (!order.paymentAction) {
         // COD — order complete.
@@ -165,11 +257,13 @@ export default function Checkout() {
         await loadRazorpay();
       } catch {
         setSubmitting(false);
+        setPaymentIssue('We could not load the payment gateway. Try again, or go back and choose Cash on Delivery.');
         toast.error('Payment unavailable', 'Could not load the payment gateway. Please try again.');
         return;
       }
       if (!window.Razorpay) {
         setSubmitting(false);
+        setPaymentIssue('We could not load the payment gateway. Try again, or go back and choose Cash on Delivery.');
         toast.error('Payment unavailable', 'Could not load the payment gateway. Please try again.');
         return;
       }
@@ -196,12 +290,14 @@ export default function Checkout() {
             navigate(`/orders/${order.id}`);
           } catch (err) {
             setSubmitting(false);
+            setPaymentIssue('We could not verify your payment. If you were charged, contact support — otherwise place the order again.');
             toast.error('Payment verification failed', err instanceof Error ? err.message : 'Please contact support if you were charged.');
           }
         },
         modal: {
           ondismiss: () => {
             setSubmitting(false);
+            setPaymentIssue('Payment was not completed. You can try again, or go back and choose Cash on Delivery.');
             toast.info('Payment not completed', 'Your order is saved as pending — you can pay later.');
           },
         },
@@ -210,137 +306,285 @@ export default function Checkout() {
     } catch (err) {
       setSubmitting(false);
       if (err instanceof ApiError && err.hasFieldErrors()) {
-        setErrors(err.fieldErrorMap());
+        // Address fields were rejected server-side — surface and send the user back to fix them.
+        setPlaceErrors(Object.values(err.fieldErrorMap()));
+        toast.error('Please check your address', 'Some delivery-address fields need attention.');
       } else {
         toast.error('Could not place order', err instanceof Error ? err.message : 'An unexpected error occurred.');
       }
     }
   }
 
-  if (storeQuery.isLoading || cartQuery.isLoading) return <PageLoader />;
+  if (storeQuery.isLoading || cartQuery.isLoading || addressesQuery.isLoading) return <PageLoader />;
   if (!cart || cart.items.length === 0) return <PageLoader />;
 
   const currency = cart.currency;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Checkout" subtitle="Enter your shipping details to complete the order." />
+      <PageHeader title="Checkout" subtitle="Complete your order in three quick steps." />
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <Stepper steps={STEPS} current={step} className="max-w-2xl" />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* ── Step content ─────────────────────────────────────────────── */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Shipping */}
-          <Card className="space-y-4 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-200">Shipping details</h2>
+          {step === 0 && (
+            <Card className="space-y-4 p-5">
+              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
+                Delivery address
+              </h2>
+
               {savedAddresses.length > 0 && (
-                <Select
-                  value={selectedAddressId}
-                  onChange={(e) => {
-                    setSelectedAddressId(e.target.value);
-                    const a = savedAddresses.find((x) => x.id === e.target.value);
-                    if (a) fillFromAddress(a);
-                  }}
-                  className="max-w-[220px]"
-                >
-                  <option value="">Use a saved address…</option>
-                  {savedAddresses.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                      {a.isDefault ? ' (default)' : ''}
-                    </option>
-                  ))}
-                </Select>
+                <div className="space-y-2" role="radiogroup" aria-label="Saved addresses">
+                  {savedAddresses.map((a) => {
+                    const active = selectedAddressId === a.id;
+                    return (
+                      <label
+                        key={a.id}
+                        className={
+                          'flex cursor-pointer gap-3 rounded-xl border px-4 py-3 transition ' +
+                          (active ? 'border-gold-400/50 bg-gold-400/5' : 'border-ink-700 hover:border-ink-500')
+                        }
+                      >
+                        <input
+                          type="radio"
+                          name="saved-address"
+                          value={a.id}
+                          checked={active}
+                          onChange={() => {
+                            setSelectedAddressId(a.id);
+                            setAddressError(null);
+                          }}
+                          className="mt-1 h-4 w-4 shrink-0 accent-gold-400"
+                        />
+                        <span className="min-w-0 text-sm">
+                          <span className="flex items-center gap-2">
+                            <span className="font-medium text-slate-100">{a.label}</span>
+                            {a.isDefault && <span className="text-xs text-gold-300">Default</span>}
+                          </span>
+                          <span className="block text-slate-400">{a.recipientName}</span>
+                          {a.phone && <span className="block text-slate-500">{a.phone}</span>}
+                          <span className="block text-slate-500">{formatAddress(a)}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Full name" required error={errors.name}>
-                <Input value={form.name} onChange={(e) => set('name', e.target.value)} invalid={!!errors.name} autoComplete="name" />
-              </Field>
-              <Field label="Phone" error={errors.phone}>
-                <Input value={form.phone} onChange={(e) => set('phone', e.target.value)} autoComplete="tel" />
-              </Field>
-              <Field label="Address line 1" required error={errors.addressLine1} className="sm:col-span-2">
-                <Input
-                  value={form.addressLine1}
-                  onChange={(e) => set('addressLine1', e.target.value)}
-                  invalid={!!errors.addressLine1}
-                  autoComplete="address-line1"
-                />
-              </Field>
-              <Field label="Address line 2" error={errors.addressLine2} className="sm:col-span-2">
-                <Input value={form.addressLine2} onChange={(e) => set('addressLine2', e.target.value)} autoComplete="address-line2" />
-              </Field>
-              <Field label="City" required error={errors.city}>
-                <Input value={form.city} onChange={(e) => set('city', e.target.value)} invalid={!!errors.city} autoComplete="address-level2" />
-              </Field>
-              <Field label="State / Region" error={errors.state}>
-                <Input value={form.state} onChange={(e) => set('state', e.target.value)} autoComplete="address-level1" />
-              </Field>
-              <Field label="Postal code" required error={errors.postalCode}>
-                <Input
-                  value={form.postalCode}
-                  onChange={(e) => set('postalCode', e.target.value)}
-                  invalid={!!errors.postalCode}
-                  autoComplete="postal-code"
-                />
-              </Field>
-              <Field label="Country" required error={errors.country}>
-                <Input value={form.country} onChange={(e) => set('country', e.target.value)} invalid={!!errors.country} autoComplete="country-name" />
-              </Field>
-              <Field label="Order notes" error={errors.notes} className="sm:col-span-2">
-                <Textarea
-                  value={form.notes}
-                  onChange={(e) => set('notes', e.target.value)}
-                  maxLength={1000}
-                  placeholder="Delivery instructions, landmarks, etc. (optional)"
-                />
-              </Field>
-            </div>
+              {!showAddForm && (
+                <Button variant="secondary" size="sm" onClick={() => setAddingAddress(true)}>
+                  <Plus className="h-4 w-4" /> Add a new address
+                </Button>
+              )}
 
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={saveAddress}
-                onChange={(e) => setSaveAddress(e.target.checked)}
-                className="h-4 w-4 accent-gold-400"
-              />
-              Save this address to my address book
-            </label>
-          </Card>
-
-          {/* Payment method */}
-          <Card className="space-y-3 p-5">
-            <h2 className="text-sm font-semibold text-slate-200">Payment method</h2>
-            <div className="space-y-2">
-              {methods.map((m) => (
-                <label
-                  key={m.value}
-                  className={
-                    'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ' +
-                    (paymentMethod === m.value ? 'border-gold-400/50 bg-gold-400/5' : 'border-ink-700 hover:border-ink-500')
-                  }
-                >
-                  <span className="flex items-center gap-3">
+              {showAddForm && (
+                <div className="space-y-4 rounded-xl border border-ink-700 p-4">
+                  {savedAddresses.length > 0 && (
+                    <h3 className="text-sm font-semibold text-slate-200">New address</h3>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Field label="Label" required error={addErrors.label} className="sm:col-span-2">
+                      <Input value={addForm.label} onChange={(e) => setAdd('label', e.target.value)} invalid={!!addErrors.label} placeholder="Home, Office…" />
+                    </Field>
+                    <Field label="Full name" required error={addErrors.recipientName}>
+                      <Input value={addForm.recipientName} onChange={(e) => setAdd('recipientName', e.target.value)} invalid={!!addErrors.recipientName} autoComplete="name" />
+                    </Field>
+                    <Field label="Phone" error={addErrors.phone}>
+                      <Input value={addForm.phone} onChange={(e) => setAdd('phone', e.target.value)} autoComplete="tel" />
+                    </Field>
+                    <Field label="Address line 1" required error={addErrors.addressLine1} className="sm:col-span-2">
+                      <Input value={addForm.addressLine1} onChange={(e) => setAdd('addressLine1', e.target.value)} invalid={!!addErrors.addressLine1} autoComplete="address-line1" />
+                    </Field>
+                    <Field label="Address line 2" error={addErrors.addressLine2} className="sm:col-span-2">
+                      <Input value={addForm.addressLine2} onChange={(e) => setAdd('addressLine2', e.target.value)} autoComplete="address-line2" />
+                    </Field>
+                    <Field label="City" required error={addErrors.city}>
+                      <Input value={addForm.city} onChange={(e) => setAdd('city', e.target.value)} invalid={!!addErrors.city} autoComplete="address-level2" />
+                    </Field>
+                    <Field label="State / Region" error={addErrors.state}>
+                      <Input value={addForm.state} onChange={(e) => setAdd('state', e.target.value)} autoComplete="address-level1" />
+                    </Field>
+                    <Field label="Postal code" required error={addErrors.postalCode}>
+                      <Input value={addForm.postalCode} onChange={(e) => setAdd('postalCode', e.target.value)} invalid={!!addErrors.postalCode} autoComplete="postal-code" />
+                    </Field>
+                    <Field label="Country" required error={addErrors.country}>
+                      <Input value={addForm.country} onChange={(e) => setAdd('country', e.target.value)} invalid={!!addErrors.country} autoComplete="country-name" />
+                    </Field>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
                     <input
-                      type="radio"
-                      name="payment"
-                      value={m.value}
-                      checked={paymentMethod === m.value}
-                      onChange={() => setPaymentMethod(m.value)}
+                      type="checkbox"
+                      checked={addForm.makeDefault}
+                      onChange={(e) => setAdd('makeDefault', e.target.checked)}
                       className="h-4 w-4 accent-gold-400"
                     />
-                    <span className="text-sm font-medium text-slate-100">{m.label}</span>
-                  </span>
-                  <span className="text-xs text-slate-500">{m.desc}</span>
-                </label>
-              ))}
-            </div>
-          </Card>
+                    Set as default address
+                  </label>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={saveNewAddress} loading={addMutation.isPending}>
+                      Save address
+                    </Button>
+                    {savedAddresses.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setAddingAddress(false);
+                          setAddErrors({});
+                          setAddForm({ ...EMPTY_ADDRESS });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {addressError && (
+                <p className="text-sm text-danger-300" role="alert">
+                  {addressError}
+                </p>
+              )}
+            </Card>
+          )}
+
+          {step === 1 && (
+            <Card className="space-y-3 p-5">
+              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
+                Payment method
+              </h2>
+              <div className="space-y-2" role="radiogroup" aria-label="Payment method">
+                {methods.map((m) => {
+                  const Icon = m.icon;
+                  const active = paymentMethod === m.value;
+                  return (
+                    <label
+                      key={m.value}
+                      className={
+                        'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ' +
+                        (active ? 'border-gold-400/50 bg-gold-400/5' : 'border-ink-700 hover:border-ink-500')
+                      }
+                    >
+                      <span className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="payment"
+                          value={m.value}
+                          checked={active}
+                          onChange={() => setPaymentMethod(m.value)}
+                          className="h-4 w-4 accent-gold-400"
+                        />
+                        <Icon className="h-5 w-5 text-slate-400" />
+                        <span className="text-sm font-medium text-slate-100">{m.label}</span>
+                      </span>
+                      <span className="text-xs text-slate-500">{m.desc}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {!onlineEnabled && (
+                <p className="text-xs text-slate-500">
+                  Online payment is currently unavailable for this store — orders are placed as Cash on Delivery.
+                </p>
+              )}
+            </Card>
+          )}
+
+          {step === 2 && (
+            <Card className="space-y-5 p-5">
+              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
+                Review &amp; place order
+              </h2>
+
+              <section className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                    <MapPin className="h-4 w-4 text-slate-400" /> Delivery to
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={() => setStep(0)}>
+                    Change
+                  </Button>
+                </div>
+                {selectedAddress ? (
+                  <div className="text-sm text-slate-400">
+                    <p className="font-medium text-slate-200">{selectedAddress.recipientName}</p>
+                    {selectedAddress.phone && <p>{selectedAddress.phone}</p>}
+                    <p>{formatAddress(selectedAddress)}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-danger-300">No address selected.</p>
+                )}
+              </section>
+
+              <section className="space-y-1 border-t border-ink-800 pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-200">Payment</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
+                    Change
+                  </Button>
+                </div>
+                <p className="text-sm text-slate-400">
+                  {methods.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}
+                </p>
+              </section>
+
+              <section className="border-t border-ink-800 pt-4">
+                <Field label="Order notes">
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    maxLength={1000}
+                    placeholder="Delivery instructions, landmarks, etc. (optional)"
+                  />
+                </Field>
+              </section>
+
+              {paymentIssue && (
+                <div className="flex items-start gap-2 rounded-xl border border-warning-500/30 bg-warning-500/15 p-3 text-sm text-warning-300" role="alert">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>{paymentIssue}</p>
+                </div>
+              )}
+
+              {placeErrors.length > 0 && (
+                <div className="rounded-xl border border-danger-500/30 bg-danger-500/15 p-3 text-sm text-danger-300" role="alert">
+                  <ul className="list-inside list-disc space-y-1">
+                    {placeErrors.map((msg, i) => (
+                      <li key={i}>{msg}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── Step navigation ────────────────────────────────────────── */}
+          <div className="flex items-center justify-between gap-3">
+            {step === 0 ? (
+              <LinkButton to="/cart" variant="ghost">
+                Back to cart
+              </LinkButton>
+            ) : (
+              <Button variant="ghost" onClick={() => setStep((s) => s - 1)} disabled={submitting}>
+                Back
+              </Button>
+            )}
+
+            {step === 0 && <Button onClick={goToPayment}>Continue to payment</Button>}
+            {step === 1 && <Button onClick={() => setStep(2)}>Continue to review</Button>}
+            {step === 2 && (
+              <Button onClick={handlePlaceOrder} loading={submitting} size="lg">
+                Place order
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Order summary */}
-        <aside>
+        {/* ── Sticky order summary ─────────────────────────────────────── */}
+        <aside className="lg:sticky lg:top-24 lg:self-start">
           <Card className="space-y-4 p-5">
             <h2 className="text-sm font-semibold text-slate-200">Order summary</h2>
             <div className="space-y-2">
@@ -357,12 +601,10 @@ export default function Checkout() {
               <span className="text-slate-300">Total</span>
               <span className="text-gold-300">{money(cart.totalAmount, currency)}</span>
             </div>
-            <Button type="submit" fullWidth size="lg" loading={submitting}>
-              Place order
-            </Button>
+            <p className="text-xs text-slate-500">Shipping &amp; taxes calculated at checkout.</p>
           </Card>
         </aside>
-      </form>
+      </div>
     </div>
   );
 }

@@ -203,7 +203,12 @@ Data sources are all existing contracts — no new endpoints: `getPublicStore()`
 `useCart()`, `useAuth()`. The router structure and all route guards are unchanged by WP-1.3.
 
 ## Backend limitations to handle gracefully (do not invent endpoints)
-- No saved-address entity → use `@/lib/addressBook` (localStorage) for `/account/addresses` and to prefill checkout.
+- Saved addresses are a **real backend entity** — use `@/api/addresses` (`listAddresses`/`addAddress`/
+  `updateAddress`/`setDefaultAddress`/`deleteAddress`, backed by `/api/v1/users/me/addresses`, types
+  `AddressResponse`/`AddressRequest`) for `/account/addresses` and the checkout address step. Map
+  `AddressResponse` → the `ShippingAddressRequest`/`shippingAddress` shape for `placeOrder`
+  (`recipientName` → `name`; `phone`/`addressLine2`/`state` are nullable pass-throughs). The legacy
+  `@/lib/addressBook` (localStorage) is **superseded** and must not be used for address CRUD or checkout.
 - No stats/reports endpoints → derive dashboard & reports client-side by paging `adminOrders.list` /
   `adminProducts.list` / `adminUsers.list` and aggregating.
 - No order status filter on the API → fetch a page and filter client-side where needed (e.g. Deliverables).
