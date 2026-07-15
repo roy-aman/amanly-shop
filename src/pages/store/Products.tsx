@@ -22,7 +22,11 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import ProductCard, { type ProductCardVariant } from '@/components/ProductCard';
 
 // Sort options map to the real backend-sortable fields (createdAt / price / name).
-// Popularity (WP-3.1) and rating (WP-3.2) sorts have no backend and are intentionally absent.
+// A "popularity" sort is intentionally absent: WP-3.1a ships /products/top (used
+// by the Home best-sellers rail), but that endpoint does NOT compose with this
+// page's category/price/stock/search filters or pagination — wiring it into this
+// URL-synced sort would silently ignore active filters. Deferred until the public
+// search endpoint gains a real `sort=popular` key. Rating sort → WP-3.2.
 const SORTS = [
   { value: 'createdAt,desc', label: 'Newest' },
   { value: 'price,asc', label: 'Price: low to high' },
@@ -208,10 +212,12 @@ export default function Products() {
       </Field>
 
       {/*
-        Phase 3 facets deliberately NOT built — no backend params exist yet:
-          • Brand / colour / size filters → WP-3.5
-          • Rating filter → WP-3.2
-          • Popularity sort → WP-3.1
+        Phase 3 facets deliberately NOT built:
+          • Brand / colour / size filters → WP-3.5 (no backend params)
+          • Rating filter → WP-3.2 (no backend params)
+          • Popularity sort → deferred: /products/top exists (WP-3.1a) but can't be
+            filtered/paginated, so it can't back this page's composable sort. Needs a
+            `sort=popular` key on the public search endpoint. See the SORTS comment.
         Do not add controls for these until their endpoints land.
       */}
     </div>

@@ -12,10 +12,10 @@ import {
   Truck,
 } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
-import { getCategoryTree, listProducts } from '@/api/catalog';
+import { getCategoryTree, getTopProducts, listProducts } from '@/api/catalog';
 import type { CategoryTreeResponse, Page, ProductSummaryResponse } from '@/lib/types';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import { Badge, cn, EmptyState, LinkButton, Skeleton } from '@/components/ui';
+import { cn, EmptyState, LinkButton, Skeleton } from '@/components/ui';
 import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import ProductCard from '@/components/ProductCard';
 
@@ -84,6 +84,12 @@ export default function Home() {
     queryKey: ['products', 'home', 'featured'],
     queryFn: () => listProducts({ tag: 'featured', size: RAIL_SIZE }),
   });
+  // Best sellers: real public top-products endpoint (WP-3.1a), ranked by units
+  // sold across paid orders. Returns [] until something sells → rail hides itself.
+  const bestSellers = useQuery({
+    queryKey: ['products', 'home', 'best-sellers'],
+    queryFn: () => getTopProducts({ limit: RAIL_SIZE }),
+  });
 
   const storeName = storeQuery.data?.name || 'Royal Commerce';
   const categories = categoryQuery.data ?? [];
@@ -103,7 +109,7 @@ export default function Home() {
         subtitle="Hand-picked highlights worth a closer look."
         query={featured}
       />
-      <BestSellersPlaceholder />
+      <BestSellersRail query={bestSellers} />
       <TrustRow />
       <ClosingCta storeName={storeName} />
     </div>
@@ -280,33 +286,28 @@ function ProductRailSection({
   );
 }
 
-// ── Best sellers (BLOCKED on WP-3.1) ────────────────────────────────────
+// ── Best sellers (WP-3.1) ───────────────────────────────────────────────
 /**
- * Best Sellers is BLOCKED on WP-3.1 (admin stats / popularity). No popularity or
- * top-products endpoint exists, so we do NOT fabricate one — this is a graceful
- * "coming soon" placeholder band. When WP-3.1 ships a public popularity signal
- * (`sort=popular` or a top-products endpoint), replace this with a real
- * `ProductRailSection` backed by that query.
+ * Best sellers, ranked by real sales via the public `/products/top` endpoint
+ * (WP-3.1a). The endpoint returns `[]` until something has sold, so the rail
+ * hides itself gracefully — no "coming soon" placeholder needed. NOTE: this
+ * endpoint does NOT compose with the PLP's filters/pagination, so it powers only
+ * this standalone rail (see the PLP sort comment for why popularity stays off there).
  */
-function BestSellersPlaceholder() {
+function BestSellersRail({ query }: { query: UseQueryResult<ProductSummaryResponse[]> }) {
+  const products = query.data ?? [];
+  // Hide the whole section when there is nothing to show (nothing sold yet, or a
+  // failed request) rather than rendering an empty band.
+  if (!query.isLoading && products.length === 0) return null;
   return (
     <section>
       <SectionHeading
         title="Best sellers"
         subtitle="The most-loved picks, ranked by real sales."
+        viewAllTo="/products"
         icon={<Flame className="h-5 w-5 text-gold-400" aria-hidden />}
-        badge={<Badge tone="gold">Coming soon</Badge>}
       />
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-ink-700 bg-ink-900/40 px-6 py-12 text-center">
-        <Flame className="h-8 w-8 text-slate-600" aria-hidden />
-        <p className="max-w-md text-body-sm text-slate-400">
-          Best-seller rankings unlock once orders start rolling in. In the meantime, explore what&apos;s
-          new and featured above.
-        </p>
-        <LinkButton to="/products" variant="secondary">
-          Explore the catalog
-        </LinkButton>
-      </div>
+      {query.isLoading ? <ProductGridSkeleton count={4} /> : <ProductRail products={products} />}
     </section>
   );
 }

@@ -3,15 +3,16 @@ import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/utils';
 import Home from './Home';
 import { getPublicStore } from '@/api/store';
-import { getCategoryTree, listProducts } from '@/api/catalog';
+import { getCategoryTree, getTopProducts, listProducts } from '@/api/catalog';
 import type { Page, ProductSummaryResponse } from '@/lib/types';
 
 vi.mock('@/api/store', () => ({ getPublicStore: vi.fn() }));
-vi.mock('@/api/catalog', () => ({ getCategoryTree: vi.fn(), listProducts: vi.fn() }));
+vi.mock('@/api/catalog', () => ({ getCategoryTree: vi.fn(), listProducts: vi.fn(), getTopProducts: vi.fn() }));
 
 const store = vi.mocked(getPublicStore);
 const tree = vi.mocked(getCategoryTree);
 const products = vi.mocked(listProducts);
+const topProducts = vi.mocked(getTopProducts);
 
 function emptyPage(): Page<ProductSummaryResponse> {
   return {
@@ -48,6 +49,7 @@ beforeEach(() => {
   store.mockResolvedValue({ name: 'Royal Test', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
   tree.mockResolvedValue([]);
   products.mockResolvedValue(emptyPage());
+  topProducts.mockResolvedValue([]);
 });
 
 describe('Home', () => {
@@ -57,10 +59,22 @@ describe('Home', () => {
     expect(cta).toHaveAttribute('href', '/products');
   });
 
-  it('renders the best-sellers placeholder (blocked on WP-3.1) with a coming-soon badge', async () => {
+  it('renders the best-sellers rail from /products/top when products are returned', async () => {
+    topProducts.mockResolvedValue([product('b1', 'Royal Bestseller')]);
     renderWithProviders(<Home />);
-    expect(await screen.findByText('Best sellers')).toBeInTheDocument();
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    // Wait for the resolved product card (the heading also shows during loading).
+    expect(await screen.findByText('Royal Bestseller')).toBeInTheDocument();
+    expect(screen.getByText('Best sellers')).toBeInTheDocument();
+  });
+
+  it('hides the best-sellers rail entirely when nothing has sold ([])', async () => {
+    topProducts.mockResolvedValue([]);
+    renderWithProviders(<Home />);
+    await screen.findByRole('link', { name: /shop the collection/i });
+    // The heading shows during the loading skeleton, then the rail removes itself
+    // once the empty [] resolves — wait for it to disappear.
+    await waitFor(() => expect(screen.queryByText('Best sellers')).not.toBeInTheDocument());
+    expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
   });
 
   it('renders the trust row value props', async () => {

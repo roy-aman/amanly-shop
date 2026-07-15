@@ -51,6 +51,12 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `UpdateWhatsappSettingsRequest` {enabled,phoneNumberId?,accessToken?,verifyToken?,appSecret?};
 `AdminCreateUserRequest` {email,fullName,password,roles}; `ChangeUserRolesRequest` {roles};
 `SavedAddress` extends ShippingDetails {id,label,isDefault}.
+Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changePct(number|null)};
+`StatsOverviewResponse` {from,to,revenue:MoneyMetric,paidOrders:CountMetric,totalOrders,customers,averageOrderValue:MoneyMetric,ordersByStatus:Record<OrderStatus,number>(all 5, zero-filled)};
+`RevenueGranularity`='day'|'week'|'month'; `RevenueSeriesPoint` {periodStart,revenue,orderCount};
+`RevenueSeriesResponse` {from,to,granularity,points[]} (contiguous/zero-filled — plot as-is);
+`TopProductStat` {productId,name,slug(null if deleted),unitsSold,revenue};
+`LowStockProduct` {productId,name,slug,sku,stockQuantity,status:ProductStatus}.
 
 ### `@/lib/http`
 `TokenStore` {save,getAccessToken,getRefreshToken,getUser,setUser,isExpired,isAuthenticated,clear};
@@ -66,7 +72,7 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 ### API modules
 `@/api/auth`: login(email,password), register(email,fullName,password), logout(), forgotPassword(email), resetPassword(token,newPassword), resendEmailVerification(email), verifyEmail(token).
 `@/api/users`: getCurrentUser(), updateProfile(fullName), updatePassword(currentPassword,newPassword).
-`@/api/catalog`: listProducts(params):Page<ProductSummaryResponse>, getProduct(slug):ProductResponse, listCategories():CategoryResponse[], getCategoryTree():CategoryTreeResponse[], getCategory(slug).
+`@/api/catalog`: listProducts(params):Page<ProductSummaryResponse>, getProduct(slug):ProductResponse, listCategories():CategoryResponse[], getCategoryTree():CategoryTreeResponse[], getCategory(slug), getTopProducts({categoryId?,limit?}):ProductSummaryResponse[] (PUBLIC best-sellers, WP-3.1a — `[]` until something sells; powers the Home best-sellers rail. CAVEAT: does NOT compose with PLP filters/pagination).
 `@/api/cart`: getCart(), addToCart(productId,quantity), updateCartItem(productId,quantity), removeCartItem(productId), clearCart().
 `@/api/orders`: placeOrder(body):OrderResponse, listOrders({page,size,sort}):Page<OrderSummaryResponse>, getOrder(id):OrderResponse, cancelOrder(id):OrderResponse, verifyRazorpayPayment(body):OrderResponse.
 `@/api/store`: getPublicStore():PublicStoreResponse.
@@ -76,6 +82,12 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
   `adminOrders`.{list({page,size,sort}):Page<OrderSummaryResponse>, get(id), updateStatus(id,status)};
   `adminUsers`.{list({search,page,size,sort}):Page<UserResponse>, get(id), create(body), changeRoles(id,roles), lock(id,reason?), unlock(id), disable(id,reason?)};
   `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body)}.
+`@/api/stats` (STAFF+ADMIN, `auth:true`; WP-3.1a). `adminStats`.{
+  `overview({from?,to?})`:StatsOverviewResponse, `revenueSeries({from?,to?,granularity?})`:RevenueSeriesResponse,
+  `topProducts({from?,to?,limit?})`:TopProductStat[], `lowStock({threshold?,limit?})`:LowStockProduct[]}.
+  Dates are `yyyy-MM-dd`, inclusive; both optional (default trailing 30 days). Money is exact BigDecimal in the
+  store currency (no currency field on the DTOs — use `getPublicStore().currency`); `changePct` is null when the
+  previous period was 0 (render "—", never 0). `Dashboard.tsx` / `Reports.tsx` are built on these.
 
 ### Contexts
 `@/context/AuthContext` → `useAuth()`: {user, isAuthenticated, isStaff, isAdmin, loading, login(email,pw), register(email,name,pw), logout(), refreshUser(), setUser(u)}.
@@ -209,8 +221,14 @@ Data sources are all existing contracts — no new endpoints: `getPublicStore()`
   `AddressResponse` → the `ShippingAddressRequest`/`shippingAddress` shape for `placeOrder`
   (`recipientName` → `name`; `phone`/`addressLine2`/`state` are nullable pass-throughs). The legacy
   `@/lib/addressBook` (localStorage) is **superseded** and must not be used for address CRUD or checkout.
-- No stats/reports endpoints → derive dashboard & reports client-side by paging `adminOrders.list` /
-  `adminProducts.list` / `adminUsers.list` and aggregating.
+- Stats/reports endpoints exist (WP-3.1a) → use `@/api/stats` (`adminStats`), not client-side aggregation.
+  `Dashboard.tsx` and `Reports.tsx` are built on `overview` / `revenue-series` / `top-products` / `low-stock`
+  (STAFF+ADMIN), with a 7/30/90-day range control; recent-orders still legitimately uses `adminOrders.list`.
+  The old page-and-aggregate workarounds have been deleted. Charts use the WP-1.2 themed wrappers
+  (`ThemedAreaChart`/`ThemedBarChart`). Best-sellers rail (Home) uses public `getTopProducts`.
+  NOTE: no payment-method / country breakdown endpoint exists — those Reports charts were dropped (not
+  re-derived client-side). PLP "popularity" sort stays deferred: `/products/top` can't be filtered/paginated,
+  so it can't back the PLP's composable sort (needs a `sort=popular` key on the public search endpoint).
 - No order status filter on the API → fetch a page and filter client-side where needed (e.g. Deliverables).
 - Product images: create via `CreateProductRequest.images`; after creation manage via
   `adminProducts.addImages` / `deleteImage`. `UpdateProductRequest` cannot change slug/sku/images.

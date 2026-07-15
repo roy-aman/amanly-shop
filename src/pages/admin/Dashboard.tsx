@@ -1,158 +1,157 @@
-import { useMemo } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { AlertTriangle, Clock, DollarSign, Package, ShoppingBag, Users } from 'lucide-react';
-import { adminOrders, adminProducts, adminUsers } from '@/api/admin';
-import type { OrderSummaryResponse } from '@/lib/types';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { AlertTriangle, DollarSign, Package, ShoppingBag, TrendingUp, Users } from 'lucide-react';
+import { adminOrders } from '@/api/admin';
+import { adminStats } from '@/api/stats';
+import { getPublicStore } from '@/api/store';
+import type { LowStockProduct, TopProductStat } from '@/lib/types';
 import { formatDate, money } from '@/lib/format';
-import { useAuth } from '@/context/AuthContext';
-import { Card, EmptyState, PageHeader } from '@/components/ui';
+import { trailingRange } from '@/lib/dateRange';
+import { Card, DataTable, EmptyState, PageHeader, ThemedAreaChart, type Column } from '@/components/ui';
 import { DashboardSkeleton } from '@/components/RouteSkeletons';
-import { OrderStatusBadge } from '@/components/StatusBadge';
-import StatCard from '@/components/admin/StatCard';
-
-const CURRENCY = 'USD';
-
-function groupByDay(orders: OrderSummaryResponse[]): { date: string; label: string; orders: number }[] {
-  const map = new Map<string, number>();
-  for (const o of orders) {
-    const key = o.createdAt.slice(0, 10);
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
-  return [...map.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, count]) => ({ date, label: formatDate(date), orders: count }));
-}
+import { OrderStatusBadge, ProductStatusBadge } from '@/components/StatusBadge';
+import DateRangeControl from '@/components/admin/DateRangeControl';
+import MetricTile from '@/components/admin/MetricTile';
 
 export default function Dashboard() {
-  const { isAdmin } = useAuth();
+  const [rangeDays, setRangeDays] = useState(30);
+  const range = trailingRange(rangeDays);
+  // Daily buckets for short windows, weekly once the range gets long enough that
+  // daily points would be noise.
+  const granularity = rangeDays > 60 ? 'week' : 'day';
 
-  const ordersQ = useQuery({
-    queryKey: ['admin', 'dashboard', 'orders'],
-    queryFn: () => adminOrders.list({ size: 100, sort: 'createdAt,desc' }),
+  const storeQ = useQuery({ queryKey: ['public-store'], queryFn: getPublicStore, staleTime: 5 * 60_000 });
+  const currency = storeQ.data?.currency ?? 'USD';
+
+  const overviewQ = useQuery({
+    queryKey: ['admin', 'stats', 'overview', range.from, range.to],
+    queryFn: () => adminStats.overview(range),
+    placeholderData: keepPreviousData,
   });
-  const productsQ = useQuery({
-    queryKey: ['admin', 'dashboard', 'products'],
-    queryFn: () => adminProducts.list({ size: 100 }),
+  const seriesQ = useQuery({
+    queryKey: ['admin', 'stats', 'revenue-series', range.from, range.to, granularity],
+    queryFn: () => adminStats.revenueSeries({ ...range, granularity }),
+    placeholderData: keepPreviousData,
   });
-  // STAFF cannot call the users endpoint — only fire it for admins.
-  const usersQ = useQuery({
-    queryKey: ['admin', 'dashboard', 'users'],
-    queryFn: () => adminUsers.list({ size: 1 }),
-    enabled: isAdmin,
+  const topQ = useQuery({
+    queryKey: ['admin', 'stats', 'top-products', range.from, range.to],
+    queryFn: () => adminStats.topProducts({ ...range, limit: 8 }),
+    placeholderData: keepPreviousData,
+  });
+  const lowStockQ = useQuery({
+    queryKey: ['admin', 'stats', 'low-stock'],
+    queryFn: () => adminStats.lowStock({ threshold: 5, limit: 10 }),
+  });
+  // Recent orders is legitimately a list (not a stat) — keep the list endpoint.
+  const recentQ = useQuery({
+    queryKey: ['admin', 'dashboard', 'recent-orders'],
+    queryFn: () => adminOrders.list({ size: 8, sort: 'createdAt,desc' }),
   });
 
-  const orders = ordersQ.data?.content ?? [];
-  const products = productsQ.data?.content ?? [];
+  if (overviewQ.isPending) return <DashboardSkeleton />;
+  if (overviewQ.isError) {
+    return (
+      <div>
+        <PageHeader title="Dashboard" />
+        <EmptyState title="Could not load stats" message={(overviewQ.error as Error)?.message} />
+      </div>
+    );
+  }
 
-  const revenueRecent = useMemo(
-    () => orders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0),
-    [orders],
-  );
-  const pendingCount = useMemo(() => orders.filter((o) => o.status === 'PENDING').length, [orders]);
-  const lowStock = useMemo(() => products.filter((p) => p.stockQuantity <= 5).length, [products]);
-  const chartData = useMemo(() => groupByDay(orders), [orders]);
-  const recentOrders = orders.slice(0, 8);
+  const ov = overviewQ.data;
+  const series = seriesQ.data?.points ?? [];
+  const top = topQ.data ?? [];
+  const lowStock = lowStockQ.data ?? [];
+  const recentOrders = recentQ.data?.content ?? [];
 
-  if (ordersQ.isLoading || productsQ.isLoading) return <DashboardSkeleton />;
+  const topColumns: Column<TopProductStat>[] = [
+    {
+      key: 'name',
+      header: 'Product',
+      render: (p) =>
+        p.slug ? (
+          <Link to={`/products/${p.slug}`} className="text-slate-200 hover:text-gold-300">
+            {p.name}
+          </Link>
+        ) : (
+          <span className="text-slate-300">{p.name}</span>
+        ),
+    },
+    { key: 'unitsSold', header: 'Units', align: 'right', render: (p) => p.unitsSold },
+    { key: 'revenue', header: 'Revenue', align: 'right', render: (p) => money(p.revenue, currency) },
+  ];
+
+  const lowStockColumns: Column<LowStockProduct>[] = [
+    {
+      key: 'name',
+      header: 'Product',
+      render: (p) => (
+        <div className="min-w-0">
+          <p className="truncate text-slate-200">{p.name}</p>
+          <p className="truncate font-mono text-xs text-slate-500">{p.sku}</p>
+        </div>
+      ),
+    },
+    { key: 'stockQuantity', header: 'Stock', align: 'right', render: (p) => p.stockQuantity },
+    { key: 'status', header: 'Status', align: 'right', render: (p) => <ProductStatusBadge status={p.status} /> },
+  ];
 
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Figures below reflect recent activity (the latest fetched orders/products), not all-time totals — the API has no aggregation endpoint."
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard
-          label="Total orders"
-          value={ordersQ.data?.totalElements ?? 0}
-          tone="blue"
-          icon={<ShoppingBag className="h-5 w-5" />}
-          hint="All-time count"
-        />
-        <StatCard
-          label="Revenue (recent)"
-          value={money(revenueRecent, CURRENCY)}
-          tone="gold"
-          icon={<DollarSign className="h-5 w-5" />}
-          hint="Non-cancelled orders in the latest page"
-        />
-        <StatCard
-          label="Pending orders"
-          value={pendingCount}
-          tone="rose"
-          icon={<Clock className="h-5 w-5" />}
-          hint="Awaiting processing (recent page)"
-        />
-        <StatCard
-          label="Products"
-          value={productsQ.data?.totalElements ?? 0}
-          tone="violet"
-          icon={<Package className="h-5 w-5" />}
-          hint="All-time count"
-        />
-        <StatCard
-          label="Low stock"
-          value={lowStock}
-          tone="rose"
-          icon={<AlertTriangle className="h-5 w-5" />}
-          hint="Stock ≤ 5 (recent page)"
-        />
-        {isAdmin && (
-          <StatCard
-            label="Users"
-            value={usersQ.data?.totalElements ?? (usersQ.isLoading ? '…' : 0)}
-            tone="green"
-            icon={<Users className="h-5 w-5" />}
-            hint="Total registered users"
-          />
-        )}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeader title="Dashboard" subtitle={`Store performance for the last ${rangeDays} days.`} />
+        <DateRangeControl value={rangeDays} onChange={setRangeDays} className="mt-1" />
       </div>
 
+      {/* KPI tiles with period-over-period deltas */}
+      <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricTile
+          label="Revenue"
+          changePct={ov.revenue.changePct}
+          icon={<DollarSign className="h-5 w-5" />}
+          value={money(ov.revenue.current, currency)}
+        />
+        <MetricTile
+          label="Paid orders"
+          changePct={ov.paidOrders.changePct}
+          icon={<ShoppingBag className="h-5 w-5" />}
+          value={ov.paidOrders.current}
+        />
+        <MetricTile
+          label="Customers"
+          changePct={ov.customers.changePct}
+          icon={<Users className="h-5 w-5" />}
+          value={ov.customers.current}
+        />
+        <MetricTile
+          label="Avg. order value"
+          changePct={ov.averageOrderValue.changePct}
+          icon={<TrendingUp className="h-5 w-5" />}
+          value={money(ov.averageOrderValue.current, currency)}
+        />
+      </div>
+
+      {/* Revenue chart + recent orders */}
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="p-5 xl:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-200">Orders (recent)</h2>
-            <span className="text-xs text-slate-500">Grouped by day, latest {orders.length} orders</span>
+            <h2 className="text-sm font-semibold text-slate-200">Revenue</h2>
+            <span className="text-xs text-slate-500">Paid orders, by {granularity}</span>
           </div>
-          {chartData.length === 0 ? (
-            <div className="py-14 text-center text-sm text-slate-500">No orders to chart yet.</div>
+          {seriesQ.isPending ? (
+            <div className="h-64 animate-pulse rounded-xl bg-ink-800/50" />
+          ) : series.length === 0 || series.every((p) => p.revenue === 0) ? (
+            <div className="py-14 text-center text-sm text-slate-500">No paid revenue in this range yet.</div>
           ) : (
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="ordersFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#e0b040" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="#e0b040" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a3140" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} stroke="#2a3140" />
-                  <YAxis allowDecimals={false} tick={{ fill: '#94a3b8', fontSize: 11 }} stroke="#2a3140" />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#141a26',
-                      border: '1px solid #2a3140',
-                      borderRadius: 12,
-                      color: '#e2e8f0',
-                    }}
-                    labelStyle={{ color: '#94a3b8' }}
-                  />
-                  <Area type="monotone" dataKey="orders" stroke="#e0b040" strokeWidth={2} fill="url(#ordersFill)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <ThemedAreaChart
+              data={series as unknown as Array<Record<string, unknown>>}
+              xKey="periodStart"
+              series={[{ key: 'revenue', name: 'Revenue' }]}
+              height={256}
+              xTickFormatter={(v) => formatDate(v as string)}
+              valueFormatter={(v) => money(Number(v), currency)}
+            />
           )}
         </Card>
 
@@ -163,7 +162,13 @@ export default function Dashboard() {
               View all
             </Link>
           </div>
-          {recentOrders.length === 0 ? (
+          {recentQ.isPending ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-lg bg-ink-800/50" />
+              ))}
+            </div>
+          ) : recentOrders.length === 0 ? (
             <EmptyState title="No orders yet" message="New orders will appear here." />
           ) : (
             <ul className="divide-y divide-ink-800">
@@ -183,6 +188,33 @@ export default function Dashboard() {
               ))}
             </ul>
           )}
+        </Card>
+      </div>
+
+      {/* Top products + low stock */}
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="p-5">
+          <h2 className="mb-4 text-sm font-semibold text-slate-200">Top products</h2>
+          <DataTable
+            columns={topColumns}
+            data={top}
+            getRowKey={(p) => p.productId}
+            loading={topQ.isPending}
+            loadingRows={5}
+            empty={<EmptyState icon={<Package className="h-8 w-8" />} title="No sales yet" message="Best-sellers appear once orders are paid." />}
+          />
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="mb-4 text-sm font-semibold text-slate-200">Low stock</h2>
+          <DataTable
+            columns={lowStockColumns}
+            data={lowStock}
+            getRowKey={(p) => p.productId}
+            loading={lowStockQ.isPending}
+            loadingRows={5}
+            empty={<EmptyState icon={<AlertTriangle className="h-8 w-8" />} title="Stock looks healthy" message="No products at or below the low-stock threshold." />}
+          />
         </Card>
       </div>
     </div>

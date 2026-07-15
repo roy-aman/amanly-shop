@@ -324,6 +324,64 @@ export interface UpdateWhatsappSettingsRequest {
   appSecret?: string | null;
 }
 
+// ── Admin stats & reports (WP-3.1) ────────────────────────────────────
+// Mirrors com.royalcommerce.application.stats.dto.*. All money is an exact
+// BigDecimal serialized as a JSON number, in the store currency (no currency
+// field on the DTOs — use getPublicStore().currency). `changePct` is null when
+// the previous period was zero (render "—", never 0).
+export interface StatsMoneyMetric {
+  current: number;
+  previous: number;
+  changePct: number | null;
+}
+export interface StatsCountMetric {
+  current: number;
+  previous: number;
+  changePct: number | null;
+}
+export interface StatsOverviewResponse {
+  from: string; // yyyy-MM-dd
+  to: string; // yyyy-MM-dd
+  revenue: StatsMoneyMetric; // paid orders only
+  paidOrders: StatsCountMetric;
+  totalOrders: StatsCountMetric;
+  customers: StatsCountMetric;
+  averageOrderValue: StatsMoneyMetric;
+  /** Always contains all five statuses, zero-filled. */
+  ordersByStatus: Record<OrderStatus, number>;
+}
+
+export type RevenueGranularity = 'day' | 'week' | 'month';
+export interface RevenueSeriesPoint {
+  periodStart: string; // yyyy-MM-dd (Monday for week, 1st for month)
+  revenue: number;
+  orderCount: number;
+}
+export interface RevenueSeriesResponse {
+  from: string;
+  to: string;
+  granularity: string; // 'DAY' | 'WEEK' | 'MONTH' (echoed back uppercased)
+  /** Contiguous / zero-filled across the range — plot as-is, no gap-filling. */
+  points: RevenueSeriesPoint[];
+}
+
+export interface TopProductStat {
+  productId: string;
+  name: string;
+  slug: string | null; // null for a deleted product
+  unitsSold: number;
+  revenue: number;
+}
+
+export interface LowStockProduct {
+  productId: string;
+  name: string;
+  slug: string | null;
+  sku: string;
+  stockQuantity: number;
+  status: ProductStatus;
+}
+
 // ── Admin user requests ───────────────────────────────────────────────
 export interface AdminCreateUserRequest {
   email: string;
