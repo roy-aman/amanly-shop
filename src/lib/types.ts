@@ -85,6 +85,75 @@ export interface CategoryTreeResponse {
   children: CategoryTreeResponse[];
 }
 
+// ── Catalog: brand (WP-3.5) ───────────────────────────────────────────
+// Mirrors com.royalcommerce.application.brand.dto.*.
+export interface BrandResponse {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logoUrl: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Create a brand (STAFF+ADMIN). 409 BRAND_SLUG_EXISTS on a duplicate slug. `active` defaults true. */
+export interface CreateBrandRequest {
+  name: string;
+  slug: string;
+  description?: string | null;
+  logoUrl?: string | null;
+  active?: boolean | null;
+}
+
+/** Fully replace a brand's fields (STAFF+ADMIN). Unlike create, `active` is required. */
+export interface UpdateBrandRequest {
+  name: string;
+  slug: string;
+  description?: string | null;
+  logoUrl?: string | null;
+  active: boolean;
+}
+
+// ── Catalog: product variant (WP-3.5) ─────────────────────────────────
+// Mirrors com.royalcommerce.application.product.dto.*. A product with ≥1 ACTIVE
+// variant is variant-based: a variantId is then required to add it to the cart.
+export interface ProductVariantResponse {
+  id: string;
+  sku: string;
+  /** Option axes, e.g. { size: 'M', color: 'Red' }. Keys are sorted by the backend. */
+  options: Record<string, string>;
+  /** Human label of the combination, e.g. "color: Red, size: M". */
+  optionsLabel: string;
+  /** Raw per-variant price override; null when the variant inherits the product price. */
+  priceOverride: number | null;
+  /** Price a buyer pays: the override when set, else the product price. */
+  effectivePrice: number;
+  stockQuantity: number;
+  imageId: string | null;
+  active: boolean;
+}
+
+/** Create a variant. `options` must be non-empty; SKU is uppercase/digits/hyphen.
+ *  409 VARIANT_SKU_EXISTS / VARIANT_OPTIONS_EXISTS on a collision. */
+export interface CreateVariantRequest {
+  sku: string;
+  options: Record<string, string>;
+  price?: number | null;
+  stockQuantity?: number | null;
+  imageId?: string | null;
+  active?: boolean | null;
+}
+
+/** Edit a variant's mutable fields (SKU is immutable; stock via the stock endpoint). */
+export interface UpdateVariantRequest {
+  options: Record<string, string>;
+  price?: number | null;
+  imageId?: string | null;
+  active: boolean;
+}
+
 // ── Catalog: product ──────────────────────────────────────────────────
 export interface ProductImageResponse {
   id: string;
@@ -108,11 +177,18 @@ export interface ProductResponse {
   categoryId: string | null;
   categoryName: string | null;
   categorySlug: string | null;
+  /** Brand id/name (WP-3.5); null when the product has no brand. Optional so pre-3.5
+   *  cached payloads still type-check. */
+  brandId?: string | null;
+  brandName?: string | null;
   weight: number | null;
   sellingUnit: string | null;
   stockQuantity: number;
   tags: string[];
   images: ProductImageResponse[];
+  /** Purchasable variants (WP-3.5). Empty/absent for a variantless product; when it has
+   *  ≥1 active variant a variantId is required to add it to the cart. */
+  variants?: ProductVariantResponse[];
   /** Average rating over APPROVED reviews (WP-3.2). null when none yet. Optional
    *  so pre-WP-3.2 cached payloads (e.g. localStorage summaries) still type-check. */
   ratingAvg?: number | null;
@@ -132,6 +208,10 @@ export interface ProductSummaryResponse {
   currency: string;
   status: ProductStatus;
   categoryName: string | null;
+  /** Brand id/name (WP-3.5); null when the product has no brand. Optional so pre-3.5
+   *  cached payloads (e.g. localStorage recently-viewed summaries) still type-check. */
+  brandId?: string | null;
+  brandName?: string | null;
   primaryImageUrl: string | null;
   stockQuantity: number;
   /** Average rating over APPROVED reviews (WP-3.2). null when none yet. Optional
@@ -156,6 +236,8 @@ export interface CreateProductRequest {
   compareAtPrice?: number | null;
   currency: string;
   categoryId?: string | null;
+  /** Optional brand id (WP-3.5). */
+  brandId?: string | null;
   description?: string | null;
   shortDescription?: string | null;
   weight?: number | null;
@@ -173,6 +255,8 @@ export interface UpdateProductRequest {
   compareAtPrice?: number | null;
   currency: string;
   categoryId?: string | null;
+  /** Optional brand id (WP-3.5). Send null to clear the current brand. */
+  brandId?: string | null;
   weight?: number | null;
   sellingUnit?: string | null;
   tags?: string[];
@@ -181,6 +265,8 @@ export interface UpdateProductRequest {
 
 export interface ProductSearchParams {
   categoryId?: string;
+  /** Filter by brand (WP-3.5); composes with the other params. */
+  brandId?: string;
   minPrice?: number;
   maxPrice?: number;
   search?: string;
@@ -212,6 +298,11 @@ export interface CartItemResponse {
   productName: string;
   productSlug: string;
   sku: string;
+  /** Chosen variant (WP-3.5); all null for a variantless line. Optional so pre-3.5
+   *  payloads still type-check. */
+  variantId?: string | null;
+  variantSku?: string | null;
+  variantOptionsLabel?: string | null;
   quantity: number;
   unitPrice: number;
   subtotal: number;
@@ -243,6 +334,11 @@ export interface OrderItemResponse {
   productId: string;
   productName: string;
   sku: string;
+  /** Chosen variant snapshot at placement (WP-3.5); all null for a variantless line.
+   *  Optional so pre-3.5 payloads still type-check. */
+  variantId?: string | null;
+  variantSku?: string | null;
+  variantOptions?: string | null;
   unitPrice: number;
   quantity: number;
   subtotal: number;

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { LayoutGrid, List, PackageSearch, SlidersHorizontal } from 'lucide-react';
-import { getCategoryTree, listProducts } from '@/api/catalog';
+import { getCategoryTree, listBrands, listProducts } from '@/api/catalog';
 import type { CategoryTreeResponse, ProductSearchParams } from '@/lib/types';
 import {
   Button,
@@ -59,6 +59,7 @@ export default function Products() {
 
   // ── URL-synced state (shareable, back/forward-safe) ─────────────────────
   const categoryId = searchParams.get('categoryId') ?? '';
+  const brandId = searchParams.get('brandId') ?? '';
   const minPrice = searchParams.get('minPrice') ?? '';
   const maxPrice = searchParams.get('maxPrice') ?? '';
   const sort = searchParams.get('sort') ?? DEFAULT_SORT;
@@ -86,6 +87,10 @@ export default function Products() {
   const categoriesQuery = useQuery({ queryKey: ['categoryTree'], queryFn: getCategoryTree });
   const categories = useMemo(() => flattenCategories(categoriesQuery.data ?? []), [categoriesQuery.data]);
   const categoryName = categories.find((c) => c.id === categoryId)?.name;
+
+  const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: listBrands });
+  const brands = brandsQuery.data ?? [];
+  const brandName = brands.find((b) => b.id === brandId)?.name;
 
   /** Merge query-param updates; empty/undefined values are removed. Uses replace so
    *  filter tweaks don't spam browser history. */
@@ -115,6 +120,7 @@ export default function Products() {
   function clearAll() {
     updateParams({
       categoryId: undefined,
+      brandId: undefined,
       minPrice: undefined,
       maxPrice: undefined,
       search: undefined,
@@ -123,7 +129,7 @@ export default function Products() {
     });
   }
 
-  const hasActiveFilters = Boolean(categoryId || minPrice || maxPrice || search || inStock);
+  const hasActiveFilters = Boolean(categoryId || brandId || minPrice || maxPrice || search || inStock);
 
   // ── Data ────────────────────────────────────────────────────────────────
   // Only real backend params are sent. `inStock` is applied client-side (see below).
@@ -131,10 +137,11 @@ export default function Products() {
     const p: ProductSearchParams = { page, size, sort };
     if (search) p.search = search;
     if (categoryId) p.categoryId = categoryId;
+    if (brandId) p.brandId = brandId;
     if (minPrice) p.minPrice = Number(minPrice);
     if (maxPrice) p.maxPrice = Number(maxPrice);
     return p;
-  }, [page, size, sort, search, categoryId, minPrice, maxPrice]);
+  }, [page, size, sort, search, categoryId, brandId, minPrice, maxPrice]);
 
   const productsQuery = useQuery({
     queryKey: ['products', params],
@@ -166,6 +173,19 @@ export default function Products() {
           ))}
         </Select>
       </Field>
+
+      {brands.length > 0 && (
+        <Field label="Brand">
+          <Select value={brandId} onChange={(e) => setFilter({ brandId: e.target.value || undefined })}>
+            <option value="">All brands</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
 
       <fieldset className="space-y-2">
         <legend className="rc-label">Price range</legend>
@@ -213,7 +233,8 @@ export default function Products() {
 
       {/*
         Phase 3 facets deliberately NOT built:
-          • Brand / colour / size filters → WP-3.5 (no backend params)
+          • Colour / size filters → no dedicated backend params (variant options aren't
+            a public search facet). Brand filter IS built (WP-3.5, ?brandId=…) above.
           • Rating filter + rating sort → STILL deferred after WP-3.2b. The public
             search endpoint (/api/v1/products) exposes no `minRating` filter or
             `sort=rating` key — ProductSummaryResponse now carries ratingAvg/ratingCount
@@ -235,6 +256,9 @@ export default function Products() {
         <FilterChip onRemove={() => setFilter({ categoryId: undefined })}>
           {categoryName ?? 'Category'}
         </FilterChip>
+      )}
+      {brandId && (
+        <FilterChip onRemove={() => setFilter({ brandId: undefined })}>{brandName ?? 'Brand'}</FilterChip>
       )}
       {(minPrice || maxPrice) && (
         <FilterChip onRemove={() => setFilter({ minPrice: undefined, maxPrice: undefined })}>

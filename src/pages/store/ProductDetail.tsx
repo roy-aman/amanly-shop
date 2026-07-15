@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PackageX, Share2, ShoppingCart } from 'lucide-react';
 import { getProduct, listProducts } from '@/api/catalog';
 import { addToCart } from '@/api/cart';
 import { ApiError } from '@/lib/http';
+import { money, titleCase } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
-import type { ProductResponse, ProductSummaryResponse } from '@/lib/types';
+import type { ProductResponse, ProductSummaryResponse, ProductVariantResponse } from '@/lib/types';
 import {
   Badge,
   Breadcrumbs,
@@ -79,11 +80,67 @@ function toSummary(product: ProductResponse): ProductSummaryResponse {
     currency: product.currency,
     status: product.status,
     categoryName: product.categoryName,
+    brandId: product.brandId ?? null,
+    brandName: product.brandName ?? null,
     primaryImageUrl: primary?.url ?? null,
     stockQuantity: product.stockQuantity,
     ratingAvg: product.ratingAvg ?? null,
     ratingCount: product.ratingCount ?? 0,
   };
+}
+
+// ── Variant helpers (WP-3.5) ──────────────────────────────────────────
+interface OptionAxis {
+  name: string;
+  values: string[];
+}
+
+/** Derive ordered option axes (e.g. Size, Color) and their distinct values from a
+ *  set of variants. Backend serializes each variant's options with sorted keys, so
+ *  axis order is stable; values keep first-seen order. */
+function deriveOptions(variants: ProductVariantResponse[]): OptionAxis[] {
+  const names: string[] = [];
+  const valuesByName = new Map<string, string[]>();
+  for (const v of variants) {
+    for (const [name, value] of Object.entries(v.options)) {
+      if (!valuesByName.has(name)) {
+        names.push(name);
+        valuesByName.set(name, []);
+      }
+      const vals = valuesByName.get(name)!;
+      if (!vals.includes(value)) vals.push(value);
+    }
+  }
+  return names.map((name) => ({ name, values: valuesByName.get(name)! }));
+}
+
+/** Resolve the single variant matching every selected axis; null until a full,
+ *  existing combination is chosen. */
+function resolveVariant(
+  variants: ProductVariantResponse[],
+  selected: Record<string, string>,
+  axes: OptionAxis[],
+): ProductVariantResponse | null {
+  if (axes.some((a) => !selected[a.name])) return null;
+  return variants.find((v) => axes.every((a) => v.options[a.name] === selected[a.name])) ?? null;
+}
+
+/** Status of an option value given the other axes already chosen:
+ *  'incompatible' = no variant has it → disable; 'oos' = exists but all sold out;
+ *  'ok' = at least one in-stock variant. */
+function valueStatus(
+  variants: ProductVariantResponse[],
+  selected: Record<string, string>,
+  name: string,
+  value: string,
+): 'ok' | 'oos' | 'incompatible' {
+  const matches = variants.filter(
+    (v) =>
+      v.options[name] === value &&
+      Object.keys(selected).every((k) => k === name || v.options[k] === selected[k]),
+  );
+  if (matches.length === 0) return 'incompatible';
+  return matches.some((v) => v.stockQuantity > 0) ? 'ok' : 'oos';
 }
 
 // ── Desktop main image with cursor-follow hover zoom ──────────────────
@@ -145,6 +202,8 @@ export default function ProductDetail() {
   const [activeImage, setActiveImage] = useState(0);
   const [adding, setAdding] = useState(false);
   const [recentlyViewed, setRecentlyViewed] = useState<ProductSummaryResponse[]>([]);
+  // Selected option axes for variant products (e.g. { size: 'M', color: 'Red' }).
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
 
   const productQuery = useQuery({
     queryKey: ['product', slug],
@@ -155,6 +214,21 @@ export default function ProductDetail() {
   const product = productQuery.data;
 
   const images = useMemo(() => (product ? sortImages(product) : []), [product]);
+
+  // ── Variant derivation (WP-3.5) ─────────────────────────────────────
+  // Only ACTIVE variants are purchasable; a product with ≥1 active variant is
+  // variant-based (requires a selection + variantId to add). A product with only
+  // inactive variants (or none) behaves exactly like a variantless product.
+  const activeVariants = useMemo(
+    () => (product?.variants ?? []).filter((v) => v.active),
+    [product],
+  );
+  const requiresVariant = activeVariants.length > 0;
+  const optionAxes = useMemo(() => deriveOptions(activeVariants), [activeVariants]);
+  const selectedVariant = useMemo(
+    () => (requiresVariant ? resolveVariant(activeVariants, selectedOptions, optionAxes) : null),
+    [requiresVariant, activeVariants, selectedOptions, optionAxes],
+  );
 
   // Similar products: same category, self excluded. Only runs once we know the category.
   const similarQuery = useQuery({
@@ -177,7 +251,18 @@ export default function ProductDetail() {
     pushRecentlyViewed(toSummary(product));
     setActiveImage(0);
     setQty(1);
+    setSelectedOptions({});
   }, [product]);
+
+  // When a variant resolves, reset the quantity and swap to its pinned image (if any).
+  useEffect(() => {
+    if (!selectedVariant) return;
+    setQty(1);
+    if (selectedVariant.imageId) {
+      const idx = images.findIndex((im) => im.id === selectedVariant.imageId);
+      if (idx >= 0) setActiveImage(idx);
+    }
+  }, [selectedVariant, images]);
 
   if (productQuery.isLoading) return <ProductDetailSkeleton />;
 
@@ -202,9 +287,21 @@ export default function ProductDetail() {
 
   if (!product) return null;
 
-  const outOfStock = product.stockQuantity <= 0;
-  const lowStock = !outOfStock && product.stockQuantity <= 5;
-  const maxQty = outOfStock ? 1 : product.stockQuantity;
+  // Availability/stock resolve to the selected variant for a variant product, else
+  // to the product itself. `needsSelection` is true while a variant product has no
+  // valid full combination chosen (also covers an unavailable combo).
+  const fullySelected = !requiresVariant || optionAxes.every((a) => selectedOptions[a.name]);
+  const needsSelection = requiresVariant && !selectedVariant;
+  const activeStock = requiresVariant ? selectedVariant?.stockQuantity ?? 0 : product.stockQuantity;
+  const outOfStock = !needsSelection && activeStock <= 0;
+  const lowStock = !outOfStock && !needsSelection && activeStock <= 5;
+  const maxQty = outOfStock || needsSelection ? 1 : activeStock;
+
+  // Effective price: the resolved variant's price, else the product's; a variant
+  // product with no selection shows the active-variant price range.
+  const variantPrices = activeVariants.map((v) => v.effectivePrice);
+  const minVariantPrice = variantPrices.length ? Math.min(...variantPrices) : product.price;
+  const maxVariantPrice = variantPrices.length ? Math.max(...variantPrices) : product.price;
 
   const main = images[activeImage] ?? images[0];
 
@@ -233,13 +330,24 @@ export default function ProductDetail() {
       navigate('/login', { state: { from: location.pathname + location.search } });
       return;
     }
+    // Variant products require a chosen variant (backend rejects add-without-variant
+    // with 400 VARIANT_REQUIRED). The button is disabled until then, but guard anyway.
+    if (requiresVariant && !selectedVariant) {
+      toast.info('Choose your options', 'Please select an option before adding to cart.');
+      return;
+    }
     setAdding(true);
     try {
-      await addToCart(product.id, qty);
+      await addToCart(product.id, qty, requiresVariant ? selectedVariant?.id : undefined);
       await refresh();
-      toast.success('Added to cart', `${qty} × ${product.name}`);
+      const label = selectedVariant ? `${product.name} (${selectedVariant.optionsLabel})` : product.name;
+      toast.success('Added to cart', `${qty} × ${label}`);
     } catch (e) {
-      toast.error('Could not add to cart', e instanceof Error ? e.message : 'Please try again.');
+      if (e instanceof ApiError && e.code === 'VARIANT_REQUIRED') {
+        toast.error('Choose your options', 'Please select an option before adding to cart.');
+      } else {
+        toast.error('Could not add to cart', e instanceof Error ? e.message : 'Please try again.');
+      }
     } finally {
       setAdding(false);
     }
@@ -329,6 +437,21 @@ export default function ProductDetail() {
               <p className="text-overline uppercase text-slate-500">{product.categoryName}</p>
             )}
             <h1 className="mt-1 font-display text-h1 text-slate-50 md:text-display">{product.name}</h1>
+            {product.brandName && (
+              <p className="mt-1.5 text-body-sm text-slate-400">
+                by{' '}
+                {product.brandId ? (
+                  <Link
+                    to={`/products?brandId=${product.brandId}`}
+                    className="rounded font-medium text-gold-300 underline-offset-2 transition hover:text-gold-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                  >
+                    {product.brandName}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-slate-300">{product.brandName}</span>
+                )}
+              </p>
+            )}
             {product.ratingAvg != null && (product.ratingCount ?? 0) > 0 && (
               <div className="mt-2">
                 <RatingStars value={product.ratingAvg} count={product.ratingCount} size="md" />
@@ -338,16 +461,32 @@ export default function ProductDetail() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <PriceTag
-              price={product.price}
-              compareAtPrice={product.compareAtPrice}
-              currency={product.currency}
-              size="lg"
-            />
-            {outOfStock ? (
+            {needsSelection ? (
+              minVariantPrice === maxVariantPrice ? (
+                <PriceTag price={minVariantPrice} currency={product.currency} size="lg" />
+              ) : (
+                <span className="text-h2 font-bold text-slate-100">
+                  {money(minVariantPrice, product.currency)} – {money(maxVariantPrice, product.currency)}
+                </span>
+              )
+            ) : (
+              <PriceTag
+                price={requiresVariant && selectedVariant ? selectedVariant.effectivePrice : product.price}
+                compareAtPrice={product.compareAtPrice}
+                currency={product.currency}
+                size="lg"
+              />
+            )}
+            {needsSelection ? (
+              fullySelected ? (
+                <Badge tone="red">Unavailable</Badge>
+              ) : (
+                <Badge tone="gray">Select options</Badge>
+              )
+            ) : outOfStock ? (
               <Badge tone="red">Out of stock</Badge>
             ) : lowStock ? (
-              <Badge tone="amber">Only {product.stockQuantity} left</Badge>
+              <Badge tone="amber">Only {activeStock} left</Badge>
             ) : (
               <Badge tone="green">In stock</Badge>
             )}
@@ -355,11 +494,76 @@ export default function ProductDetail() {
 
           {product.shortDescription && <p className="text-body-sm text-slate-300">{product.shortDescription}</p>}
 
+          {/* Variant selector (WP-3.5) — one radiogroup per option axis. */}
+          {requiresVariant && (
+            <div className="space-y-4" data-testid="pdp-variant-selector">
+              {optionAxes.map((axis) => (
+                <div key={axis.name}>
+                  <p className="mb-1.5 text-caption font-medium uppercase text-slate-400">
+                    {titleCase(axis.name)}
+                    {selectedOptions[axis.name] && (
+                      <span className="ml-1.5 font-normal normal-case text-slate-300">
+                        {selectedOptions[axis.name]}
+                      </span>
+                    )}
+                  </p>
+                  <div role="radiogroup" aria-label={axis.name} className="flex flex-wrap gap-2">
+                    {axis.values.map((value) => {
+                      const status = valueStatus(activeVariants, selectedOptions, axis.name, value);
+                      const isSelected = selectedOptions[axis.name] === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          aria-label={`${axis.name}: ${value}${status === 'oos' ? ' (out of stock)' : ''}`}
+                          disabled={status === 'incompatible'}
+                          onClick={() => setSelectedOptions((prev) => ({ ...prev, [axis.name]: value }))}
+                          className={cn(
+                            'min-w-[2.75rem] rounded-lg border px-3 py-2 text-sm font-medium transition',
+                            isSelected
+                              ? 'border-gold-400 bg-gold-400/15 text-gold-200'
+                              : 'border-ink-700 text-slate-200 hover:border-ink-500',
+                            status === 'incompatible' && 'cursor-not-allowed opacity-40',
+                            status === 'oos' && !isSelected && 'text-slate-500 line-through',
+                          )}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {needsSelection && (
+                <p className="text-caption text-slate-500">
+                  {fullySelected
+                    ? 'This combination is unavailable — try another.'
+                    : 'Select each option to see price and availability.'}
+                </p>
+              )}
+              {selectedVariant && <p className="text-caption text-slate-500">SKU: {selectedVariant.sku}</p>}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-4">
-            <QuantityStepper value={qty} onChange={setQty} min={1} max={maxQty} disabled={outOfStock} />
-            <Button onClick={handleAdd} loading={adding} disabled={outOfStock} size="lg">
+            <QuantityStepper
+              value={qty}
+              onChange={setQty}
+              min={1}
+              max={maxQty}
+              disabled={outOfStock || needsSelection}
+            />
+            <Button onClick={handleAdd} loading={adding} disabled={outOfStock || needsSelection} size="lg">
               <ShoppingCart className="h-4 w-4" />
-              {outOfStock ? 'Out of stock' : 'Add to cart'}
+              {needsSelection
+                ? fullySelected
+                  ? 'Unavailable'
+                  : 'Select options'
+                : outOfStock
+                  ? 'Out of stock'
+                  : 'Add to cart'}
             </Button>
             <WishlistButton productId={product.id} productName={product.name} variant="inline" withLabel />
             <Button variant="outline" size="lg" onClick={handleShare} aria-label="Share this product">

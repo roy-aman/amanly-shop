@@ -115,8 +115,13 @@ export default function AdminOrderDetail() {
                 <tbody className="divide-y divide-ink-800">
                   {order.items.map((it) => (
                     <tr key={it.id}>
-                      <td className="px-2 py-3 text-slate-200">{it.productName}</td>
-                      <td className="px-2 py-3 font-mono text-xs text-slate-500">{it.sku}</td>
+                      <td className="px-2 py-3 text-slate-200">
+                        {it.productName}
+                        {it.variantOptions && (
+                          <span className="mt-0.5 block text-xs text-slate-400">{it.variantOptions}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 font-mono text-xs text-slate-500">{it.variantSku ?? it.sku}</td>
                       <td className="px-2 py-3 text-right text-slate-400">{money(it.unitPrice, order.currency)}</td>
                       <td className="px-2 py-3 text-right text-slate-300">{it.quantity}</td>
                       <td className="px-2 py-3 text-right font-medium text-slate-100">

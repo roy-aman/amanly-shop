@@ -1,5 +1,6 @@
 import { buildQuery, request } from '@/lib/http';
 import type {
+  BrandResponse,
   CategoryResponse,
   CategoryTreeResponse,
   Page,
@@ -32,4 +33,8 @@ export function getCategoryTree(): Promise<CategoryTreeResponse[]> {
 }
 export function getCategory(slug: string): Promise<CategoryResponse> {
   return request('GET', `/api/v1/categories/${encodeURIComponent(slug)}`);
+}
+/** Active brands for the storefront brand filter (public, WP-3.5), ordered by name. */
+export function listBrands(): Promise<BrandResponse[]> {
+  return request('GET', '/api/v1/brands');
 }

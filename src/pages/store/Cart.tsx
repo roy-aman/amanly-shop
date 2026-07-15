@@ -5,7 +5,7 @@ import { addToCart, clearCart, removeCartItem, updateCartItem } from '@/api/cart
 import { addToWishlist } from '@/api/wishlist';
 import { validateCoupon } from '@/api/coupons';
 import { clearStoredCoupon, getStoredCoupon, setStoredCoupon } from '@/lib/couponStorage';
-import type { CartResponse, CouponPreviewResponse } from '@/lib/types';
+import type { CartItemResponse, CartResponse, CouponPreviewResponse } from '@/lib/types';
 import { money } from '@/lib/format';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -32,6 +32,7 @@ const UNDO_WINDOW_MS = 6000;
 
 interface UndoState {
   productId: string;
+  variantId: string | null;
   quantity: number;
   productName: string;
 }
@@ -40,10 +41,11 @@ interface UndoState {
  * Recompute a cart locally so a quantity change reflects instantly (optimistic).
  * The server response later replaces this wholesale, so this only needs to be a
  * plausible interim view — line subtotal = unitPrice × qty, total = Σ subtotals.
+ * Keyed by cartItemId so variant lines of the same product stay independent.
  */
-function withOptimisticQuantity(cart: CartResponse, productId: string, quantity: number): CartResponse {
+function withOptimisticQuantity(cart: CartResponse, cartItemId: string, quantity: number): CartResponse {
   const items = cart.items.map((it) =>
-    it.productId === productId ? { ...it, quantity, subtotal: it.unitPrice * quantity } : it,
+    it.cartItemId === cartItemId ? { ...it, quantity, subtotal: it.unitPrice * quantity } : it,
   );
   return { ...cart, items, totalAmount: items.reduce((sum, it) => sum + it.subtotal, 0) };
 }
@@ -54,8 +56,9 @@ export default function Cart() {
   const { refresh: refreshWishlist } = useWishlist();
   const toast = useToast();
 
-  // Per-product in-flight guard: disables that row's controls to prevent
-  // double-submits and keeps the optimistic view from racing the server.
+  // Per-line in-flight guard (keyed by cartItemId — a product can appear as several
+  // variant lines): disables that row's controls to prevent double-submits and keeps
+  // the optimistic view from racing the server.
   const [busyId, setBusyId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [undo, setUndo] = useState<UndoState | null>(null);
@@ -135,14 +138,14 @@ export default function Cart() {
     clearStoredCoupon();
   }
 
-  async function changeQty(productId: string, quantity: number, current: number) {
-    if (!cart || quantity < 1 || quantity === current) return;
-    setBusyId(productId);
+  async function changeQty(item: CartItemResponse, quantity: number) {
+    if (!cart || quantity < 1 || quantity === item.quantity) return;
+    setBusyId(item.cartItemId);
     // Optimistic: show the new quantity immediately…
-    setCart(withOptimisticQuantity(cart, productId, quantity));
+    setCart(withOptimisticQuantity(cart, item.cartItemId, quantity));
     try {
       // …then reconcile with the authoritative cart the mutation returns.
-      const updated = await updateCartItem(productId, quantity);
+      const updated = await updateCartItem(item.productId, quantity, item.variantId ?? undefined);
       setCart(updated);
     } catch (e) {
       // Roll back to server truth so the UI can never drift out of sync.
@@ -153,12 +156,17 @@ export default function Cart() {
     }
   }
 
-  async function remove(productId: string, quantity: number, productName: string) {
-    setBusyId(productId);
+  async function remove(item: CartItemResponse) {
+    setBusyId(item.cartItemId);
     try {
-      const updated = await removeCartItem(productId);
+      const updated = await removeCartItem(item.productId, item.variantId ?? undefined);
       setCart(updated);
-      setUndo({ productId, quantity, productName });
+      setUndo({
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+        productName: item.productName,
+      });
     } catch (e) {
       await refresh();
       toast.error('Could not remove item', e instanceof Error ? e.message : 'Please try again.');
@@ -172,8 +180,9 @@ export default function Cart() {
   // line. If the wishlist add fails we keep the item in the cart (nothing moved).
   // If the add succeeds but the cart remove fails, the item is safely on the
   // wishlist and still in the cart — we say so rather than silently swallowing it.
-  async function saveForLater(productId: string, productName: string) {
-    setBusyId(productId);
+  async function saveForLater(item: CartItemResponse) {
+    const { productId, productName } = item;
+    setBusyId(item.cartItemId);
     try {
       await addToWishlist(productId);
     } catch (e) {
@@ -182,7 +191,7 @@ export default function Cart() {
       return;
     }
     try {
-      const updated = await removeCartItem(productId);
+      const updated = await removeCartItem(productId, item.variantId ?? undefined);
       setCart(updated);
       void refreshWishlist(); // keep heart state in sync across the app
       toast.success('Saved for later', `${productName} moved to your wishlist.`);
@@ -202,7 +211,7 @@ export default function Cart() {
     if (!undo) return;
     setUndoing(true);
     try {
-      const updated = await addToCart(undo.productId, undo.quantity);
+      const updated = await addToCart(undo.productId, undo.quantity, undo.variantId ?? undefined);
       setCart(updated);
       setUndo(null);
     } catch (e) {
@@ -270,7 +279,7 @@ export default function Cart() {
         {/* ── Line items ─────────────────────────────────────────────── */}
         <div className="space-y-3 lg:col-span-2">
           {items.map((item) => {
-            const busy = busyId === item.productId;
+            const busy = busyId === item.cartItemId;
             const reservedMinutes =
               item.reservationRemainingMinutes != null
                 ? Math.max(0, item.reservationRemainingMinutes - elapsedMinutes)
@@ -295,7 +304,10 @@ export default function Cart() {
                   >
                     {item.productName}
                   </Link>
-                  <p className="text-xs text-slate-500">SKU: {item.sku}</p>
+                  {item.variantOptionsLabel && (
+                    <p className="mt-0.5 text-xs text-slate-300">{item.variantOptionsLabel}</p>
+                  )}
+                  <p className="text-xs text-slate-500">SKU: {item.variantSku ?? item.sku}</p>
                   <p className="mt-1 text-sm text-slate-400">{money(item.unitPrice, currency)} each</p>
                   {reservedMinutes != null && (
                     <div className="mt-2">
@@ -312,7 +324,7 @@ export default function Cart() {
                 <div className="flex items-center justify-between gap-4 sm:justify-end">
                   <QuantityStepper
                     value={item.quantity}
-                    onChange={(q) => changeQty(item.productId, q, item.quantity)}
+                    onChange={(q) => changeQty(item, q)}
                     min={1}
                     max={99}
                     size="sm"
@@ -326,7 +338,7 @@ export default function Cart() {
 
                   <button
                     type="button"
-                    onClick={() => saveForLater(item.productId, item.productName)}
+                    onClick={() => saveForLater(item)}
                     disabled={busy}
                     className="rounded-lg p-2 text-slate-500 transition hover:bg-ink-800 hover:text-gold-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-40"
                     aria-label={`Save ${item.productName} for later`}
@@ -337,7 +349,7 @@ export default function Cart() {
 
                   <button
                     type="button"
-                    onClick={() => remove(item.productId, item.quantity, item.productName)}
+                    onClick={() => remove(item)}
                     disabled={busy}
                     className="rounded-lg p-2 text-slate-500 transition hover:bg-ink-800 hover:text-danger-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-40"
                     aria-label={`Remove ${item.productName}`}

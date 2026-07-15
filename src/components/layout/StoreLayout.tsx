@@ -499,6 +499,9 @@ export default function StoreLayout() {
                   >
                     {item.productName}
                   </Link>
+                  {item.variantOptionsLabel && (
+                    <p className="truncate text-caption text-slate-400">{item.variantOptionsLabel}</p>
+                  )}
                   <p className="mt-0.5 text-caption text-slate-500">
                     {item.quantity} × {money(item.unitPrice, cart.currency)}
                   </p>

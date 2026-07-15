@@ -8,6 +8,7 @@ import {
   Crown,
   FolderTree,
   LayoutDashboard,
+  Tags,
   LogOut,
   Menu,
   MessagesSquare,
@@ -55,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
       { to: '/admin/categories', label: 'Categories', icon: FolderTree },
+      { to: '/admin/brands', label: 'Brands', icon: Tags },
       { to: '/admin/reviews', label: 'Reviews', icon: MessagesSquare },
     ],
   },
@@ -79,6 +81,7 @@ const CRUMB_LABELS: Record<string, string> = {
   coupons: 'Coupons',
   inventory: 'Inventory',
   categories: 'Categories',
+  brands: 'Brands',
   reviews: 'Reviews',
   reports: 'Reports',
   users: 'Users',

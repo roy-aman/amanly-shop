@@ -5,13 +5,25 @@ import { useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import Products from './Products';
-import { getCategoryTree, listProducts } from '@/api/catalog';
-import type { CategoryTreeResponse, Page, ProductSummaryResponse } from '@/lib/types';
+import { getCategoryTree, listBrands, listProducts } from '@/api/catalog';
+import type { BrandResponse, CategoryTreeResponse, Page, ProductSummaryResponse } from '@/lib/types';
 
-vi.mock('@/api/catalog', () => ({ getCategoryTree: vi.fn(), listProducts: vi.fn() }));
+vi.mock('@/api/catalog', () => ({ getCategoryTree: vi.fn(), listBrands: vi.fn(), listProducts: vi.fn() }));
 
 const tree = vi.mocked(getCategoryTree);
+const brandsMock = vi.mocked(listBrands);
 const products = vi.mocked(listProducts);
+
+const BRAND: BrandResponse = {
+  id: 'b1',
+  name: 'Royal Textiles',
+  slug: 'royal-textiles',
+  description: null,
+  logoUrl: null,
+  active: true,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+};
 
 function page(content: ProductSummaryResponse[]): Page<ProductSummaryResponse> {
   return {
@@ -77,6 +89,7 @@ function categorySelect() {
 beforeEach(() => {
   vi.clearAllMocks();
   tree.mockResolvedValue([CATEGORY]);
+  brandsMock.mockResolvedValue([BRAND]);
   products.mockResolvedValue(page([product('p1')]));
 });
 
@@ -93,6 +106,23 @@ describe('Products (PLP)', () => {
     await waitFor(() => expect(locSearch()).toContain('categoryId=c1'));
     await waitFor(() =>
       expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ categoryId: 'c1' })),
+    );
+  });
+
+  it('applying the brand filter updates the URL and re-queries the API (WP-3.5)', async () => {
+    const user = userEvent.setup();
+    renderPLP();
+
+    await screen.findByText('Product p1');
+    const brandSelect = (await screen.findByRole('option', { name: 'All brands' })).closest(
+      'select',
+    ) as HTMLSelectElement;
+
+    await user.selectOptions(brandSelect, 'b1');
+
+    await waitFor(() => expect(locSearch()).toContain('brandId=b1'));
+    await waitFor(() =>
+      expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ brandId: 'b1' })),
     );
   });
 

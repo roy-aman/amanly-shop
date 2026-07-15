@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Star, Trash2 } from 'lucide-react';
-import { adminCategories, adminProducts } from '@/api/admin';
+import { ArrowLeft, Boxes, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { adminCategories, adminProducts, adminProductVariants } from '@/api/admin';
+import { listBrands } from '@/api/catalog';
 import { ApiError } from '@/lib/http';
+import { money } from '@/lib/format';
 import type {
   CreateProductRequest,
+  CreateVariantRequest,
   ProductImageRequest,
+  ProductVariantResponse,
   UpdateProductRequest,
+  UpdateVariantRequest,
 } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, Field, Input, PageHeader, Select, Textarea } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, Field, Input, Modal, PageHeader, Select, Textarea } from '@/components/ui';
 import { FormSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
@@ -34,6 +39,7 @@ interface FormState {
   compareAtPrice: string;
   currency: string;
   categoryId: string;
+  brandId: string;
   shortDescription: string;
   description: string;
   weight: string;
@@ -50,6 +56,7 @@ const EMPTY: FormState = {
   compareAtPrice: '',
   currency: 'USD',
   categoryId: '',
+  brandId: '',
   shortDescription: '',
   description: '',
   weight: '',
@@ -92,6 +99,8 @@ export default function ProductForm() {
     queryFn: () => adminCategories.list(),
   });
 
+  const brandsQ = useQuery({ queryKey: ['brands'], queryFn: () => listBrands() });
+
   const productQ = useQuery({
     queryKey: ['admin', 'product', id],
     queryFn: () => adminProducts.get(id as string),
@@ -110,6 +119,7 @@ export default function ProductForm() {
       compareAtPrice: p.compareAtPrice != null ? String(p.compareAtPrice) : '',
       currency: p.currency,
       categoryId: p.categoryId ?? '',
+      brandId: p.brandId ?? '',
       shortDescription: p.shortDescription ?? '',
       description: p.description ?? '',
       weight: p.weight != null ? String(p.weight) : '',
@@ -175,6 +185,7 @@ export default function ProductForm() {
         compareAtPrice: compareAt,
         currency: form.currency.trim().toUpperCase(),
         categoryId: form.categoryId || null,
+        brandId: form.brandId || null,
         weight,
         sellingUnit,
         tags: toTags(form.tags),
@@ -190,6 +201,7 @@ export default function ProductForm() {
         compareAtPrice: compareAt,
         currency: form.currency.trim().toUpperCase(),
         categoryId: form.categoryId || null,
+        brandId: form.brandId || null,
         description: form.description.trim() || null,
         shortDescription: form.shortDescription.trim() || null,
         weight,
@@ -212,6 +224,7 @@ export default function ProductForm() {
   if (isEdit && productQ.isLoading) return <FormSkeleton />;
 
   const categories = categoriesQ.data ?? [];
+  const brands = brandsQ.data ?? [];
   const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
@@ -262,17 +275,34 @@ export default function ProductForm() {
             </Field>
           </div>
 
-          <Field label="Category" error={errors.categoryId}>
-            <Select value={form.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
-              <option value="">— No category —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {'— '.repeat(c.depth)}
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Category" error={errors.categoryId}>
+              <Select value={form.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
+                <option value="">— No category —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {'— '.repeat(c.depth)}
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Brand" error={errors.brandId}>
+              <Select value={form.brandId} onChange={(e) => set('brandId', e.target.value)}>
+                <option value="">— No brand —</option>
+                {brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+                {/* The assigned brand may be inactive (absent from the active list) — keep it selectable. */}
+                {form.brandId && !brands.some((b) => b.id === form.brandId) && (
+                  <option value={form.brandId}>{productQ.data?.brandName ?? 'Current brand'}</option>
+                )}
+              </Select>
+            </Field>
+          </div>
         </Card>
 
         <Card className="space-y-4 p-5">
@@ -444,9 +474,466 @@ export default function ProductForm() {
         </div>
       </form>
 
-      {/* Images manager — EDIT mode only */}
-      {isEdit && <ImagesManager productId={id as string} />}
+      {/* Variants + images managers — EDIT mode only (both need a saved productId) */}
+      {isEdit ? (
+        <>
+          <VariantsManager productId={id as string} />
+          <ImagesManager productId={id as string} />
+        </>
+      ) : (
+        <Card className="mt-6 space-y-2 p-5">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+            <Boxes className="h-4 w-4 text-gold-400" /> Variants
+          </h2>
+          <p className="text-sm text-slate-500">
+            Variants (e.g. size or colour) are managed after the product exists. Create this product first, then
+            add its variants from the edit screen. Adding the first active variant makes the product variant-based —
+            shoppers then pick an option before adding it to the cart.
+          </p>
+        </Card>
+      )}
     </div>
+  );
+}
+
+// ── Variants manager (edit mode) ──────────────────────────────────────
+interface OptionRow {
+  key: string;
+  value: string;
+}
+
+interface VariantFormState {
+  sku: string;
+  options: OptionRow[];
+  price: string;
+  stockQuantity: string;
+  imageId: string;
+  active: boolean;
+}
+
+const EMPTY_VARIANT: VariantFormState = {
+  sku: '',
+  options: [{ key: '', value: '' }],
+  price: '',
+  stockQuantity: '0',
+  imageId: '',
+  active: true,
+};
+
+const VARIANT_SKU_RE = /^[A-Z0-9-]{2,50}$/;
+
+function rowsToOptions(rows: OptionRow[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const r of rows) {
+    const k = r.key.trim();
+    const v = r.value.trim();
+    if (k && v) out[k] = v;
+  }
+  return out;
+}
+
+function optionsToRows(options: Record<string, string>): OptionRow[] {
+  const rows = Object.entries(options).map(([key, value]) => ({ key, value }));
+  return rows.length ? rows : [{ key: '', value: '' }];
+}
+
+function VariantsManager({ productId }: { productId: string }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<ProductVariantResponse | null>(null);
+  const [form, setForm] = useState<VariantFormState>({ ...EMPTY_VARIANT });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [stockTarget, setStockTarget] = useState<ProductVariantResponse | null>(null);
+  const [stockValue, setStockValue] = useState('0');
+  const [deleteTarget, setDeleteTarget] = useState<ProductVariantResponse | null>(null);
+
+  const productQ = useQuery({
+    queryKey: ['admin', 'product', productId],
+    queryFn: () => adminProducts.get(productId),
+  });
+  const variantsQ = useQuery({
+    queryKey: ['admin', 'product-variants', productId],
+    queryFn: () => adminProductVariants.list(productId),
+  });
+
+  const images = productQ.data?.images ?? [];
+  const currency = productQ.data?.currency ?? 'USD';
+  const variants = variantsQ.data ?? [];
+
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ['admin', 'product-variants', productId] });
+    // The product's variant list / variant-based flag changed too.
+    qc.invalidateQueries({ queryKey: ['admin', 'product', productId] });
+    qc.invalidateQueries({ queryKey: ['admin', 'inventory'] });
+  }
+
+  function onError(e: unknown, title: string) {
+    if (e instanceof ApiError) {
+      if (e.hasFieldErrors()) setErrors(e.fieldErrorMap());
+      else if (e.code === 'VARIANT_SKU_EXISTS') setErrors({ sku: 'This SKU is already in use.' });
+      else if (e.code === 'VARIANT_OPTIONS_EXISTS') setErrors({ options: 'A variant with these options already exists.' });
+      toast.error(title, e.message);
+    } else {
+      toast.error(title, 'An unexpected error occurred.');
+    }
+  }
+
+  const createMutation = useMutation({
+    mutationFn: (body: CreateVariantRequest) => adminProductVariants.create(productId, body),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Variant added');
+      closeForm();
+    },
+    onError: (e) => onError(e, 'Could not add variant'),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ variantId, body }: { variantId: string; body: UpdateVariantRequest }) =>
+      adminProductVariants.update(productId, variantId, body),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Variant updated');
+      closeForm();
+    },
+    onError: (e) => onError(e, 'Could not update variant'),
+  });
+  const stockMutation = useMutation({
+    mutationFn: ({ variantId, quantity }: { variantId: string; quantity: number }) =>
+      adminProductVariants.setStock(productId, variantId, quantity),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Stock updated');
+      setStockTarget(null);
+    },
+    onError: (e) => onError(e, 'Could not update stock'),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (variantId: string) => adminProductVariants.remove(productId, variantId),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Variant deleted');
+      setDeleteTarget(null);
+    },
+    onError: (e) => onError(e, 'Could not delete variant'),
+  });
+
+  function openCreate() {
+    setErrors({});
+    setEditTarget(null);
+    setForm({ ...EMPTY_VARIANT, options: [{ key: '', value: '' }] });
+    setFormOpen(true);
+  }
+  function openEdit(v: ProductVariantResponse) {
+    setErrors({});
+    setEditTarget(v);
+    setForm({
+      sku: v.sku,
+      options: optionsToRows(v.options),
+      price: v.priceOverride != null ? String(v.priceOverride) : '',
+      stockQuantity: String(v.stockQuantity),
+      imageId: v.imageId ?? '',
+      active: v.active,
+    });
+    setFormOpen(true);
+  }
+  function closeForm() {
+    setFormOpen(false);
+    setEditTarget(null);
+    setErrors({});
+  }
+  function openStock(v: ProductVariantResponse) {
+    setStockTarget(v);
+    setStockValue(String(v.stockQuantity));
+  }
+
+  function setField<K extends keyof VariantFormState>(key: K, value: VariantFormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+  function setOptionRow(idx: number, patch: Partial<OptionRow>) {
+    setForm((f) => ({ ...f, options: f.options.map((r, i) => (i === idx ? { ...r, ...patch } : r)) }));
+  }
+
+  function validate(): boolean {
+    const next: Record<string, string> = {};
+    if (!editTarget) {
+      if (!form.sku.trim()) next.sku = 'SKU is required';
+      else if (!VARIANT_SKU_RE.test(form.sku.trim())) next.sku = 'Uppercase letters, digits and hyphens (2–50 chars)';
+    }
+    if (Object.keys(rowsToOptions(form.options)).length === 0) {
+      next.options = 'Add at least one option (e.g. Size = M)';
+    }
+    if (form.price.trim() && Number(form.price) <= 0) next.price = 'Price must be greater than 0';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+  function submit() {
+    if (!validate()) return;
+    const options = rowsToOptions(form.options);
+    const price = form.price.trim() ? Number(form.price) : null;
+    const imageId = form.imageId || null;
+    if (editTarget) {
+      updateMutation.mutate({
+        variantId: editTarget.id,
+        body: { options, price, imageId, active: form.active },
+      });
+    } else {
+      createMutation.mutate({
+        sku: form.sku.trim().toUpperCase(),
+        options,
+        price,
+        stockQuantity: Number(form.stockQuantity) || 0,
+        imageId,
+        active: form.active,
+      });
+    }
+  }
+
+  return (
+    <Card className="mt-6 space-y-4 p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+          <Boxes className="h-4 w-4 text-gold-400" /> Variants
+        </h2>
+        <Button type="button" size="sm" variant="outline" onClick={openCreate}>
+          <Plus className="h-4 w-4" /> Add variant
+        </Button>
+      </div>
+
+      {variantsQ.isLoading ? (
+        <p className="text-sm text-slate-500">Loading variants…</p>
+      ) : variants.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          No variants. This product sells by its own price and stock. Add a variant to sell it by size, colour, etc. —
+          the first active variant makes it variant-based.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wider text-slate-500">
+                <th className="px-2 py-2 font-medium">Options</th>
+                <th className="px-2 py-2 font-medium">SKU</th>
+                <th className="px-2 py-2 font-medium text-right">Price</th>
+                <th className="px-2 py-2 font-medium text-right">Stock</th>
+                <th className="px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-800">
+              {variants.map((v) => (
+                <tr key={v.id}>
+                  <td className="px-2 py-3 text-slate-200">{v.optionsLabel}</td>
+                  <td className="px-2 py-3 font-mono text-xs text-slate-500">{v.sku}</td>
+                  <td className="px-2 py-3 text-right text-slate-300">
+                    {money(v.effectivePrice, currency)}
+                    {v.priceOverride == null && <span className="ml-1 text-xs text-slate-600">(base)</span>}
+                  </td>
+                  <td className="px-2 py-3 text-right">
+                    <span className={v.stockQuantity <= 5 ? 'font-semibold text-rose-400' : 'text-slate-300'}>
+                      {v.stockQuantity}
+                    </span>
+                  </td>
+                  <td className="px-2 py-3">
+                    <Badge tone={v.active ? 'green' : 'gray'}>{v.active ? 'Active' : 'Inactive'}</Badge>
+                  </td>
+                  <td className="px-2 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button size="sm" variant="outline" onClick={() => openStock(v)}>
+                        Set stock
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(v)} aria-label={`Edit ${v.sku}`}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(v)} aria-label={`Delete ${v.sku}`}>
+                        <Trash2 className="h-4 w-4 text-danger-400" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Create / edit variant form */}
+      <Modal
+        open={formOpen}
+        onClose={closeForm}
+        title={editTarget ? `Edit variant ${editTarget.sku}` : 'Add variant'}
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={closeForm}>
+              Cancel
+            </Button>
+            <Button loading={createMutation.isPending || updateMutation.isPending} onClick={submit}>
+              {editTarget ? 'Save' : 'Add variant'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field
+            label="SKU"
+            required
+            error={errors.sku}
+            hint={editTarget ? 'SKU is immutable — create a new variant to change it.' : 'UPPERCASE / digits / hyphen'}
+          >
+            <Input
+              value={form.sku}
+              onChange={(e) => setField('sku', e.target.value.toUpperCase())}
+              invalid={!!errors.sku}
+              readOnly={!!editTarget}
+              disabled={!!editTarget}
+            />
+          </Field>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="rc-label">Options</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setForm((f) => ({ ...f, options: [...f.options, { key: '', value: '' }] }))}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add option
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {form.options.map((row, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <Input
+                    aria-label={`Option ${idx + 1} name`}
+                    placeholder="Size"
+                    value={row.key}
+                    onChange={(e) => setOptionRow(idx, { key: e.target.value })}
+                  />
+                  <span className="text-slate-500">=</span>
+                  <Input
+                    aria-label={`Option ${idx + 1} value`}
+                    placeholder="M"
+                    value={row.value}
+                    onChange={(e) => setOptionRow(idx, { value: e.target.value })}
+                  />
+                  {form.options.length > 1 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Remove option ${idx + 1}`}
+                      onClick={() => setForm((f) => ({ ...f, options: f.options.filter((_, i) => i !== idx) }))}
+                    >
+                      <Trash2 className="h-4 w-4 text-slate-400" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {errors.options && <p className="mt-1 text-xs text-danger-300">{errors.options}</p>}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Price override" error={errors.price} hint="Optional · blank inherits the product price">
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={form.price}
+                onChange={(e) => setField('price', e.target.value)}
+                invalid={!!errors.price}
+              />
+            </Field>
+            {!editTarget && (
+              <Field label="Initial stock">
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.stockQuantity}
+                  onChange={(e) => setField('stockQuantity', e.target.value)}
+                />
+              </Field>
+            )}
+            <Field label="Image" hint="Optional · pins a product image to this variant">
+              <Select value={form.imageId} onChange={(e) => setField('imageId', e.target.value)}>
+                <option value="">— None —</option>
+                {images.map((im, i) => (
+                  <option key={im.id} value={im.id}>
+                    {im.altText || `Image ${i + 1}`}
+                    {im.isPrimary ? ' (primary)' : ''}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setField('active', e.target.checked)}
+              className="h-4 w-4 accent-gold-400"
+            />
+            Active (purchasable)
+          </label>
+        </div>
+      </Modal>
+
+      {/* Set variant stock */}
+      <Modal
+        open={!!stockTarget}
+        onClose={() => setStockTarget(null)}
+        title="Set variant stock"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setStockTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={stockMutation.isPending}
+              onClick={() =>
+                stockTarget &&
+                stockMutation.mutate({ variantId: stockTarget.id, quantity: Math.max(0, Number(stockValue) || 0) })
+              }
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        {stockTarget && (
+          <Field label={`Stock for ${stockTarget.optionsLabel}`}>
+            <Input
+              type="number"
+              min={0}
+              value={stockValue}
+              onChange={(e) => setStockValue(e.target.value)}
+              autoFocus
+            />
+          </Field>
+        )}
+      </Modal>
+
+      {/* Delete variant */}
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete this variant?"
+        description={
+          deleteTarget
+            ? `Permanently delete variant ${deleteTarget.sku} (${deleteTarget.optionsLabel}). Deleting the last variant returns the product to selling by its own price and stock. Placed order lines keep their variant snapshot.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+    </Card>
   );
 }
 

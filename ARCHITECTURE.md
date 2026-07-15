@@ -29,18 +29,23 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `CategoryResponse` {id,name,slug,description,parentId,parentName,depth,sortOrder,active,createdAt,updatedAt};
 `CategoryTreeResponse` {id,name,slug,sortOrder,children[]};
 `ProductImageResponse` {id,url,altText,sortOrder,isPrimary};
-`ProductResponse` {id,name,slug,description,shortDescription,sku,price,compareAtPrice,currency,status,categoryId,categoryName,categorySlug,weight,sellingUnit,stockQuantity,tags:string[],images[],`ratingAvg`:number|null,`ratingCount`:number,createdAt,updatedAt};
-`ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,primaryImageUrl,stockQuantity,`ratingAvg`:number|null,`ratingCount`:number};
+`ProductResponse` {id,name,slug,description,shortDescription,sku,price,compareAtPrice,currency,status,categoryId,categoryName,categorySlug,`brandId`?:string|null,`brandName`?:string|null,weight,sellingUnit,stockQuantity,tags:string[],images[],`variants`?:ProductVariantResponse[],`ratingAvg`:number|null,`ratingCount`:number,createdAt,updatedAt};
+`ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,`brandId`?:string|null,`brandName`?:string|null,primaryImageUrl,stockQuantity,`ratingAvg`:number|null,`ratingCount`:number};
+  (WP-3.5: `brandId`/`brandName`/`variants` are additive & nullable — typed OPTIONAL so pre-3.5 cached payloads still compile; backend always populates them. `variants` is `[]` for a variantless product; a product with ≥1 ACTIVE variant is variant-based — a `variantId` is then REQUIRED to add it to the cart.)
   (WP-3.2b: `ratingAvg`/`ratingCount` are the APPROVED-review aggregate. Typed OPTIONAL in TS so pre-3.2 cached payloads — e.g. localStorage recently-viewed summaries — still compile; backend always populates them. Treat `ratingAvg==null` / `ratingCount==0` as "no ratings" and render nothing, never "0 (0)".)
 `ProductImageRequest` {url,altText?,sortOrder,isPrimary};
-`CreateProductRequest` {name,slug,sku,price,compareAtPrice?,currency,categoryId?,description?,shortDescription?,weight?,tags?,images?,stockQuantity?};
-`UpdateProductRequest` {name,description?,shortDescription?,price,compareAtPrice?,currency,categoryId?,weight?,tags?,stockQuantity?} (NO slug/sku/images);
-`ProductSearchParams` {categoryId?,minPrice?,maxPrice?,search?,tag?,status?,page?,size?,sort?};
+`CreateProductRequest` {name,slug,sku,price,compareAtPrice?,currency,categoryId?,`brandId`?,description?,shortDescription?,weight?,tags?,images?,stockQuantity?};
+`UpdateProductRequest` {name,description?,shortDescription?,price,compareAtPrice?,currency,categoryId?,`brandId`?(send null to clear),weight?,tags?,stockQuantity?} (NO slug/sku/images);
+`ProductSearchParams` {categoryId?,`brandId`?,minPrice?,maxPrice?,search?,tag?,status?,page?,size?,sort?} (brandId composes with the rest, WP-3.5);
+Brands & variants (WP-3.5): `BrandResponse` {id,name,slug,description:string|null,logoUrl:string|null,active,createdAt,updatedAt};
+  `CreateBrandRequest` {name,slug,description?,logoUrl?,active?}; `UpdateBrandRequest` {name,slug,description?,logoUrl?,active(REQUIRED)} (409 `BRAND_SLUG_EXISTS`).
+  `ProductVariantResponse` {id,sku,options:Record<string,string>,optionsLabel:string,priceOverride:number|null,effectivePrice:number,stockQuantity,imageId:string|null,active};
+  `CreateVariantRequest` {sku,options(non-empty),price?,stockQuantity?,imageId?,active?}; `UpdateVariantRequest` {options,price?,imageId?,active(REQUIRED)} (SKU immutable; stock via a dedicated endpoint; 409 `VARIANT_SKU_EXISTS`/`VARIANT_OPTIONS_EXISTS`).
 `CreateCategoryRequest` {name,slug,description?,parentId?}; `UpdateCategoryRequest` {name,description?,sortOrder?,active?};
-`CartItemResponse` {cartItemId,productId,productName,productSlug,sku,quantity,unitPrice,subtotal,reservationRemainingMinutes};
+`CartItemResponse` {cartItemId,productId,productName,productSlug,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptionsLabel`?:string|null,quantity,unitPrice,subtotal,reservationRemainingMinutes} (WP-3.5 variant fields null for a variantless line);
 `CartResponse` {cartId,userId,items[],totalAmount,currency};
 `ShippingDetails`/`ShippingAddressRequest` {name,phone?,addressLine1,addressLine2?,city,state?,postalCode,country};
-`OrderItemResponse` {id,productId,productName,sku,unitPrice,quantity,subtotal};
+`OrderItemResponse` {id,productId,productName,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptions`?:string|null,unitPrice,quantity,subtotal} (WP-3.5 variant snapshot null for a variantless line);
 `PaymentAction` {provider,razorpayKeyId,razorpayOrderId,amountMinor,currency};
 `OrderResponse` {id,userId,status,paymentMethod,paymentStatus,`totalAmount`(post-discount payable),`discountAmount`:number(0 when none, WP-3.4),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
 `OrderSummaryResponse` {id,status,paymentMethod,totalAmount,currency,itemCount,shippingCity,shippingCountry,createdAt} (order LIST — NO discount fields);
@@ -93,8 +98,8 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
 ### API modules
 `@/api/auth`: login(email,password), register(email,fullName,password), logout(), forgotPassword(email), resetPassword(token,newPassword), resendEmailVerification(email), verifyEmail(token).
 `@/api/users`: getCurrentUser(), updateProfile(fullName), updatePassword(currentPassword,newPassword).
-`@/api/catalog`: listProducts(params):Page<ProductSummaryResponse>, getProduct(slug):ProductResponse, listCategories():CategoryResponse[], getCategoryTree():CategoryTreeResponse[], getCategory(slug), getTopProducts({categoryId?,limit?}):ProductSummaryResponse[] (PUBLIC best-sellers, WP-3.1a — `[]` until something sells; powers the Home best-sellers rail. CAVEAT: does NOT compose with PLP filters/pagination).
-`@/api/cart`: getCart(), addToCart(productId,quantity), updateCartItem(productId,quantity), removeCartItem(productId), clearCart().
+`@/api/catalog`: listProducts(params):Page<ProductSummaryResponse>, getProduct(slug):ProductResponse, listCategories():CategoryResponse[], getCategoryTree():CategoryTreeResponse[], getCategory(slug), getTopProducts({categoryId?,limit?}):ProductSummaryResponse[] (PUBLIC best-sellers, WP-3.1a — `[]` until something sells; powers the Home best-sellers rail. CAVEAT: does NOT compose with PLP filters/pagination), `listBrands`():BrandResponse[] (PUBLIC active brands, WP-3.5 — powers the PLP brand facet).
+`@/api/cart`: getCart(), `addToCart(productId,quantity,variantId?)`, `updateCartItem(productId,quantity,variantId?)`, `removeCartItem(productId,variantId?)`, clearCart(). (WP-3.5: `variantId` is optional & backward-compatible — omit it for a variantless product/line, pass it for a variant. Update/remove append `?variantId=…`; add includes it in the body. All existing variantless callers keep working unchanged.)
 `@/api/orders`: placeOrder(body):OrderResponse, listOrders({page,size,sort}):Page<OrderSummaryResponse>, getOrder(id):OrderResponse, cancelOrder(id):OrderResponse, verifyRazorpayPayment(body):OrderResponse.
 `@/api/store`: getPublicStore():PublicStoreResponse.
 `@/api/coupons` (WP-3.4): validateCoupon(code, subtotal?):CouponPreviewResponse (auth; POST /coupons/validate —
@@ -113,6 +118,8 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
   not directly (except Cart's save-for-later, which calls `addToWishlist` then `removeCartItem`).
 `@/api/admin`:
   `adminProducts`.{list(params):Page<ProductSummaryResponse>, get(id), create(body), update(id,body), changeStatus(id,status), setStock(id,quantity), addImages(id,images[]), deleteImage(id,imageId), remove(id)};
+  `adminProductVariants` (WP-3.5, STAFF+ADMIN; scoped under a product).{list(productId):ProductVariantResponse[], create(productId,body):ProductVariantResponse, update(productId,variantId,body) (SKU immutable), setStock(productId,variantId,quantity):ProductVariantResponse, remove(productId,variantId):void};
+  `adminBrands` (WP-3.5, STAFF+ADMIN; NO delete — deactivate only).{list():BrandResponse[], get(id), create(body):BrandResponse, update(id,body):BrandResponse, deactivate(id):BrandResponse} (409 `BRAND_SLUG_EXISTS`);
   `adminCategories`.{list():CategoryResponse[], create(body), update(id,body), remove(id)};
   `adminOrders`.{list({page,size,sort}):Page<OrderSummaryResponse>, get(id), updateStatus(id,status)};
   `adminUsers`.{list({search,page,size,sort}):Page<UserResponse>, get(id), create(body), changeRoles(id,roles), lock(id,reason?), unlock(id), disable(id,reason?)};
@@ -234,7 +241,8 @@ Auth (no layout / centered): `/login`, `/register`, `/admin/login`, `/forgot-pas
 Admin (in `AdminLayout`, guarded): `/admin` dashboard, `/admin/orders`, `/admin/orders/:id`,
 `/admin/deliverables`, `/admin/coupons` (WP-3.4 — coupon CRUD, STAFF+ADMIN with ADMIN-only delete, sidebar under
 Sales), `/admin/inventory`, `/admin/inventory/new`, `/admin/inventory/:id`,
-`/admin/categories`, `/admin/reviews` (WP-3.2b — review moderation, STAFF+ADMIN, sidebar under Catalog),
+`/admin/categories`, `/admin/brands` (WP-3.5 — brand CRUD/deactivate, STAFF+ADMIN, sidebar under Catalog; no
+delete), `/admin/reviews` (WP-3.2b — review moderation, STAFF+ADMIN, sidebar under Catalog),
 `/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`, `/admin/forbidden`.
 
 ## Layout & navigation chrome (WP-1.3)
@@ -299,6 +307,19 @@ Data sources are all existing contracts — no new endpoints: `getPublicStore()`
   `RequireStaff` block; the destructive **delete** action is gated to ADMIN via `useAuth().isAdmin`, matching the
   backend where DELETE is ADMIN-only and list/CRUD/deactivate are STAFF+ADMIN); a used coupon can't be deleted
   (409 → the UI steers you to deactivate).
+- **Variants & brands (WP-3.5).** PDP (`ProductDetail`) renders a variant selector when the product has ≥1
+  active variant: it derives one radiogroup per option axis from the variants' `options` maps, resolves the
+  selected variant, and shows its `effectivePrice`/`stockQuantity`/pinned image reactively (a range "from…" until a
+  full combination is chosen). Incompatible option combos are disabled; a full selection is REQUIRED before add,
+  which sends `variantId` (with a `VARIANT_REQUIRED` guard). Variantless products behave exactly as before (no
+  selector, add without `variantId`). The PLP (`Products`) adds a **brand facet** from `listBrands()` → `?brandId=`
+  URL param (composes with the other filters + chips + clear). The admin product form (`ProductForm`) gains a
+  **brand selector** (optional, keeps an inactive assigned brand selectable) and a **variant editor** (edit mode
+  only — variants need a saved productId; create mode shows a note): add/edit/delete variants (options as key/value
+  rows, price override, active, optional pinned image), set per-variant stock via the dedicated PATCH. Cart page +
+  mini-cart show `variantOptionsLabel`/`variantSku` and are variant-aware (update/remove key by cart line + pass
+  `variantId`); customer + admin order detail show `variantOptions`. Mixed carts (variant + variantless lines) are
+  handled. Brand/colour/size are NOT public search facets beyond brand — variant options aren't a search param.
 - No order status filter on the API → fetch a page and filter client-side where needed (e.g. Deliverables).
 - Product images: create via `CreateProductRequest.images`; after creation manage via
   `adminProducts.addImages` / `deleteImage`. `UpdateProductRequest` cannot change slug/sku/images.

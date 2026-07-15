@@ -100,7 +100,8 @@ export default function OrderDetail() {
                     <tr key={it.id} className="border-b border-ink-850 last:border-0">
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-100">{it.productName}</div>
-                        <div className="text-xs text-slate-500">SKU: {it.sku}</div>
+                        {it.variantOptions && <div className="text-xs text-slate-300">{it.variantOptions}</div>}
+                        <div className="text-xs text-slate-500">SKU: {it.variantSku ?? it.sku}</div>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-300">{money(it.unitPrice, order.currency)}</td>
                       <td className="px-4 py-3 text-right text-slate-300">{it.quantity}</td>

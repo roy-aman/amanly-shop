@@ -3,11 +3,14 @@ import type {
   AdminCouponResponse,
   AdminCreateUserRequest,
   AdminReviewResponse,
+  BrandResponse,
   CategoryResponse,
   ChangeUserRolesRequest,
+  CreateBrandRequest,
   CreateCategoryRequest,
   CreateCouponRequest,
   CreateProductRequest,
+  CreateVariantRequest,
   OrderPaymentStatus,
   OrderResponse,
   OrderStatus,
@@ -18,12 +21,15 @@ import type {
   ProductSearchParams,
   ProductStatus,
   ProductSummaryResponse,
+  ProductVariantResponse,
   ReviewStatus,
   StoreSettingsResponse,
+  UpdateBrandRequest,
   UpdateCategoryRequest,
   UpdateCouponRequest,
   UpdatePaymentSettingsRequest,
   UpdateProductRequest,
+  UpdateVariantRequest,
   UpdateWhatsappSettingsRequest,
   UserResponse,
 } from '@/lib/types';
@@ -58,6 +64,51 @@ export const adminProducts = {
   },
   remove(id: string): Promise<void> {
     return request('DELETE', `${A}/products/${id}`, { auth: true }); // ADMIN only
+  },
+};
+
+// ── Product variants (ADMIN, STAFF) ───────────────────────────────────
+// Scoped under a product: /admin/products/{productId}/variants. SKU is immutable
+// on update; stock is set via the dedicated PATCH .../stock endpoint. The first
+// active variant makes the product variant-based (add-to-cart then requires a
+// variantId). 409 VARIANT_SKU_EXISTS / VARIANT_OPTIONS_EXISTS on a collision.
+export const adminProductVariants = {
+  list(productId: string): Promise<ProductVariantResponse[]> {
+    return request('GET', `${A}/products/${productId}/variants`, { auth: true });
+  },
+  create(productId: string, body: CreateVariantRequest): Promise<ProductVariantResponse> {
+    return request('POST', `${A}/products/${productId}/variants`, { body, auth: true });
+  },
+  update(productId: string, variantId: string, body: UpdateVariantRequest): Promise<ProductVariantResponse> {
+    return request('PUT', `${A}/products/${productId}/variants/${variantId}`, { body, auth: true });
+  },
+  setStock(productId: string, variantId: string, quantity: number): Promise<ProductVariantResponse> {
+    return request('PATCH', `${A}/products/${productId}/variants/${variantId}/stock`, {
+      body: { quantity },
+      auth: true,
+    });
+  },
+  remove(productId: string, variantId: string): Promise<void> {
+    return request('DELETE', `${A}/products/${productId}/variants/${variantId}`, { auth: true });
+  },
+};
+
+// ── Brands (ADMIN, STAFF; no delete — deactivate only) ────────────────
+export const adminBrands = {
+  list(): Promise<BrandResponse[]> {
+    return request('GET', `${A}/brands`, { auth: true });
+  },
+  get(id: string): Promise<BrandResponse> {
+    return request('GET', `${A}/brands/${id}`, { auth: true });
+  },
+  create(body: CreateBrandRequest): Promise<BrandResponse> {
+    return request('POST', `${A}/brands`, { body, auth: true });
+  },
+  update(id: string, body: UpdateBrandRequest): Promise<BrandResponse> {
+    return request('PUT', `${A}/brands/${id}`, { body, auth: true });
+  },
+  deactivate(id: string): Promise<BrandResponse> {
+    return request('POST', `${A}/brands/${id}/deactivate`, { auth: true });
   },
 };
 

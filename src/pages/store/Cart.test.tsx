@@ -112,7 +112,7 @@ describe('Cart (WP-2.4)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Increase quantity' }));
 
-    await waitFor(() => expect(updateMock).toHaveBeenCalledWith('p1', 3));
+    await waitFor(() => expect(updateMock).toHaveBeenCalledWith('p1', 3, undefined));
     // Optimistic setCart + server-truth reconcile setCart both fire.
     await waitFor(() => expect(setCart).toHaveBeenCalled());
     const calls = setCart.mock.calls;
@@ -126,11 +126,11 @@ describe('Cart (WP-2.4)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove Signet Ring' }));
 
-    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('p1'));
+    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('p1', undefined));
     const undoBtn = await screen.findByRole('button', { name: /undo/i });
 
     await user.click(undoBtn);
-    await waitFor(() => expect(addMock).toHaveBeenCalledWith('p1', 2));
+    await waitFor(() => expect(addMock).toHaveBeenCalledWith('p1', 2, undefined));
   });
 
   it('"save for later" adds to the wishlist then removes the cart line', async () => {
@@ -140,10 +140,31 @@ describe('Cart (WP-2.4)', () => {
     await user.click(screen.getByRole('button', { name: 'Save Signet Ring for later' }));
 
     await waitFor(() => expect(addWishlistMock).toHaveBeenCalledWith('p1'));
-    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('p1'));
+    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('p1', undefined));
     // Cart is reconciled from server truth and heart state is resynced.
     await waitFor(() => expect(setCart).toHaveBeenCalled());
     expect(wishlistRefresh).toHaveBeenCalled();
+  });
+
+  it('shows the variant label + SKU on a variant line and removes it variant-aware (WP-3.5)', async () => {
+    const variantItem = item({
+      cartItemId: 'ci-v',
+      variantId: 'var-1',
+      variantSku: 'RING-1-M-RED',
+      variantOptionsLabel: 'color: Red, size: M',
+    });
+    currentCart = cart([variantItem]);
+    removeMock.mockResolvedValue(cart([]));
+    const user = userEvent.setup();
+    renderCart();
+
+    // The chosen options + the variant SKU are surfaced on the line.
+    expect(screen.getByText('color: Red, size: M')).toBeInTheDocument();
+    expect(screen.getByText('SKU: RING-1-M-RED')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Signet Ring' }));
+    // Remove targets the specific variant line via its variantId.
+    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('p1', 'var-1'));
   });
 
   it('renders a rich empty state with a Start shopping CTA', () => {

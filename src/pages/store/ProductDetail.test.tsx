@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ProductDetail from './ProductDetail';
 import { getProduct, listProducts } from '@/api/catalog';
-import type { Page, ProductImageResponse, ProductResponse, ProductSummaryResponse } from '@/lib/types';
+import { addToCart } from '@/api/cart';
+import type {
+  Page,
+  ProductImageResponse,
+  ProductResponse,
+  ProductSummaryResponse,
+  ProductVariantResponse,
+} from '@/lib/types';
 
 vi.mock('@/api/catalog', () => ({ getProduct: vi.fn(), listProducts: vi.fn() }));
 vi.mock('@/api/cart', () => ({ addToCart: vi.fn() }));
@@ -19,6 +26,22 @@ vi.mock('@/context/ToastContext', () => ({
 
 const getProductMock = vi.mocked(getProduct);
 const listProductsMock = vi.mocked(listProducts);
+const addToCartMock = vi.mocked(addToCart);
+
+function variant(overrides: Partial<ProductVariantResponse> = {}): ProductVariantResponse {
+  return {
+    id: 'var-m',
+    sku: 'RING-1-M',
+    options: { size: 'M' },
+    optionsLabel: 'size: M',
+    priceOverride: null,
+    effectivePrice: 120,
+    stockQuantity: 5,
+    imageId: null,
+    active: true,
+    ...overrides,
+  };
+}
 
 function image(id: string, url: string, sortOrder: number, isPrimary = false): ProductImageResponse {
   return { id, url, altText: `alt-${id}`, sortOrder, isPrimary };
@@ -108,6 +131,40 @@ describe('ProductDetail (PDP)', () => {
 
     const addBtn = await screen.findByRole('button', { name: /out of stock/i });
     expect(addBtn).toBeDisabled();
+  });
+
+  it('variantless product adds to cart without a variantId (WP-3.5)', async () => {
+    const user = userEvent.setup();
+    renderPDP();
+
+    const addBtn = await screen.findByRole('button', { name: /add to cart/i });
+    await user.click(addBtn);
+
+    await waitFor(() => expect(addToCartMock).toHaveBeenCalledWith('p1', 1, undefined));
+  });
+
+  it('variant product requires a selection, then adds with the resolved variantId (WP-3.5)', async () => {
+    getProductMock.mockResolvedValue(
+      product({
+        variants: [
+          variant({ id: 'var-m', options: { size: 'M' }, optionsLabel: 'size: M', sku: 'RING-1-M' }),
+          variant({ id: 'var-l', options: { size: 'L' }, optionsLabel: 'size: L', sku: 'RING-1-L', stockQuantity: 2 }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderPDP();
+
+    // Before choosing an option the CTA is disabled and prompts a selection.
+    const preselect = await screen.findByRole('button', { name: /select options/i });
+    expect(preselect).toBeDisabled();
+
+    // Pick a size → the variant resolves and the CTA becomes "Add to cart".
+    await user.click(screen.getByRole('radio', { name: /size: M/i }));
+    const addBtn = await screen.findByRole('button', { name: /add to cart/i });
+    await user.click(addBtn);
+
+    await waitFor(() => expect(addToCartMock).toHaveBeenCalledWith('p1', 1, 'var-m'));
   });
 
   it('persists the viewed product to localStorage (recently viewed)', async () => {
