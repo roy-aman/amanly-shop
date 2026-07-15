@@ -6,6 +6,7 @@ import {
   CreditCard,
   Crown,
   Facebook,
+  Heart,
   Instagram,
   LogOut,
   Menu,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 import { useToast } from '@/context/ToastContext';
 import { getPublicStore } from '@/api/store';
 import { getCategoryTree } from '@/api/catalog';
@@ -52,6 +54,7 @@ const PAYMENT_BADGES = ['Visa', 'Mastercard', 'UPI', 'Razorpay', 'COD'];
 export default function StoreLayout() {
   const { user, isAuthenticated, isStaff, logout } = useAuth();
   const { cart, itemCount } = useCart();
+  const { count: wishlistCount } = useWishlist();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -119,6 +122,16 @@ export default function StoreLayout() {
           <DropdownMenuItem asChild>
             <Link to="/orders">
               <Package className="h-4 w-4" /> My orders
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/account/wishlist">
+              <Heart className="h-4 w-4" /> Wishlist
+              {wishlistCount > 0 && (
+                <span className="ml-auto rounded-full bg-gold-400/15 px-1.5 text-xs font-semibold text-gold-300">
+                  {wishlistCount}
+                </span>
+              )}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
@@ -418,6 +431,9 @@ export default function StoreLayout() {
                 </Link>
                 <Link to="/orders" onClick={() => setMobileOpen(false)} className="rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-ink-800">
                   My orders
+                </Link>
+                <Link to="/account/wishlist" onClick={() => setMobileOpen(false)} className="rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-ink-800">
+                  Wishlist{wishlistCount > 0 ? ` (${wishlistCount})` : ''}
                 </Link>
                 {isStaff && (
                   <Link to="/admin" onClick={() => setMobileOpen(false)} className="rounded-lg px-3 py-2 text-sm text-gold-300 hover:bg-ink-800">

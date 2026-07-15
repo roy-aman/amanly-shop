@@ -3,6 +3,7 @@ import { ImageOff } from 'lucide-react';
 import type { ProductSummaryResponse } from '@/lib/types';
 import { money } from '@/lib/format';
 import { Badge, RatingStars } from '@/components/ui';
+import WishlistButton from '@/components/WishlistButton';
 
 /** Layout variants: the default square-tile grid card, and a horizontal list row. */
 export type ProductCardVariant = 'grid' | 'list';
@@ -65,6 +66,9 @@ export default function ProductCard({
               <Badge tone="red">Out of stock</Badge>
             </span>
           )}
+          <div className="absolute right-2 top-2">
+            <WishlistButton productId={product.id} productName={product.name} />
+          </div>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1">
           {product.categoryName && (
@@ -91,6 +95,9 @@ export default function ProductCard({
             <Badge tone="red">Out of stock</Badge>
           </span>
         )}
+        <div className="absolute right-2 top-2">
+          <WishlistButton productId={product.id} productName={product.name} />
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-4">

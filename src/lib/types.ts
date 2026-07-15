@@ -501,3 +501,18 @@ export interface AdminReviewResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Wishlist (WP-3.3) ─────────────────────────────────────────────────
+// Mirrors com.royalcommerce.application.wishlist.dto.WishlistMutationResponse.
+/**
+ * Result of an idempotent wishlist add/remove. `wishlisted` is the product's
+ * resulting state (true after add, false after remove); `wishlistCount` is the
+ * user's total wishlist size afterwards — enough to confirm a heart toggle and
+ * update a badge without a follow-up request. The wishlist itself is read as
+ * `ProductSummaryResponse[]` (full list) or `string[]` (ids for heart state).
+ */
+export interface WishlistMutationResponse {
+  productId: string;
+  wishlisted: boolean;
+  wishlistCount: number;
+}

@@ -59,6 +59,9 @@ Reviews (WP-3.2b): `ReviewStatus`='PENDING'|'APPROVED'|'REJECTED';
 `MyReviewResponse` {purchased:boolean,canReview:boolean,review:MyReview|null} (canReview===purchased&&review==null);
 `CreateReviewRequest`/`UpdateReviewRequest` {rating:1..5,title?,body?} (title≤150, body≤4000);
 `AdminReviewResponse` {id,productId,userId,reviewerName,rating,title,body,status,verifiedPurchase,createdAt,updatedAt}.
+Wishlist (WP-3.3): `WishlistMutationResponse` {productId:string, wishlisted:boolean, wishlistCount:number} — the
+  result of an idempotent add/remove (`wishlisted` = resulting state, `wishlistCount` = new total). The wishlist
+  itself is read as `ProductSummaryResponse[]` (full list, most-recent first) or `string[]` (product ids for hearts).
 Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changePct(number|null)};
 `StatsOverviewResponse` {from,to,revenue:MoneyMetric,paidOrders:CountMetric,totalOrders,customers,averageOrderValue:MoneyMetric,ordersByStatus:Record<OrderStatus,number>(all 5, zero-filled)};
 `RevenueGranularity`='day'|'week'|'month'; `RevenueSeriesPoint` {periodStart,revenue,orderCount};
@@ -89,6 +92,11 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
   createReview(productId,body):MyReview (auth; 403 REVIEW_NOT_PURCHASED / 409 REVIEW_ALREADY_EXISTS),
   updateMyReview(productId,body):MyReview (auth; resets review to PENDING). NOTE: routes are scoped by product
   **UUID** (`/api/v1/products/{productId}/reviews`), not slug — pass `product.id`.
+`@/api/wishlist` (WP-3.3b, all auth-required under `/api/v1/users/me/wishlist`, 401 if logged out):
+  getWishlist():ProductSummaryResponse[] (most-recent first), getWishlistIds():string[] (ids for heart state),
+  addToWishlist(productId):WishlistMutationResponse (idempotent; 404 if product missing),
+  removeFromWishlist(productId):WishlistMutationResponse (idempotent). Pages consume these via `WishlistContext`,
+  not directly (except Cart's save-for-later, which calls `addToWishlist` then `removeCartItem`).
 `@/api/admin`:
   `adminProducts`.{list(params):Page<ProductSummaryResponse>, get(id), create(body), update(id,body), changeStatus(id,status), setStock(id,quantity), addImages(id,images[]), deleteImage(id,imageId), remove(id)};
   `adminCategories`.{list():CategoryResponse[], create(body), update(id,body), remove(id)};
@@ -107,6 +115,12 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
 ### Contexts
 `@/context/AuthContext` → `useAuth()`: {user, isAuthenticated, isStaff, isAdmin, loading, login(email,pw), register(email,name,pw), logout(), refreshUser(), setUser(u)}.
 `@/context/CartContext` → `useCart()`: {cart, itemCount, loading, refresh(), setCart(c)}. Call `refresh()` after cart mutations.
+`@/context/WishlistContext` → `useWishlist()`: {ids:Set<string>, count, ready, isWishlisted(id), toggle(id), refresh()}
+  (WP-3.3b). Loads wishlisted ids once for authenticated users (skips all network calls when logged out); `toggle`
+  is **optimistic** (heart flips immediately, rolls back + toasts on API error) and **auth-gated** (redirects to
+  `/login` with `from` when logged out). Mounted under `AuthProvider`+`CartProvider` (needs `useAuth`/`useToast`/
+  router). Unlike the other context hooks it does **not** throw without a provider — it returns an inert default so
+  low-level `ProductCard` can render an outline heart in isolated tests; the real provider is always mounted (main.tsx).
 `@/context/ToastContext` → `useToast()`: {success(t,m?), error(t,m?), info(t,m?), warning(t,m?), push(kind,t,m?)}.
 
 ### UI kit `@/components/ui`
@@ -157,6 +171,13 @@ New deps: `@radix-ui/react-{tabs,dropdown-menu,tooltip,dialog,accordion,alert-di
 ### `@/components/guards`
 `RequireAuth`, `RequireStaff` (STAFF|ADMIN), `RequireAdmin` — used as route elements wrapping `<Outlet/>`.
 
+### `@/components/WishlistButton` (WP-3.3b)
+Heart toggle backed by `useWishlist()`. Props `{productId, productName?, variant?:'overlay'|'inline', withLabel?,
+className?}`. `overlay` = round chip floating over a card image (used by `ProductCard` grid+list, self-preventing the
+card `<Link>` navigation); `inline` = bordered pill for the PDP buy box. `aria-pressed` reflects wishlisted state,
+gold focus ring, filled gold heart when saved. All optimism/rollback/auth-gating lives in the context, so the button
+needs no props beyond the product and can be embedded anywhere without prop threading.
+
 ### App-wide UX infrastructure (WP-1.4)
 Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reuse these on every new page.
 
@@ -190,7 +211,7 @@ Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reu
 ## Canonical route map (use these exact paths in all links/navigate)
 
 Store (in `StoreLayout`): `/` Home, `/products` catalog, `/products/:slug` detail, `/cart`, `/checkout`,
-`/orders`, `/orders/:id`, `/account`, `/account/addresses`, `/account/settings`.
+`/orders`, `/orders/:id`, `/account`, `/account/wishlist` (WP-3.3b, RequireAuth), `/account/addresses`, `/account/settings`.
 Auth (no layout / centered): `/login`, `/register`, `/admin/login`, `/forgot-password`, `/reset-password`,
 `/verify-email`, `/oauth2-callback`.
 Admin (in `AdminLayout`, guarded): `/admin` dashboard, `/admin/orders`, `/admin/orders/:id`,

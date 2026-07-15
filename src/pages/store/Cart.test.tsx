@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Cart from './Cart';
 import { addToCart, removeCartItem, updateCartItem } from '@/api/cart';
+import { addToWishlist } from '@/api/wishlist';
 import type { CartItemResponse, CartResponse } from '@/lib/types';
 
 vi.mock('@/api/cart', () => ({
@@ -11,6 +12,20 @@ vi.mock('@/api/cart', () => ({
   clearCart: vi.fn(),
   removeCartItem: vi.fn(),
   updateCartItem: vi.fn(),
+}));
+
+vi.mock('@/api/wishlist', () => ({ addToWishlist: vi.fn() }));
+
+const wishlistRefresh = vi.fn();
+vi.mock('@/context/WishlistContext', () => ({
+  useWishlist: () => ({
+    ids: new Set<string>(),
+    count: 0,
+    ready: true,
+    isWishlisted: () => false,
+    toggle: vi.fn(),
+    refresh: wishlistRefresh,
+  }),
 }));
 
 // Cart state lives in CartContext — stub it so the page drives real api calls
@@ -28,6 +43,7 @@ vi.mock('@/context/ToastContext', () => ({
 const updateMock = vi.mocked(updateCartItem);
 const removeMock = vi.mocked(removeCartItem);
 const addMock = vi.mocked(addToCart);
+const addWishlistMock = vi.mocked(addToWishlist);
 
 function item(overrides: Partial<CartItemResponse> = {}): CartItemResponse {
   return {
@@ -68,6 +84,7 @@ beforeEach(() => {
   updateMock.mockResolvedValue(cart([item({ quantity: 3, subtotal: 300 })]));
   removeMock.mockResolvedValue(cart([]));
   addMock.mockResolvedValue(cart([item()]));
+  addWishlistMock.mockResolvedValue({ productId: 'p1', wishlisted: true, wishlistCount: 1 });
 });
 
 describe('Cart (WP-2.4)', () => {
@@ -96,6 +113,19 @@ describe('Cart (WP-2.4)', () => {
 
     await user.click(undoBtn);
     await waitFor(() => expect(addMock).toHaveBeenCalledWith('p1', 2));
+  });
+
+  it('"save for later" adds to the wishlist then removes the cart line', async () => {
+    const user = userEvent.setup();
+    renderCart();
+
+    await user.click(screen.getByRole('button', { name: 'Save Signet Ring for later' }));
+
+    await waitFor(() => expect(addWishlistMock).toHaveBeenCalledWith('p1'));
+    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('p1'));
+    // Cart is reconciled from server truth and heart state is resynced.
+    await waitFor(() => expect(setCart).toHaveBeenCalled());
+    expect(wishlistRefresh).toHaveBeenCalled();
   });
 
   it('renders a rich empty state with a Start shopping CTA', () => {

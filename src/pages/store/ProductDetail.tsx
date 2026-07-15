@@ -29,6 +29,7 @@ import {
 } from '@/components/ui';
 import ProductCard from '@/components/ProductCard';
 import ProductReviews from '@/components/ProductReviews';
+import WishlistButton from '@/components/WishlistButton';
 import { ProductDetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
@@ -360,6 +361,7 @@ export default function ProductDetail() {
               <ShoppingCart className="h-4 w-4" />
               {outOfStock ? 'Out of stock' : 'Add to cart'}
             </Button>
+            <WishlistButton productId={product.id} productName={product.name} variant="inline" withLabel />
             <Button variant="outline" size="lg" onClick={handleShare} aria-label="Share this product">
               <Share2 className="h-4 w-4" />
               Share

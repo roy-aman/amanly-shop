@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, ShoppingBag, Trash2, Undo2 } from 'lucide-react';
+import { Clock, Heart, ShoppingBag, Trash2, Undo2 } from 'lucide-react';
 import { addToCart, clearCart, removeCartItem, updateCartItem } from '@/api/cart';
+import { addToWishlist } from '@/api/wishlist';
 import type { CartResponse } from '@/lib/types';
 import { money } from '@/lib/format';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 import { useToast } from '@/context/ToastContext';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import {
@@ -47,6 +49,7 @@ function withOptimisticQuantity(cart: CartResponse, productId: string, quantity:
 export default function Cart() {
   useDocumentTitle('Cart');
   const { cart, loading, refresh, setCart } = useCart();
+  const { refresh: refreshWishlist } = useWishlist();
   const toast = useToast();
 
   // Per-product in-flight guard: disables that row's controls to prevent
@@ -104,6 +107,37 @@ export default function Cart() {
     } catch (e) {
       await refresh();
       toast.error('Could not remove item', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // "Save for later" = move the line to the wishlist. There is no combined
+  // backend endpoint, so this is two calls: add to wishlist, then remove the cart
+  // line. If the wishlist add fails we keep the item in the cart (nothing moved).
+  // If the add succeeds but the cart remove fails, the item is safely on the
+  // wishlist and still in the cart — we say so rather than silently swallowing it.
+  async function saveForLater(productId: string, productName: string) {
+    setBusyId(productId);
+    try {
+      await addToWishlist(productId);
+    } catch (e) {
+      toast.error('Could not save for later', e instanceof Error ? e.message : 'Please try again.');
+      setBusyId(null);
+      return;
+    }
+    try {
+      const updated = await removeCartItem(productId);
+      setCart(updated);
+      void refreshWishlist(); // keep heart state in sync across the app
+      toast.success('Saved for later', `${productName} moved to your wishlist.`);
+    } catch (e) {
+      void refreshWishlist();
+      await refresh();
+      toast.warning(
+        'Saved to your wishlist',
+        `But we couldn't remove ${productName} from your cart — try removing it again.`,
+      );
     } finally {
       setBusyId(null);
     }
@@ -228,6 +262,17 @@ export default function Cart() {
                   <div className="w-24 text-right text-sm font-semibold text-slate-100">
                     {money(item.subtotal, currency)}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => saveForLater(item.productId, item.productName)}
+                    disabled={busy}
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-ink-800 hover:text-gold-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-40"
+                    aria-label={`Save ${item.productName} for later`}
+                    title="Save for later"
+                  >
+                    <Heart className="h-4 w-4" />
+                  </button>
 
                   <button
                     type="button"

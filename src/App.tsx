@@ -39,6 +39,7 @@ const Checkout = lazy(() => import('@/pages/store/Checkout'));
 const Orders = lazy(() => import('@/pages/store/Orders'));
 const OrderDetail = lazy(() => import('@/pages/store/OrderDetail'));
 const Account = lazy(() => import('@/pages/store/Account'));
+const Wishlist = lazy(() => import('@/pages/store/Wishlist'));
 const Addresses = lazy(() => import('@/pages/store/Addresses'));
 const AccountSettings = lazy(() => import('@/pages/store/AccountSettings'));
 
@@ -116,6 +117,7 @@ export default function App() {
             <Route path="/orders" element={<Page title="My orders" fallback={<ListSkeleton />}><Orders /></Page>} />
             <Route path="/orders/:id" element={<Page fallback={<DetailSkeleton />}><OrderDetail /></Page>} />
             <Route path="/account" element={<Page title="Account" fallback={<FormSkeleton />}><Account /></Page>} />
+            <Route path="/account/wishlist" element={<Page title="Wishlist" fallback={<StoreListSkeleton />}><Wishlist /></Page>} />
             <Route path="/account/addresses" element={<Page title="Addresses" fallback={<FormSkeleton />}><Addresses /></Page>} />
             <Route path="/account/settings" element={<Page title="Settings" fallback={<FormSkeleton />}><AccountSettings /></Page>} />
           </Route>

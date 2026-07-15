@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { BadgeCheck, MapPin, Package, Settings, ShieldAlert } from 'lucide-react';
+import { BadgeCheck, Heart, MapPin, Package, Settings, ShieldAlert } from 'lucide-react';
 import { listOrders } from '@/api/orders';
 import { money, formatDate, titleCase } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
@@ -8,6 +8,7 @@ import { OrderStatusBadge } from '@/components/StatusBadge';
 import { Badge, Card, LinkButton, PageHeader } from '@/components/ui';
 
 const LINKS = [
+  { to: '/account/wishlist', label: 'Wishlist', desc: 'Products you saved for later', icon: Heart },
   { to: '/account/addresses', label: 'Addresses', desc: 'Manage saved shipping addresses', icon: MapPin },
   { to: '/account/settings', label: 'Settings', desc: 'Profile & password', icon: Settings },
   { to: '/orders', label: 'Orders', desc: 'View your order history', icon: Package },
@@ -52,7 +53,7 @@ export default function Account() {
       </Card>
 
       {/* Quick links */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {LINKS.map((l) => (
           <Link key={l.to} to={l.to}>
             <Card className="flex h-full items-start gap-3 p-5 transition hover:border-ink-600">
