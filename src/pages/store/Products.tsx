@@ -214,7 +214,12 @@ export default function Products() {
       {/*
         Phase 3 facets deliberately NOT built:
           • Brand / colour / size filters → WP-3.5 (no backend params)
-          • Rating filter → WP-3.2 (no backend params)
+          • Rating filter + rating sort → STILL deferred after WP-3.2b. The public
+            search endpoint (/api/v1/products) exposes no `minRating` filter or
+            `sort=rating` key — ProductSummaryResponse now carries ratingAvg/ratingCount
+            (shown as stars on the cards), but there's nothing to filter/sort on
+            server-side, and doing it client-side would only reorder the current page.
+            Needs `minRating`/`sort=rating` on the public search endpoint.
           • Popularity sort → deferred: /products/top exists (WP-3.1a) but can't be
             filtered/paginated, so it can't back this page's composable sort. Needs a
             `sort=popular` key on the public search endpoint. See the SORTS comment.

@@ -1,6 +1,7 @@
 import { buildQuery, request } from '@/lib/http';
 import type {
   AdminCreateUserRequest,
+  AdminReviewResponse,
   CategoryResponse,
   ChangeUserRolesRequest,
   CreateCategoryRequest,
@@ -15,6 +16,7 @@ import type {
   ProductSearchParams,
   ProductStatus,
   ProductSummaryResponse,
+  ReviewStatus,
   StoreSettingsResponse,
   UpdateCategoryRequest,
   UpdatePaymentSettingsRequest,
@@ -125,6 +127,19 @@ export const adminUsers = {
   },
   disable(id: string, reason?: string): Promise<UserResponse> {
     return request('PATCH', `${A}/users/${id}/disable`, { body: { reason: reason ?? null }, auth: true });
+  },
+};
+
+// ── Review moderation (ADMIN, STAFF) ──────────────────────────────────
+export const adminReviews = {
+  list(params: { status?: ReviewStatus; page?: number; size?: number } = {}): Promise<Page<AdminReviewResponse>> {
+    return request('GET', `${A}/reviews${buildQuery(params as Record<string, unknown>)}`, { auth: true });
+  },
+  approve(id: string): Promise<AdminReviewResponse> {
+    return request('POST', `${A}/reviews/${id}/approve`, { auth: true });
+  },
+  reject(id: string): Promise<AdminReviewResponse> {
+    return request('POST', `${A}/reviews/${id}/reject`, { auth: true });
   },
 };
 

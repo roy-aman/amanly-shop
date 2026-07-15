@@ -50,6 +50,7 @@ const Deliverables = lazy(() => import('@/pages/admin/Deliverables'));
 const Inventory = lazy(() => import('@/pages/admin/Inventory'));
 const ProductForm = lazy(() => import('@/pages/admin/ProductForm'));
 const Categories = lazy(() => import('@/pages/admin/Categories'));
+const AdminReviews = lazy(() => import('@/pages/admin/Reviews'));
 const Reports = lazy(() => import('@/pages/admin/Reports'));
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
@@ -135,6 +136,7 @@ export default function App() {
             <Route path="inventory/new" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
             <Route path="inventory/:id" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
             <Route path="categories" element={<Page title="Categories" fallback={<ListSkeleton />}><Categories /></Page>} />
+            <Route path="reviews" element={<Page title="Reviews" fallback={<ListSkeleton />}><AdminReviews /></Page>} />
             <Route path="reports" element={<Page title="Reports" fallback={<DashboardSkeleton />}><Reports /></Page>} />
 
             {/* ADMIN-only sections */}

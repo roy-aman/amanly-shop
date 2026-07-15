@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { ImageOff } from 'lucide-react';
 import type { ProductSummaryResponse } from '@/lib/types';
 import { money } from '@/lib/format';
-import { Badge } from '@/components/ui';
+import { Badge, RatingStars } from '@/components/ui';
 
 /** Layout variants: the default square-tile grid card, and a horizontal list row. */
 export type ProductCardVariant = 'grid' | 'list';
@@ -22,6 +22,13 @@ export default function ProductCard({
 }) {
   const outOfStock = product.stockQuantity <= 0;
   const hasCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
+
+  // Ratings arrive with WP-3.2. Fields are optional (older cached summaries lack
+  // them); show stars only once at least one approved review exists — never "0 (0)".
+  const hasRating = product.ratingAvg != null && (product.ratingCount ?? 0) > 0;
+  const rating = hasRating ? (
+    <RatingStars value={product.ratingAvg as number} count={product.ratingCount} size="sm" />
+  ) : null;
 
   const image = product.primaryImageUrl ? (
     <img
@@ -65,6 +72,7 @@ export default function ProductCard({
           )}
           <h3 className="line-clamp-2 text-base font-semibold text-slate-100 group-hover:text-gold-300">{product.name}</h3>
           {product.sku && <p className="text-xs text-slate-500">SKU: {product.sku}</p>}
+          {rating}
           <div className="mt-auto pt-2">{price}</div>
         </div>
       </Link>
@@ -90,6 +98,7 @@ export default function ProductCard({
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{product.categoryName}</p>
         )}
         <h3 className="line-clamp-2 text-sm font-semibold text-slate-100 group-hover:text-gold-300">{product.name}</h3>
+        {rating}
         <div className="mt-auto pt-2">{price}</div>
       </div>
     </Link>

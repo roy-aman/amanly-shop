@@ -29,8 +29,9 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `CategoryResponse` {id,name,slug,description,parentId,parentName,depth,sortOrder,active,createdAt,updatedAt};
 `CategoryTreeResponse` {id,name,slug,sortOrder,children[]};
 `ProductImageResponse` {id,url,altText,sortOrder,isPrimary};
-`ProductResponse` {id,name,slug,description,shortDescription,sku,price,compareAtPrice,currency,status,categoryId,categoryName,categorySlug,weight,stockQuantity,tags:string[],images[],createdAt,updatedAt};
-`ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,primaryImageUrl,stockQuantity};
+`ProductResponse` {id,name,slug,description,shortDescription,sku,price,compareAtPrice,currency,status,categoryId,categoryName,categorySlug,weight,sellingUnit,stockQuantity,tags:string[],images[],`ratingAvg`:number|null,`ratingCount`:number,createdAt,updatedAt};
+`ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,primaryImageUrl,stockQuantity,`ratingAvg`:number|null,`ratingCount`:number};
+  (WP-3.2b: `ratingAvg`/`ratingCount` are the APPROVED-review aggregate. Typed OPTIONAL in TS so pre-3.2 cached payloads — e.g. localStorage recently-viewed summaries — still compile; backend always populates them. Treat `ratingAvg==null` / `ratingCount==0` as "no ratings" and render nothing, never "0 (0)".)
 `ProductImageRequest` {url,altText?,sortOrder,isPrimary};
 `CreateProductRequest` {name,slug,sku,price,compareAtPrice?,currency,categoryId?,description?,shortDescription?,weight?,tags?,images?,stockQuantity?};
 `UpdateProductRequest` {name,description?,shortDescription?,price,compareAtPrice?,currency,categoryId?,weight?,tags?,stockQuantity?} (NO slug/sku/images);
@@ -51,6 +52,13 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `UpdateWhatsappSettingsRequest` {enabled,phoneNumberId?,accessToken?,verifyToken?,appSecret?};
 `AdminCreateUserRequest` {email,fullName,password,roles}; `ChangeUserRolesRequest` {roles};
 `SavedAddress` extends ShippingDetails {id,label,isDefault}.
+Reviews (WP-3.2b): `ReviewStatus`='PENDING'|'APPROVED'|'REJECTED';
+`ReviewResponse` {id,rating:number,title:string|null,body:string|null,reviewerName,verifiedPurchase:boolean,createdAt} (public, APPROVED only);
+`ReviewSummaryResponse` {average:number|null,count:number,buckets:Record<'1'..'5',number>};
+`MyReview` {id,rating,title,body,status:ReviewStatus,verifiedPurchase,createdAt,updatedAt};
+`MyReviewResponse` {purchased:boolean,canReview:boolean,review:MyReview|null} (canReview===purchased&&review==null);
+`CreateReviewRequest`/`UpdateReviewRequest` {rating:1..5,title?,body?} (title≤150, body≤4000);
+`AdminReviewResponse` {id,productId,userId,reviewerName,rating,title,body,status,verifiedPurchase,createdAt,updatedAt}.
 Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changePct(number|null)};
 `StatsOverviewResponse` {from,to,revenue:MoneyMetric,paidOrders:CountMetric,totalOrders,customers,averageOrderValue:MoneyMetric,ordersByStatus:Record<OrderStatus,number>(all 5, zero-filled)};
 `RevenueGranularity`='day'|'week'|'month'; `RevenueSeriesPoint` {periodStart,revenue,orderCount};
@@ -76,12 +84,19 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
 `@/api/cart`: getCart(), addToCart(productId,quantity), updateCartItem(productId,quantity), removeCartItem(productId), clearCart().
 `@/api/orders`: placeOrder(body):OrderResponse, listOrders({page,size,sort}):Page<OrderSummaryResponse>, getOrder(id):OrderResponse, cancelOrder(id):OrderResponse, verifyRazorpayPayment(body):OrderResponse.
 `@/api/store`: getPublicStore():PublicStoreResponse.
+`@/api/reviews` (WP-3.2b): listReviews(productId,{page?,size?,sort?}):Page<ReviewResponse> (public, APPROVED only),
+  getReviewSummary(productId):ReviewSummaryResponse (public), getMyReview(productId):MyReviewResponse (auth),
+  createReview(productId,body):MyReview (auth; 403 REVIEW_NOT_PURCHASED / 409 REVIEW_ALREADY_EXISTS),
+  updateMyReview(productId,body):MyReview (auth; resets review to PENDING). NOTE: routes are scoped by product
+  **UUID** (`/api/v1/products/{productId}/reviews`), not slug — pass `product.id`.
 `@/api/admin`:
   `adminProducts`.{list(params):Page<ProductSummaryResponse>, get(id), create(body), update(id,body), changeStatus(id,status), setStock(id,quantity), addImages(id,images[]), deleteImage(id,imageId), remove(id)};
   `adminCategories`.{list():CategoryResponse[], create(body), update(id,body), remove(id)};
   `adminOrders`.{list({page,size,sort}):Page<OrderSummaryResponse>, get(id), updateStatus(id,status)};
   `adminUsers`.{list({search,page,size,sort}):Page<UserResponse>, get(id), create(body), changeRoles(id,roles), lock(id,reason?), unlock(id), disable(id,reason?)};
-  `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body)}.
+  `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body)};
+  `adminReviews` (WP-3.2b, STAFF+ADMIN).{list({status?,page?,size?}):Page<AdminReviewResponse>, approve(id):AdminReviewResponse,
+    reject(id):AdminReviewResponse} (approve/reject 400 INVALID_REVIEW_STATUS_TRANSITION).
 `@/api/stats` (STAFF+ADMIN, `auth:true`; WP-3.1a). `adminStats`.{
   `overview({from?,to?})`:StatsOverviewResponse, `revenueSeries({from?,to?,granularity?})`:RevenueSeriesResponse,
   `topProducts({from?,to?,limit?})`:TopProductStat[], `lowStock({threshold?,limit?})`:LowStockProduct[]}.
@@ -126,7 +141,7 @@ success/warning/danger/info tokens — zero visual change); `Spinner`, `PageLoad
 - ⚛ `ConfirmDialog` {open?, onOpenChange?, trigger?, title, description?, confirmLabel?, cancelLabel?, destructive?, loading?, onConfirm} — AlertDialog; stays open during async, caller closes via onOpenChange.
 - `QuantityStepper` {value, onChange, min?, max?, step?, disabled?, size?} — clamped −/＋ numeric control.
 - `PriceTag` {price, compareAtPrice?, currency?, size?, showDiscountBadge?} — shows compare-at + computed discount % only when compareAt > price.
-- `RatingStars` {value, max?, size?, count?} — display-only (interactive input in WP-3.2).
+- `RatingStars` {value, max?, size?, count?} — display-only. `RatingInput` {value, onChange, max?, size?, name?, label?, disabled?} — WP-3.2b interactive rating (native radio-per-star, `radiogroup`/`radio` semantics, arrow-key operable, gold focus ring on the focused star). Two separate exports so the display-only surface is unchanged.
 - `ImageWithFallback` {src?, alt, wrapperClassName?, fallback?, ...img attrs} — graceful placeholder on missing/broken src; lazy by default.
 - `Carousel` {children(slides), loop?, showDots?, showArrows?, ariaLabel?} — one-per-view, arrow-key navigable.
 - `SearchInput` {defaultValue?, onSearch, delay?(300), placeholder?} — debounced, with clear button.
@@ -180,8 +195,8 @@ Auth (no layout / centered): `/login`, `/register`, `/admin/login`, `/forgot-pas
 `/verify-email`, `/oauth2-callback`.
 Admin (in `AdminLayout`, guarded): `/admin` dashboard, `/admin/orders`, `/admin/orders/:id`,
 `/admin/deliverables`, `/admin/inventory`, `/admin/inventory/new`, `/admin/inventory/:id`,
-`/admin/categories`, `/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`,
-`/admin/forbidden`.
+`/admin/categories`, `/admin/reviews` (WP-3.2b — review moderation, STAFF+ADMIN, sidebar under Catalog),
+`/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`, `/admin/forbidden`.
 
 ## Layout & navigation chrome (WP-1.3)
 
@@ -229,6 +244,10 @@ Data sources are all existing contracts — no new endpoints: `getPublicStore()`
   NOTE: no payment-method / country breakdown endpoint exists — those Reports charts were dropped (not
   re-derived client-side). PLP "popularity" sort stays deferred: `/products/top` can't be filtered/paginated,
   so it can't back the PLP's composable sort (needs a `sort=popular` key on the public search endpoint).
+- **PLP rating filter/sort stays backend-blocked (after WP-3.2b).** Product cards now show rating stars
+  (`ratingAvg`/`ratingCount` on `ProductSummaryResponse`), but the public search endpoint exposes no
+  `minRating` filter or `sort=rating` key — a client-side version would only reorder the current page.
+  Not built; needs those params on `/api/v1/products`. See the deferral comment in `Products.tsx`.
 - No order status filter on the API → fetch a page and filter client-side where needed (e.g. Deliverables).
 - Product images: create via `CreateProductRequest.images`; after creation manage via
   `adminProducts.addImages` / `deleteImage`. `UpdateProductRequest` cannot change slug/sku/images.

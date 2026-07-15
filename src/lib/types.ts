@@ -113,6 +113,11 @@ export interface ProductResponse {
   stockQuantity: number;
   tags: string[];
   images: ProductImageResponse[];
+  /** Average rating over APPROVED reviews (WP-3.2). null when none yet. Optional
+   *  so pre-WP-3.2 cached payloads (e.g. localStorage summaries) still type-check. */
+  ratingAvg?: number | null;
+  /** Number of APPROVED reviews (0 when none). Optional for the same reason. */
+  ratingCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -129,6 +134,11 @@ export interface ProductSummaryResponse {
   categoryName: string | null;
   primaryImageUrl: string | null;
   stockQuantity: number;
+  /** Average rating over APPROVED reviews (WP-3.2). null when none yet. Optional
+   *  so pre-WP-3.2 cached payloads (e.g. localStorage summaries) still type-check. */
+  ratingAvg?: number | null;
+  /** Number of APPROVED reviews (0 when none). Optional for the same reason. */
+  ratingCount?: number;
 }
 
 export interface ProductImageRequest {
@@ -421,4 +431,73 @@ export interface AddressRequest {
   postalCode: string;
   country: string;
   makeDefault: boolean;
+}
+
+// ── Reviews & ratings (WP-3.2) ────────────────────────────────────────
+// Mirrors com.royalcommerce.application.review.dto.*.
+export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/** A publicly visible (APPROVED) review — no reviewer id/email, only a display name. */
+export interface ReviewResponse {
+  id: string;
+  rating: number; // 1..5
+  title: string | null;
+  body: string | null;
+  reviewerName: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
+}
+
+/** Aggregate rating over APPROVED reviews. `average` is null when there are none;
+ *  `buckets` is always keyed "1".."5" (zero-filled). */
+export interface ReviewSummaryResponse {
+  average: number | null;
+  count: number;
+  buckets: Record<string, number>;
+}
+
+/** The authenticated user's own review (any status, so they see moderation state). */
+export interface MyReview {
+  id: string;
+  rating: number;
+  title: string | null;
+  body: string | null;
+  status: ReviewStatus;
+  verifiedPurchase: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** My review + eligibility. `canReview === purchased && review == null`. */
+export interface MyReviewResponse {
+  purchased: boolean;
+  canReview: boolean;
+  review: MyReview | null;
+}
+
+export interface CreateReviewRequest {
+  rating: number; // 1..5
+  title?: string | null;
+  body?: string | null;
+}
+
+export interface UpdateReviewRequest {
+  rating: number; // 1..5
+  title?: string | null;
+  body?: string | null;
+}
+
+/** Full review view for the moderation queue (ADMIN/STAFF only). */
+export interface AdminReviewResponse {
+  id: string;
+  productId: string;
+  userId: string;
+  reviewerName: string;
+  rating: number;
+  title: string | null;
+  body: string | null;
+  status: ReviewStatus;
+  verifiedPurchase: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

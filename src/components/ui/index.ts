@@ -46,7 +46,7 @@ export type { Column, DataTableProps, SortState, SortDir } from './DataTable';
 export { ConfirmDialog } from './ConfirmDialog';
 export { QuantityStepper } from './QuantityStepper';
 export { PriceTag } from './PriceTag';
-export { RatingStars } from './RatingStars';
+export { RatingStars, RatingInput } from './RatingStars';
 export { ImageWithFallback } from './ImageWithFallback';
 export { Carousel } from './Carousel';
 export { SearchInput } from './SearchInput';

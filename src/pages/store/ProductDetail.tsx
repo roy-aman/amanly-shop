@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PackageX, Share2, ShoppingCart, Star } from 'lucide-react';
+import { PackageX, Share2, ShoppingCart } from 'lucide-react';
 import { getProduct, listProducts } from '@/api/catalog';
 import { addToCart } from '@/api/cart';
 import { ApiError } from '@/lib/http';
@@ -19,6 +19,7 @@ import {
   LinkButton,
   PriceTag,
   QuantityStepper,
+  RatingStars,
   Tabs,
   TabsContent,
   TabsList,
@@ -27,6 +28,7 @@ import {
   type Crumb,
 } from '@/components/ui';
 import ProductCard from '@/components/ProductCard';
+import ProductReviews from '@/components/ProductReviews';
 import { ProductDetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
@@ -78,6 +80,8 @@ function toSummary(product: ProductResponse): ProductSummaryResponse {
     categoryName: product.categoryName,
     primaryImageUrl: primary?.url ?? null,
     stockQuantity: product.stockQuantity,
+    ratingAvg: product.ratingAvg ?? null,
+    ratingCount: product.ratingCount ?? 0,
   };
 }
 
@@ -324,6 +328,11 @@ export default function ProductDetail() {
               <p className="text-overline uppercase text-slate-500">{product.categoryName}</p>
             )}
             <h1 className="mt-1 font-display text-h1 text-slate-50 md:text-display">{product.name}</h1>
+            {product.ratingAvg != null && (product.ratingCount ?? 0) > 0 && (
+              <div className="mt-2">
+                <RatingStars value={product.ratingAvg} count={product.ratingCount} size="md" />
+              </div>
+            )}
             <p className="mt-2 text-caption text-slate-500">SKU: {product.sku}</p>
           </div>
 
@@ -397,11 +406,7 @@ export default function ProductDetail() {
         </TabsContent>
 
         <TabsContent value="reviews">
-          <EmptyState
-            icon={<Star className="h-10 w-10" />}
-            title="Reviews are coming soon"
-            message="Customer ratings and reviews for this product will appear here once they launch."
-          />
+          <ProductReviews productId={product.id} isAuthenticated={isAuthenticated} />
         </TabsContent>
       </Tabs>
 

@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessagesSquare,
   PanelLeft,
   PanelLeftClose,
   Settings,
@@ -53,6 +54,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
       { to: '/admin/categories', label: 'Categories', icon: FolderTree },
+      { to: '/admin/reviews', label: 'Reviews', icon: MessagesSquare },
     ],
   },
   {
@@ -74,6 +76,7 @@ const CRUMB_LABELS: Record<string, string> = {
   deliverables: 'Deliverables',
   inventory: 'Inventory',
   categories: 'Categories',
+  reviews: 'Reviews',
   reports: 'Reports',
   users: 'Users',
   settings: 'Settings',
