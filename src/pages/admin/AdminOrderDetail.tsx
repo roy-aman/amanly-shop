@@ -126,6 +126,26 @@ export default function AdminOrderDetail() {
                   ))}
                 </tbody>
                 <tfoot>
+                  {order.discountAmount > 0 && (
+                    <>
+                      <tr className="border-t border-ink-700">
+                        <td colSpan={4} className="px-2 py-2 text-right text-sm text-slate-400">
+                          Subtotal
+                        </td>
+                        <td className="px-2 py-2 text-right text-sm text-slate-200">
+                          {money(order.totalAmount + order.discountAmount, order.currency)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} className="px-2 py-2 text-right text-sm text-success-300">
+                          Discount{order.couponCode ? ` (${order.couponCode})` : ''}
+                        </td>
+                        <td className="px-2 py-2 text-right text-sm font-medium text-success-300">
+                          −{money(order.discountAmount, order.currency)}
+                        </td>
+                      </tr>
+                    </>
+                  )}
                   <tr className="border-t border-ink-700">
                     <td colSpan={4} className="px-2 py-3 text-right text-sm font-medium text-slate-400">
                       Total
@@ -188,6 +208,20 @@ export default function AdminOrderDetail() {
                 <dt className="text-slate-500">Updated</dt>
                 <dd className="text-slate-300">{formatDateTime(order.updatedAt)}</dd>
               </div>
+              {order.discountAmount > 0 && (
+                <>
+                  <div className="flex justify-between border-t border-ink-700 pt-2">
+                    <dt className="text-slate-500">Subtotal</dt>
+                    <dd className="text-slate-300">
+                      {money(order.totalAmount + order.discountAmount, order.currency)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between text-success-300">
+                    <dt>Discount{order.couponCode ? ` (${order.couponCode})` : ''}</dt>
+                    <dd className="font-medium">−{money(order.discountAmount, order.currency)}</dd>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between border-t border-ink-700 pt-2">
                 <dt className="font-medium text-slate-300">Total</dt>
                 <dd className="font-bold text-gold-300">{money(order.totalAmount, order.currency)}</dd>

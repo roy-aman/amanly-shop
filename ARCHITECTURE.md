@@ -42,9 +42,9 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `ShippingDetails`/`ShippingAddressRequest` {name,phone?,addressLine1,addressLine2?,city,state?,postalCode,country};
 `OrderItemResponse` {id,productId,productName,sku,unitPrice,quantity,subtotal};
 `PaymentAction` {provider,razorpayKeyId,razorpayOrderId,amountMinor,currency};
-`OrderResponse` {id,userId,status,paymentMethod,paymentStatus,totalAmount,currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
-`OrderSummaryResponse` {id,status,paymentMethod,totalAmount,currency,itemCount,shippingCity,shippingCountry,createdAt};
-`PlaceOrderRequest` {shippingAddress,notes?,paymentMethod?};
+`OrderResponse` {id,userId,status,paymentMethod,paymentStatus,`totalAmount`(post-discount payable),`discountAmount`:number(0 when none, WP-3.4),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
+`OrderSummaryResponse` {id,status,paymentMethod,totalAmount,currency,itemCount,shippingCity,shippingCountry,createdAt} (order LIST — NO discount fields);
+`PlaceOrderRequest` {shippingAddress,notes?,paymentMethod?,`couponCode`?(WP-3.4 — re-validated at placement; an invalid code REJECTS the order, never silently dropped)};
 `RazorpayVerifyRequest` {orderId,razorpayPaymentId,razorpayOrderId,razorpaySignature};
 `PublicStoreResponse` {name,currency,codEnabled,onlinePaymentEnabled};
 `StoreSettingsResponse` {id,slug,name,currency,status,codEnabled,onlinePaymentEnabled,razorpayKeyId,razorpayConfigured,whatsappEnabled};
@@ -62,6 +62,16 @@ Reviews (WP-3.2b): `ReviewStatus`='PENDING'|'APPROVED'|'REJECTED';
 Wishlist (WP-3.3): `WishlistMutationResponse` {productId:string, wishlisted:boolean, wishlistCount:number} — the
   result of an idempotent add/remove (`wishlisted` = resulting state, `wishlistCount` = new total). The wishlist
   itself is read as `ProductSummaryResponse[]` (full list, most-recent first) or `string[]` (product ids for hearts).
+Coupons (WP-3.4): `CouponType`='PERCENT'|'FIXED'; `CouponRejectionReason`='NOT_FOUND'|'INACTIVE'|'NOT_STARTED'|
+  'EXPIRED'|'MIN_ORDER_NOT_MET'|'MAX_REDEMPTIONS_REACHED'|'PER_USER_LIMIT_REACHED';
+  `CouponValidationRequest` {code, subtotal?} (subtotal is an advisory fallback — server prefers the live cart);
+  `CouponPreviewResponse` {valid:boolean, code, reason:CouponRejectionReason|null, message, subtotal,
+    discountAmount:number|null, total:number|null} — ADVISORY, ALWAYS HTTP 200 (read `valid`; the authoritative
+    discount is on the placed `OrderResponse.discountAmount`). `message` is display-ready per reason.
+  `AdminCouponResponse` {id,code,type,value,minOrderAmount,startsAt,endsAt,maxRedemptions,perUserLimit,active,
+    totalRedemptions,createdAt,updatedAt};
+  `CreateCouponRequest` {code,type,value,minOrderAmount?,startsAt?,endsAt?,maxRedemptions?,perUserLimit?,active?}
+    (active defaults true); `UpdateCouponRequest` (same, but `active` REQUIRED — full replace).
 Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changePct(number|null)};
 `StatsOverviewResponse` {from,to,revenue:MoneyMetric,paidOrders:CountMetric,totalOrders,customers,averageOrderValue:MoneyMetric,ordersByStatus:Record<OrderStatus,number>(all 5, zero-filled)};
 `RevenueGranularity`='day'|'week'|'month'; `RevenueSeriesPoint` {periodStart,revenue,orderCount};
@@ -87,6 +97,10 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
 `@/api/cart`: getCart(), addToCart(productId,quantity), updateCartItem(productId,quantity), removeCartItem(productId), clearCart().
 `@/api/orders`: placeOrder(body):OrderResponse, listOrders({page,size,sort}):Page<OrderSummaryResponse>, getOrder(id):OrderResponse, cancelOrder(id):OrderResponse, verifyRazorpayPayment(body):OrderResponse.
 `@/api/store`: getPublicStore():PublicStoreResponse.
+`@/api/coupons` (WP-3.4): validateCoupon(code, subtotal?):CouponPreviewResponse (auth; POST /coupons/validate —
+  ALWAYS resolves 200, read `valid` rather than catching). Advisory preview for the cart/checkout; the real discount
+  is recomputed at placement. The Cart page persists the applied code via `@/lib/couponStorage`
+  (localStorage `rc-applied-coupon`) so Checkout carries it into `placeOrder`.
 `@/api/reviews` (WP-3.2b): listReviews(productId,{page?,size?,sort?}):Page<ReviewResponse> (public, APPROVED only),
   getReviewSummary(productId):ReviewSummaryResponse (public), getMyReview(productId):MyReviewResponse (auth),
   createReview(productId,body):MyReview (auth; 403 REVIEW_NOT_PURCHASED / 409 REVIEW_ALREADY_EXISTS),
@@ -104,7 +118,10 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
   `adminUsers`.{list({search,page,size,sort}):Page<UserResponse>, get(id), create(body), changeRoles(id,roles), lock(id,reason?), unlock(id), disable(id,reason?)};
   `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body)};
   `adminReviews` (WP-3.2b, STAFF+ADMIN).{list({status?,page?,size?}):Page<AdminReviewResponse>, approve(id):AdminReviewResponse,
-    reject(id):AdminReviewResponse} (approve/reject 400 INVALID_REVIEW_STATUS_TRANSITION).
+    reject(id):AdminReviewResponse} (approve/reject 400 INVALID_REVIEW_STATUS_TRANSITION);
+  `adminCoupons` (WP-3.4, STAFF+ADMIN; delete ADMIN-only).{list({page?,size?,sort?}):Page<AdminCouponResponse>, get(id),
+    create(body):AdminCouponResponse, update(id,body):AdminCouponResponse, deactivate(id):AdminCouponResponse,
+    remove(id):void} — `remove` is ADMIN-only and 409 `COUPON_HAS_REDEMPTIONS` on a used coupon (deactivate instead).
 `@/api/stats` (STAFF+ADMIN, `auth:true`; WP-3.1a). `adminStats`.{
   `overview({from?,to?})`:StatsOverviewResponse, `revenueSeries({from?,to?,granularity?})`:RevenueSeriesResponse,
   `topProducts({from?,to?,limit?})`:TopProductStat[], `lowStock({threshold?,limit?})`:LowStockProduct[]}.
@@ -215,7 +232,8 @@ Store (in `StoreLayout`): `/` Home, `/products` catalog, `/products/:slug` detai
 Auth (no layout / centered): `/login`, `/register`, `/admin/login`, `/forgot-password`, `/reset-password`,
 `/verify-email`, `/oauth2-callback`.
 Admin (in `AdminLayout`, guarded): `/admin` dashboard, `/admin/orders`, `/admin/orders/:id`,
-`/admin/deliverables`, `/admin/inventory`, `/admin/inventory/new`, `/admin/inventory/:id`,
+`/admin/deliverables`, `/admin/coupons` (WP-3.4 — coupon CRUD, STAFF+ADMIN with ADMIN-only delete, sidebar under
+Sales), `/admin/inventory`, `/admin/inventory/new`, `/admin/inventory/:id`,
 `/admin/categories`, `/admin/reviews` (WP-3.2b — review moderation, STAFF+ADMIN, sidebar under Catalog),
 `/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`, `/admin/forbidden`.
 
@@ -269,6 +287,18 @@ Data sources are all existing contracts — no new endpoints: `getPublicStore()`
   (`ratingAvg`/`ratingCount` on `ProductSummaryResponse`), but the public search endpoint exposes no
   `minRating` filter or `sort=rating` key — a client-side version would only reorder the current page.
   Not built; needs those params on `/api/v1/products`. See the deferral comment in `Products.tsx`.
+- **Coupon flow (WP-3.4).** Cart's promo input calls `validateCoupon` (advisory, always-200 — read `valid`),
+  shows the discount (green success + "−$X") or the rejection `message`, and persists a valid code to
+  localStorage (`@/lib/couponStorage`, key `rc-applied-coupon`). Checkout re-validates that code against the
+  CURRENT cart on entry; if it's no longer valid it's dropped with a notice (placement rejects an invalid code
+  outright — it is never silently dropped). `placeOrder` sends `couponCode` only when the re-validation confirmed
+  it; the placed `OrderResponse.discountAmount`/`couponCode` are authoritative and may differ from the preview if
+  the cart changed. On successful placement the stored code is cleared. Discount lines render in the Cart summary,
+  Checkout summary, and both customer + admin order detail (only when `discountAmount > 0`). Preview requires auth
+  (Cart/Checkout are already `RequireAuth`). The admin `/admin/coupons` page is STAFF+ADMIN (page under the existing
+  `RequireStaff` block; the destructive **delete** action is gated to ADMIN via `useAuth().isAdmin`, matching the
+  backend where DELETE is ADMIN-only and list/CRUD/deactivate are STAFF+ADMIN); a used coupon can't be deleted
+  (409 → the UI steers you to deactivate).
 - No order status filter on the API → fetch a page and filter client-side where needed (e.g. Deliverables).
 - Product images: create via `CreateProductRequest.images`; after creation manage via
   `adminProducts.addImages` / `deleteImage`. `UpdateProductRequest` cannot change slug/sku/images.

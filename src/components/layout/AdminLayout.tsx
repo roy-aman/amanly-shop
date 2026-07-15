@@ -16,6 +16,7 @@ import {
   Settings,
   ShoppingBag,
   Store,
+  TicketPercent,
   Truck,
   Users,
 } from 'lucide-react';
@@ -62,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
       { to: '/admin/deliverables', label: 'Deliverables', icon: Truck },
+      { to: '/admin/coupons', label: 'Coupons', icon: TicketPercent },
     ],
   },
   { label: 'People', items: [{ to: '/admin/users', label: 'Users', icon: Users, adminOnly: true }] },
@@ -74,6 +76,7 @@ const COLLAPSE_KEY = 'rc-admin-sidebar-collapsed';
 const CRUMB_LABELS: Record<string, string> = {
   orders: 'Orders',
   deliverables: 'Deliverables',
+  coupons: 'Coupons',
   inventory: 'Inventory',
   categories: 'Categories',
   reviews: 'Reviews',

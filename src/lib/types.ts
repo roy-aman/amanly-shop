@@ -262,7 +262,12 @@ export interface OrderResponse {
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: OrderPaymentStatus;
+  /** Amount payable AFTER any coupon discount (subtotal − discountAmount). */
   totalAmount: number;
+  /** Coupon discount applied at placement; 0 when no coupon was used (WP-3.4). */
+  discountAmount: number;
+  /** Coupon code applied at placement; null when none was used (WP-3.4). */
+  couponCode: string | null;
   currency: string;
   shippingAddress: ShippingDetails;
   notes: string | null;
@@ -288,6 +293,10 @@ export interface PlaceOrderRequest {
   shippingAddress: ShippingAddressRequest;
   notes?: string | null;
   paymentMethod?: PaymentMethod;
+  /** Optional coupon code (WP-3.4). Re-validated authoritatively at placement
+   *  against the server cart; an invalid coupon REJECTS the order (never silently
+   *  dropped), so only send a code the preview reported valid. */
+  couponCode?: string | null;
 }
 
 export interface RazorpayVerifyRequest {
@@ -515,4 +524,86 @@ export interface WishlistMutationResponse {
   productId: string;
   wishlisted: boolean;
   wishlistCount: number;
+}
+
+// ── Coupons & discounts (WP-3.4) ──────────────────────────────────────
+// Mirrors com.royalcommerce.application.coupon.dto.* and domain enums.
+export type CouponType = 'PERCENT' | 'FIXED';
+
+/** The single, precise reason a coupon could not be applied (backend enum). */
+export type CouponRejectionReason =
+  | 'NOT_FOUND'
+  | 'INACTIVE'
+  | 'NOT_STARTED'
+  | 'EXPIRED'
+  | 'MIN_ORDER_NOT_MET'
+  | 'MAX_REDEMPTIONS_REACHED'
+  | 'PER_USER_LIMIT_REACHED';
+
+/** Customer coupon preview request (POST /coupons/validate). `subtotal` is an
+ *  optional fallback — ignored by the server when the caller has a non-empty cart. */
+export interface CouponValidationRequest {
+  code: string;
+  subtotal?: number | null;
+}
+
+/**
+ * Advisory result of a coupon preview — ALWAYS returned with HTTP 200 (a rejected
+ * coupon is a normal outcome, not an error). Read `valid`: when true, `reason` is
+ * null and `discountAmount`/`total` are populated; when false, `reason`/`message`
+ * explain why and the money fields are null. The authoritative discount is recomputed
+ * server-side at placement (see `OrderResponse.discountAmount`).
+ */
+export interface CouponPreviewResponse {
+  valid: boolean;
+  code: string;
+  reason: CouponRejectionReason | null;
+  message: string;
+  subtotal: number;
+  discountAmount: number | null;
+  total: number | null;
+}
+
+/** Full coupon view for the admin console, including the live redemption count. */
+export interface AdminCouponResponse {
+  id: string;
+  code: string;
+  type: CouponType;
+  value: number;
+  minOrderAmount: number | null;
+  startsAt: string | null; // ISO instant
+  endsAt: string | null; // ISO instant
+  maxRedemptions: number | null;
+  perUserLimit: number | null;
+  active: boolean;
+  totalRedemptions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Create a coupon. Cross-field rules (PERCENT ≤ 100, ends after starts) are
+ *  enforced server-side (surfaced as INVALID_COUPON). `active` defaults to true. */
+export interface CreateCouponRequest {
+  code: string;
+  type: CouponType;
+  value: number;
+  minOrderAmount?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  maxRedemptions?: number | null;
+  perUserLimit?: number | null;
+  active?: boolean | null;
+}
+
+/** Fully replace a coupon's fields. Unlike create, `active` is required. */
+export interface UpdateCouponRequest {
+  code: string;
+  type: CouponType;
+  value: number;
+  minOrderAmount?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  maxRedemptions?: number | null;
+  perUserLimit?: number | null;
+  active: boolean;
 }

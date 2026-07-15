@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CreditCard, MapPin, Plus, Wallet } from 'lucide-react';
+import { AlertTriangle, CreditCard, MapPin, Plus, Tag, Wallet } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
 import { getCart } from '@/api/cart';
 import { placeOrder, verifyRazorpayPayment } from '@/api/orders';
+import { validateCoupon } from '@/api/coupons';
 import { addAddress, listAddresses } from '@/api/addresses';
 import { loadRazorpay } from '@/lib/razorpay';
+import { clearStoredCoupon, getStoredCoupon } from '@/lib/couponStorage';
 import { ApiError } from '@/lib/http';
 import { money } from '@/lib/format';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import type { AddressRequest, AddressResponse, PaymentMethod, ShippingDetails } from '@/lib/types';
+import type { AddressRequest, AddressResponse, PaymentMethod, PlaceOrderRequest, ShippingDetails } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -114,6 +116,31 @@ export default function Checkout() {
   const savedAddresses = useMemo(() => addressesQuery.data ?? [], [addressesQuery.data]);
   const store = storeQuery.data;
   const cart = cartQuery.data;
+
+  // ── Coupon carry-through (WP-3.4) ─────────────────────────────────────
+  // A coupon applied on the Cart page is persisted; re-validate it against the
+  // CURRENT server cart on entering checkout (the cart may have changed since).
+  // If it no longer applies we drop it with a notice — placement rejects invalid
+  // coupons outright, so we never want to send a stale one.
+  const [couponCode, setCouponCode] = useState<string | null>(() => getStoredCoupon());
+  const [couponDropped, setCouponDropped] = useState<string | null>(null);
+
+  const couponQuery = useQuery({
+    queryKey: ['coupon-preview', couponCode, cart?.totalAmount],
+    queryFn: () => validateCoupon(couponCode!, cart?.totalAmount),
+    enabled: !!couponCode && !!cart,
+  });
+  const appliedCoupon = couponQuery.data?.valid ? couponQuery.data : null;
+
+  // Drop a now-invalid coupon (expired/exhausted/min-not-met after a cart change).
+  useEffect(() => {
+    const data = couponQuery.data;
+    if (couponCode && data && !data.valid) {
+      setCouponDropped(data.message);
+      setCouponCode(null);
+      clearStoredCoupon();
+    }
+  }, [couponQuery.data, couponCode]);
 
   // ── Step + form state (lives in the parent so back/forward never loses it) ──
   const [step, setStep] = useState(0);
@@ -240,11 +267,16 @@ export default function Checkout() {
     setPlaceErrors([]);
     setPaymentIssue(null);
     setSubmitting(true);
+    // Only send a coupon the re-validation confirmed is still valid; placement
+    // recomputes the discount authoritatively and rejects an invalid code.
+    const body: PlaceOrderRequest = { shippingAddress, notes: notes.trim() || null, paymentMethod };
+    if (appliedCoupon) body.couponCode = appliedCoupon.code;
     try {
-      const order = await placeOrder({ shippingAddress, notes: notes.trim() || null, paymentMethod });
+      const order = await placeOrder(body);
 
       if (!order.paymentAction) {
-        // COD — order complete.
+        // COD — order complete. The coupon (if any) is now redeemed on the order.
+        clearStoredCoupon();
         toast.success('Order placed!', 'Thank you — your order has been received.');
         await refresh();
         navigate(`/orders/${order.id}`);
@@ -285,6 +317,7 @@ export default function Checkout() {
               razorpayOrderId: resp.razorpay_order_id,
               razorpaySignature: resp.razorpay_signature,
             });
+            clearStoredCoupon();
             toast.success('Payment successful!', 'Thank you — your order is confirmed.');
             await refresh();
             navigate(`/orders/${order.id}`);
@@ -597,11 +630,38 @@ export default function Checkout() {
                 </div>
               ))}
             </div>
+
+            {couponDropped && (
+              <div className="flex items-start gap-2 rounded-xl border border-warning-500/30 bg-warning-500/15 p-3 text-xs text-warning-300" role="status">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <p>Your coupon was removed — {couponDropped}</p>
+              </div>
+            )}
+
+            <dl className="space-y-2 border-t border-ink-800 pt-4 text-sm">
+              <div className="flex items-center justify-between">
+                <dt className="text-slate-400">Subtotal</dt>
+                <dd className="text-slate-200">{money(cart.totalAmount, currency)}</dd>
+              </div>
+              {appliedCoupon && (
+                <div className="flex items-center justify-between text-success-300">
+                  <dt className="flex items-center gap-1">
+                    <Tag className="h-3.5 w-3.5" /> Discount ({appliedCoupon.code})
+                  </dt>
+                  <dd className="font-medium">−{money(appliedCoupon.discountAmount, currency)}</dd>
+                </div>
+              )}
+            </dl>
+
             <div className="flex items-center justify-between border-t border-ink-800 pt-4 text-base font-bold">
               <span className="text-slate-300">Total</span>
-              <span className="text-gold-300">{money(cart.totalAmount, currency)}</span>
+              <span className="text-gold-300">{money(appliedCoupon?.total ?? cart.totalAmount, currency)}</span>
             </div>
-            <p className="text-xs text-slate-500">Shipping &amp; taxes calculated at checkout.</p>
+            <p className="text-xs text-slate-500">
+              {appliedCoupon
+                ? 'Final discount is confirmed when you place the order.'
+                : 'Shipping & taxes calculated at checkout.'}
+            </p>
           </Card>
         </aside>
       </div>

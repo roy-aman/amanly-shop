@@ -1,10 +1,12 @@
 import { buildQuery, request } from '@/lib/http';
 import type {
+  AdminCouponResponse,
   AdminCreateUserRequest,
   AdminReviewResponse,
   CategoryResponse,
   ChangeUserRolesRequest,
   CreateCategoryRequest,
+  CreateCouponRequest,
   CreateProductRequest,
   OrderPaymentStatus,
   OrderResponse,
@@ -19,6 +21,7 @@ import type {
   ReviewStatus,
   StoreSettingsResponse,
   UpdateCategoryRequest,
+  UpdateCouponRequest,
   UpdatePaymentSettingsRequest,
   UpdateProductRequest,
   UpdateWhatsappSettingsRequest,
@@ -140,6 +143,29 @@ export const adminReviews = {
   },
   reject(id: string): Promise<AdminReviewResponse> {
     return request('POST', `${A}/reviews/${id}/reject`, { auth: true });
+  },
+};
+
+// ── Coupons (ADMIN, STAFF; delete ADMIN only) ─────────────────────────
+export const adminCoupons = {
+  list(params: { page?: number; size?: number; sort?: string } = {}): Promise<Page<AdminCouponResponse>> {
+    return request('GET', `${A}/coupons${buildQuery(params)}`, { auth: true });
+  },
+  get(id: string): Promise<AdminCouponResponse> {
+    return request('GET', `${A}/coupons/${id}`, { auth: true });
+  },
+  create(body: CreateCouponRequest): Promise<AdminCouponResponse> {
+    return request('POST', `${A}/coupons`, { body, auth: true });
+  },
+  update(id: string, body: UpdateCouponRequest): Promise<AdminCouponResponse> {
+    return request('PUT', `${A}/coupons/${id}`, { body, auth: true });
+  },
+  deactivate(id: string): Promise<AdminCouponResponse> {
+    return request('POST', `${A}/coupons/${id}/deactivate`, { auth: true });
+  },
+  // ADMIN only. 409 COUPON_HAS_REDEMPTIONS when the coupon has been used → deactivate instead.
+  remove(id: string): Promise<void> {
+    return request('DELETE', `${A}/coupons/${id}`, { auth: true });
   },
 };
 

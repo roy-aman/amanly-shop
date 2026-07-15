@@ -52,6 +52,7 @@ const Inventory = lazy(() => import('@/pages/admin/Inventory'));
 const ProductForm = lazy(() => import('@/pages/admin/ProductForm'));
 const Categories = lazy(() => import('@/pages/admin/Categories'));
 const AdminReviews = lazy(() => import('@/pages/admin/Reviews'));
+const AdminCoupons = lazy(() => import('@/pages/admin/Coupons'));
 const Reports = lazy(() => import('@/pages/admin/Reports'));
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
@@ -134,6 +135,7 @@ export default function App() {
             <Route path="orders" element={<Page title="Orders" fallback={<ListSkeleton />}><AdminOrders /></Page>} />
             <Route path="orders/:id" element={<Page fallback={<DetailSkeleton />}><AdminOrderDetail /></Page>} />
             <Route path="deliverables" element={<Page title="Deliverables" fallback={<ListSkeleton />}><Deliverables /></Page>} />
+            <Route path="coupons" element={<Page title="Coupons" fallback={<ListSkeleton />}><AdminCoupons /></Page>} />
             <Route path="inventory" element={<Page title="Inventory" fallback={<ListSkeleton />}><Inventory /></Page>} />
             <Route path="inventory/new" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
             <Route path="inventory/:id" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />

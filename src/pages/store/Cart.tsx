@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, Heart, ShoppingBag, Trash2, Undo2 } from 'lucide-react';
+import { Clock, Heart, ShoppingBag, Tag, Trash2, Undo2, X } from 'lucide-react';
 import { addToCart, clearCart, removeCartItem, updateCartItem } from '@/api/cart';
 import { addToWishlist } from '@/api/wishlist';
-import type { CartResponse } from '@/lib/types';
+import { validateCoupon } from '@/api/coupons';
+import { clearStoredCoupon, getStoredCoupon, setStoredCoupon } from '@/lib/couponStorage';
+import type { CartResponse, CouponPreviewResponse } from '@/lib/types';
 import { money } from '@/lib/format';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -79,6 +81,59 @@ export default function Cart() {
     const id = window.setTimeout(() => setUndo(null), UNDO_WINDOW_MS);
     return () => window.clearTimeout(id);
   }, [undo]);
+
+  // ── Coupon entry ──────────────────────────────────────────────────────
+  // `activeCode` is the code we're previewing (seeded from a persisted apply so
+  // it survives navigation). A single effect validates it against the CURRENT
+  // cart subtotal — so it re-checks automatically when quantities change — and
+  // mirrors the result into `preview`. The preview is advisory; the real discount
+  // is recomputed server-side at placement.
+  const [activeCode, setActiveCode] = useState<string | null>(() => getStoredCoupon());
+  const [couponInput, setCouponInput] = useState('');
+  const [preview, setPreview] = useState<CouponPreviewResponse | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+
+  const cartSubtotal = cart?.totalAmount;
+  useEffect(() => {
+    if (!activeCode || cartSubtotal == null) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setCouponBusy(true);
+    validateCoupon(activeCode, cartSubtotal)
+      .then((res) => {
+        if (cancelled) return;
+        setPreview(res);
+        // Persist only a valid code; drop a now-invalid one from storage so it
+        // never rides along to checkout (placement would reject the whole order).
+        if (res.valid) setStoredCoupon(res.code);
+        else clearStoredCoupon();
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCouponBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCode, cartSubtotal]);
+
+  function applyCoupon() {
+    const code = couponInput.trim();
+    if (!code || couponBusy) return;
+    setActiveCode(code);
+    setCouponInput('');
+  }
+
+  function removeCoupon() {
+    setActiveCode(null);
+    setPreview(null);
+    setCouponInput('');
+    clearStoredCoupon();
+  }
 
   async function changeQty(productId: string, quantity: number, current: number) {
     if (!cart || quantity < 1 || quantity === current) return;
@@ -177,6 +232,12 @@ export default function Cart() {
   const items = cart?.items ?? [];
   const currency = cart?.currency ?? 'USD';
   const elapsedMinutes = Math.floor((now - seededAt.current) / 60_000);
+
+  // Applied (valid) coupon → drives the discount row + adjusted total. A rejected
+  // preview stays in `preview` (message shown) but never affects the totals.
+  const appliedCoupon = preview?.valid ? preview : null;
+  const discountAmount = appliedCoupon?.discountAmount ?? 0;
+  const payableTotal = appliedCoupon?.total ?? cart?.totalAmount;
 
   if (items.length === 0) {
     return (
@@ -299,28 +360,83 @@ export default function Cart() {
                 <dt className="text-slate-400">Subtotal</dt>
                 <dd className="font-medium text-slate-100">{money(cart?.totalAmount, currency)}</dd>
               </div>
+              {appliedCoupon && (
+                <div className="flex items-center justify-between text-success-300">
+                  <dt className="flex items-center gap-1">
+                    <Tag className="h-3.5 w-3.5" /> Discount ({appliedCoupon.code})
+                  </dt>
+                  <dd className="font-medium">−{money(discountAmount, currency)}</dd>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <dt className="text-slate-400">Shipping</dt>
                 <dd className="text-slate-500">Calculated at checkout</dd>
               </div>
             </dl>
 
-            {/* Coupon input is intentionally inert — the coupon backend ships in
-                WP-3.4. Rendered disabled with a "coming soon" hint; no endpoint. */}
+            {/* ── Coupon entry (WP-3.4) ─────────────────────────────────────
+                Preview is advisory (always HTTP 200 — read `valid`); the real
+                discount is recomputed at placement. Applied code is persisted so
+                Checkout can carry it into placeOrder. */}
             <div className="border-t border-ink-800 pt-4">
-              <Field label="Promo code" hint="Coupon codes are coming soon.">
-                <div className="flex gap-2">
-                  <Input placeholder="Enter code" disabled aria-label="Promo code (coming soon)" />
-                  <Button variant="secondary" disabled>
-                    Apply
-                  </Button>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-success-500/30 bg-success-500/10 px-3 py-2.5 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 text-success-300">
+                    <Tag className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="font-semibold">{appliedCoupon.code}</span> applied
+                      <span className="block text-xs text-success-400/90">
+                        You save {money(discountAmount, currency)}
+                      </span>
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={removeCoupon}
+                    className="rounded-lg p-1.5 text-success-300 transition hover:bg-success-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                    aria-label={`Remove coupon ${appliedCoupon.code}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-              </Field>
+              ) : (
+                <Field label="Promo code">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter code"
+                      aria-label="Promo code"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyCoupon();
+                        }
+                      }}
+                      invalid={!!preview && !preview.valid}
+                      disabled={couponBusy}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={applyCoupon}
+                      loading={couponBusy}
+                      disabled={!couponInput.trim()}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </Field>
+              )}
+              {preview && !preview.valid && (
+                <p className="mt-2 text-xs text-danger-300" role="alert">
+                  {preview.message}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between border-t border-ink-800 pt-4 text-base font-bold">
               <span className="text-slate-300">Total</span>
-              <span className="text-gold-300">{money(cart?.totalAmount, currency)}</span>
+              <span className="text-gold-300">{money(payableTotal, currency)}</span>
             </div>
             <p className="-mt-2 text-xs text-slate-500">Shipping &amp; taxes calculated at checkout.</p>
 

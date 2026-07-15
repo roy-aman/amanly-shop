@@ -5,7 +5,8 @@ import { MemoryRouter } from 'react-router-dom';
 import Cart from './Cart';
 import { addToCart, removeCartItem, updateCartItem } from '@/api/cart';
 import { addToWishlist } from '@/api/wishlist';
-import type { CartItemResponse, CartResponse } from '@/lib/types';
+import { validateCoupon } from '@/api/coupons';
+import type { CartItemResponse, CartResponse, CouponPreviewResponse } from '@/lib/types';
 
 vi.mock('@/api/cart', () => ({
   addToCart: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('@/api/cart', () => ({
 }));
 
 vi.mock('@/api/wishlist', () => ({ addToWishlist: vi.fn() }));
+vi.mock('@/api/coupons', () => ({ validateCoupon: vi.fn() }));
 
 const wishlistRefresh = vi.fn();
 vi.mock('@/context/WishlistContext', () => ({
@@ -44,6 +46,20 @@ const updateMock = vi.mocked(updateCartItem);
 const removeMock = vi.mocked(removeCartItem);
 const addMock = vi.mocked(addToCart);
 const addWishlistMock = vi.mocked(addToWishlist);
+const validateCouponMock = vi.mocked(validateCoupon);
+
+function preview(overrides: Partial<CouponPreviewResponse> = {}): CouponPreviewResponse {
+  return {
+    valid: true,
+    code: 'SAVE10',
+    reason: null,
+    message: 'Coupon applied.',
+    subtotal: 200,
+    discountAmount: 20,
+    total: 180,
+    ...overrides,
+  };
+}
 
 function item(overrides: Partial<CartItemResponse> = {}): CartItemResponse {
   return {
@@ -80,11 +96,13 @@ function renderCart() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear(); // reset any persisted coupon between tests
   currentCart = cart([item()]);
   updateMock.mockResolvedValue(cart([item({ quantity: 3, subtotal: 300 })]));
   removeMock.mockResolvedValue(cart([]));
   addMock.mockResolvedValue(cart([item()]));
   addWishlistMock.mockResolvedValue({ productId: 'p1', wishlisted: true, wishlistCount: 1 });
+  validateCouponMock.mockResolvedValue(preview());
 });
 
 describe('Cart (WP-2.4)', () => {
@@ -136,9 +154,39 @@ describe('Cart (WP-2.4)', () => {
     expect(screen.getByRole('link', { name: /start shopping/i })).toHaveAttribute('href', '/products');
   });
 
-  it('surfaces the reservation window and disables the coupon input (WP-3.4)', () => {
+  it('surfaces the reservation window and offers a working coupon input (WP-3.4)', () => {
     renderCart();
     expect(screen.getByText(/reserved for 12 min/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/promo code/i)).toBeDisabled();
+    // Coupon entry is now live (WP-3.4) — the promo input is enabled.
+    expect(screen.getByLabelText(/promo code/i)).toBeEnabled();
+  });
+
+  it('applying a valid coupon validates it and shows the discount (WP-3.4)', async () => {
+    const user = userEvent.setup();
+    renderCart();
+
+    await user.type(screen.getByLabelText(/promo code/i), 'SAVE10');
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+
+    await waitFor(() => expect(validateCouponMock).toHaveBeenCalledWith('SAVE10', 200));
+    // Applied confirmation + discount line reflect the preview.
+    expect(await screen.findByText(/Discount \(SAVE10\)/i)).toBeInTheDocument();
+    expect(screen.getByText('−$20.00')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /remove coupon save10/i })).toBeInTheDocument();
+  });
+
+  it('applying an invalid coupon surfaces the rejection message (WP-3.4)', async () => {
+    validateCouponMock.mockResolvedValue(
+      preview({ valid: false, code: 'EXPIRED', reason: 'EXPIRED', message: 'This coupon has expired.', discountAmount: null, total: null }),
+    );
+    const user = userEvent.setup();
+    renderCart();
+
+    await user.type(screen.getByLabelText(/promo code/i), 'EXPIRED');
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(await screen.findByText(/this coupon has expired/i)).toBeInTheDocument();
+    // No discount line is shown for a rejected coupon.
+    expect(screen.queryByText(/^Discount/i)).not.toBeInTheDocument();
   });
 });
