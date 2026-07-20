@@ -47,11 +47,16 @@ Brands & variants (WP-3.5): `BrandResponse` {id,name,slug,description:string|nul
 `ShippingDetails`/`ShippingAddressRequest` {name,phone?,addressLine1,addressLine2?,city,state?,postalCode,country};
 `OrderItemResponse` {id,productId,productName,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptions`?:string|null,unitPrice,quantity,subtotal} (WP-3.5 variant snapshot null for a variantless line);
 `PaymentAction` {provider,razorpayKeyId,razorpayOrderId,amountMinor,currency};
-`OrderResponse` {id,userId,status,paymentMethod,paymentStatus,`totalAmount`(post-discount payable),`discountAmount`:number(0 when none, WP-3.4),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
+`OrderResponse` {id,userId,status,paymentMethod,paymentStatus,`totalAmount`(payable),`subtotalAmount`(WP-P.6),`discountAmount`:number(0 when none, WP-3.4),`shippingAmount`(WP-P.6),`taxAmount`(WP-P.6),`taxRatePercent`(WP-P.6),`taxInclusive`:boolean(WP-P.6),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
+  - **Money breakdown (WP-P.6).** All figures are placement-time snapshots — editing store settings never changes a placed order. The relationship depends on `taxInclusive`:
+    `taxInclusive=false` → `total = subtotal - discount + shipping + tax` (tax added on top);
+    `taxInclusive=true` → `total = subtotal - discount + shipping` (`taxAmount` is the portion already inside `total` — **do not add it again** when rendering).
+    `OrderSummaryResponse` is unchanged and still carries only `totalAmount`; that figure is now complete, so list rows need no adjustment.
 `OrderSummaryResponse` {id,status,paymentMethod,totalAmount,currency,itemCount,shippingCity,shippingCountry,createdAt} (order LIST — NO discount fields);
 `PlaceOrderRequest` {shippingAddress,notes?,paymentMethod?,`couponCode`?(WP-3.4 — re-validated at placement; an invalid code REJECTS the order, never silently dropped)};
 `RazorpayVerifyRequest` {orderId,razorpayPaymentId,razorpayOrderId,razorpaySignature};
-`PublicStoreResponse` {name,currency,codEnabled,onlinePaymentEnabled};
+`PublicStoreResponse` {name,currency,codEnabled,onlinePaymentEnabled,`shippingFlatAmount`(WP-P.6),`freeShippingThreshold`:number|null(WP-P.6, null = never free),`taxRatePercent`(WP-P.6),`pricesIncludeTax`:boolean(WP-P.6)};
+  - Enough to render delivery cost and "free delivery over X" messaging before checkout, and to label prices "incl. tax" vs "+ tax at checkout". **There is no cart totals-preview endpoint yet** — the storefront must apply the same rules client-side (discounted subtotal ≥ threshold → free; tax on goods + shipping), and the placed `OrderResponse` remains authoritative.
 `StoreSettingsResponse` {id,slug,name,currency,status,codEnabled,onlinePaymentEnabled,razorpayKeyId,razorpayConfigured,whatsappEnabled};
 `UpdatePaymentSettingsRequest` {codEnabled,onlinePaymentEnabled,razorpayKeyId?,razorpayKeySecret?,razorpayWebhookSecret?};
 `UpdateWhatsappSettingsRequest` {enabled,phoneNumberId?,accessToken?,verifyToken?,appSecret?};
@@ -123,7 +128,9 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
   `adminCategories`.{list():CategoryResponse[], create(body), update(id,body), remove(id)};
   `adminOrders`.{list({page,size,sort}):Page<OrderSummaryResponse>, get(id), updateStatus(id,status)};
   `adminUsers`.{list({search,page,size,sort}):Page<UserResponse>, get(id), create(body), changeRoles(id,roles), lock(id,reason?), unlock(id), disable(id,reason?)};
-  `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body)};
+  `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body), **updateCommerce(body)**(WP-P.6, `PUT /api/v1/admin/store/commerce-settings`, ADMIN)};
+  - `StoreSettingsResponse` gains `shippingFlatAmount`,`freeShippingThreshold`,`taxRatePercent`,`pricesIncludeTax` (WP-P.6).
+  - `updateCommerce` body = `{shippingFlatAmount, freeShippingThreshold|null, taxRatePercent, pricesIncludeTax}`. Unlike `updatePayment`, there is **no "null = keep existing"** rule — send the complete policy every time; `freeShippingThreshold: null` genuinely means "never free". Applies to future orders only.
   `adminReviews` (WP-3.2b, STAFF+ADMIN).{list({status?,page?,size?}):Page<AdminReviewResponse>, approve(id):AdminReviewResponse,
     reject(id):AdminReviewResponse} (approve/reject 400 INVALID_REVIEW_STATUS_TRANSITION);
   `adminCoupons` (WP-3.4, STAFF+ADMIN; delete ADMIN-only).{list({page?,size?,sort?}):Page<AdminCouponResponse>, get(id),
