@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Info, MapPin, Pencil, Star, Trash2 } from 'lucide-react';
+import { MapPin, Pencil, Star, Trash2 } from 'lucide-react';
 import * as addressApi from '@/api/addresses';
 import { ApiError } from '@/lib/http';
 import type { AddressRequest, AddressResponse } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
-import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, PageLoader } from '@/components/ui';
+import { Button, EmptyState, Field, Input, Modal, PageLoader } from '@/components/ui';
 
 interface FormState {
   label: string;
@@ -157,18 +157,20 @@ export default function Addresses() {
   if (isLoading) return <PageLoader />;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Addresses"
-        subtitle="Saved shipping addresses to speed up checkout."
-        action={<Button onClick={openAdd}>Add address</Button>}
-      />
+    <div>
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-700 pb-6">
+        <div>
+          <h1 className="font-display text-h1 text-slate-100">Addresses</h1>
+          <p className="mt-2 text-body-sm text-slate-400">
+            Saved addresses prefill checkout and sync across your devices.
+          </p>
+        </div>
+        <Button onClick={openAdd} variant="outline">
+          Add address
+        </Button>
+      </header>
 
-      <div className="flex items-start gap-2 rounded-xl border border-ink-800 bg-ink-900/50 p-4 text-sm text-slate-400">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
-        <p>Addresses are saved to your account and used to prefill checkout. They sync across your devices.</p>
-      </div>
-
+      <div className="mt-8">
       {list.length === 0 ? (
         <EmptyState
           icon={<MapPin className="h-10 w-10" />}
@@ -177,21 +179,19 @@ export default function Addresses() {
           action={<Button onClick={openAdd}>Add address</Button>}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-10 border-t border-ink-700 sm:grid-cols-2">
           {list.map((a) => (
-            <Card key={a.id} className="flex flex-col gap-3 p-5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-100">{a.label}</span>
-                  {a.isDefault && <Badge tone="gold">Default</Badge>}
-                </div>
+            <div key={a.id} className="flex flex-col gap-3 border-b border-ink-700 py-6">
+              <div className="flex items-center gap-3">
+                <span className="text-body-sm font-medium text-slate-100">{a.label}</span>
+                {a.isDefault && <span className="text-overline uppercase text-slate-500">Default</span>}
               </div>
-              <div className="text-sm text-slate-400">
-                <p className="font-medium text-slate-200">{a.recipientName}</p>
+              <div className="text-body-sm text-slate-400">
+                <p className="text-slate-200">{a.recipientName}</p>
                 {a.phone && <p>{a.phone}</p>}
                 <p>{formatAddress(a)}</p>
               </div>
-              <div className="mt-auto flex flex-wrap gap-2 pt-2">
+              <div className="mt-auto flex flex-wrap gap-4 pt-2">
                 {!a.isDefault && (
                   <Button variant="ghost" size="sm" onClick={() => defaultMutation.mutate(a.id)} loading={defaultMutation.isPending}>
                     <Star className="h-3.5 w-3.5" /> Set default
@@ -204,10 +204,11 @@ export default function Addresses() {
                   <Trash2 className="h-3.5 w-3.5" /> Remove
                 </Button>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
+      </div>
 
       {/* Add / edit modal */}
       <Modal
@@ -258,7 +259,7 @@ export default function Addresses() {
               type="checkbox"
               checked={form.makeDefault}
               onChange={(e) => set('makeDefault', e.target.checked)}
-              className="h-4 w-4 accent-gold-400"
+              className="h-4 w-4 accent-primary"
             />
             Set as default address
           </label>

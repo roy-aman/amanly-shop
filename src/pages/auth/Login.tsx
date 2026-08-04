@@ -50,7 +50,7 @@ export default function Login() {
       footer={
         <>
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="font-medium text-gold-400 hover:text-gold-300">
+          <Link to="/register" className="font-medium text-slate-100 underline decoration-ink-600 underline-offset-4 transition hover:decoration-slate-100">
             Create one
           </Link>
         </>
@@ -85,7 +85,7 @@ export default function Login() {
         </Field>
 
         <div className="text-right">
-          <Link to="/forgot-password" className="text-xs text-slate-400 hover:text-gold-300">
+          <Link to="/forgot-password" className="text-caption text-slate-500 underline-offset-4 transition hover:text-slate-100 hover:underline">
             Forgot password?
           </Link>
         </div>

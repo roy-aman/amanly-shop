@@ -37,7 +37,7 @@ export function RatingStars({
         </span>
         {/* Filled overlay, clipped to the rating fraction */}
         <span
-          className="absolute inset-0 inline-flex overflow-hidden text-gold-400"
+          className="absolute inset-0 inline-flex overflow-hidden text-slate-100"
           style={{ width: `${(clamped / max) * 100}%` }}
           aria-hidden
         >
@@ -115,7 +115,7 @@ export function RatingInput({
               className={cn(
                 dim,
                 'rounded transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-gold-400/70 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-ink-950',
-                filled ? 'fill-gold-400 text-gold-400' : 'fill-transparent text-ink-500',
+                filled ? 'fill-slate-100 text-slate-100' : 'fill-transparent text-ink-500',
               )}
             />
           </label>

@@ -229,7 +229,9 @@ export default function Products() {
             type="checkbox"
             checked={inStock}
             onChange={(e) => setFilter({ inStock: e.target.checked ? '1' : undefined })}
-            className="mt-0.5 h-4 w-4 rounded-none border-ink-600 bg-ink-850 text-slate-100 focus:ring-gold-400/70"
+            // `accent-*`, not `text-*`: without the Tailwind forms plugin a
+            // native checkbox ignores text colour and renders browser blue.
+            className="mt-0.5 h-4 w-4 accent-primary"
           />
           <span>
             In stock only

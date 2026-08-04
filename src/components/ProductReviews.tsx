@@ -143,7 +143,7 @@ export default function ProductReviews({
                 <div key={star} className="flex items-center gap-3 text-caption text-slate-400">
                   <span className="w-10 shrink-0 tabular-nums">{star} star</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink-800">
-                    <div className="h-full rounded-full bg-gold-400" style={{ width: `${pct}%` }} />
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
                   </div>
                   <span className="w-8 shrink-0 text-right tabular-nums">{n}</span>
                 </div>

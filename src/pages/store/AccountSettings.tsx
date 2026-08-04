@@ -3,7 +3,7 @@ import { updateProfile, updatePassword } from '@/api/users';
 import { ApiError } from '@/lib/http';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, Field, Input, PasswordInput, PageHeader } from '@/components/ui';
+import { Button, Field, Input, PasswordInput } from '@/components/ui';
 
 export default function AccountSettings() {
   const { user, setUser } = useAuth();
@@ -74,13 +74,16 @@ export default function AccountSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Account settings" subtitle="Update your profile and password." />
+    <div>
+      <header className="border-b border-ink-700 pb-6">
+        <h1 className="font-display text-h1 text-slate-100">Settings</h1>
+        <p className="mt-2 text-body-sm text-slate-400">Update your profile and password.</p>
+      </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-2">
         {/* Profile */}
-        <Card className="p-5">
-          <h2 className="mb-4 text-sm font-semibold text-slate-200">Profile</h2>
+        <section>
+          <h2 className="mb-5 text-overline uppercase text-slate-500">Profile</h2>
           <form onSubmit={saveProfile} className="space-y-4">
             <Field label="Email">
               <Input value={user?.email ?? ''} disabled readOnly />
@@ -92,11 +95,11 @@ export default function AccountSettings() {
               Save profile
             </Button>
           </form>
-        </Card>
+        </section>
 
         {/* Password */}
-        <Card className="p-5">
-          <h2 className="mb-4 text-sm font-semibold text-slate-200">Password</h2>
+        <section>
+          <h2 className="mb-5 text-overline uppercase text-slate-500">Password</h2>
           <form onSubmit={savePassword} className="space-y-4">
             <Field label="Current password" required error={passwordErrors.currentPassword}>
               <PasswordInput
@@ -131,7 +134,7 @@ export default function AccountSettings() {
               Update password
             </Button>
           </form>
-        </Card>
+        </section>
       </div>
     </div>
   );

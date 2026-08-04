@@ -5,7 +5,7 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import ProductCard from '@/components/ProductCard';
 import { ProductGridSkeleton } from '@/components/RouteSkeletons';
-import { EmptyState, LinkButton, PageHeader } from '@/components/ui';
+import { EmptyState, LinkButton } from '@/components/ui';
 
 /**
  * The signed-in user's saved products (route-guarded by RequireAuth). The list
@@ -22,25 +22,21 @@ export default function Wishlist() {
 
   if (query.isLoading) {
     return (
-      <div className="space-y-6">
-        <PageHeader title="Wishlist" subtitle="Products you've saved for later." />
-        <ProductGridSkeleton count={8} />
+      <div>
+        <Header count={null} />
+        <div className="mt-8">
+          <ProductGridSkeleton count={8} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Wishlist"
-        subtitle={
-          items.length > 0
-            ? `${items.length} saved item${items.length === 1 ? '' : 's'}`
-            : "Products you've saved for later."
-        }
-      />
+    <div>
+      <Header count={items.length} />
 
-      {query.isError ? (
+      <div className="mt-8">
+        {query.isError ? (
         <EmptyState
           icon={<Heart className="h-10 w-10" />}
           title="Could not load your wishlist"
@@ -55,12 +51,29 @@ export default function Wishlist() {
           action={<LinkButton to="/products">Browse products</LinkButton>}
         />
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((p) => (
-            <ProductCard key={p.id} product={p} variant="grid" />
-          ))}
-        </div>
-      )}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-3 xl:grid-cols-4">
+            {items.map((p) => (
+              <ProductCard key={p.id} product={p} variant="grid" />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** Page head. Count is null while loading, so the subtitle never flashes "0 saved". */
+function Header({ count }: { count: number | null }) {
+  return (
+    <header className="border-b border-ink-700 pb-6">
+      <h1 className="font-display text-h1 text-slate-100">Wishlist</h1>
+      <p className="mt-2 text-body-sm text-slate-400">
+        {count === null
+          ? "Pieces you've saved for later."
+          : count > 0
+            ? `${count} saved ${count === 1 ? 'piece' : 'pieces'}`
+            : "Pieces you've saved for later."}
+      </p>
+    </header>
   );
 }
