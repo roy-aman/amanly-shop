@@ -2,12 +2,15 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Crown } from 'lucide-react';
 import { Card } from '@/components/ui';
+import { useDarkTheme } from '@/lib/useDarkTheme';
 
 interface AuthLayoutProps {
   title: string;
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** `admin` keeps the dark console palette; storefront auth pages are light. */
+  theme?: 'store' | 'admin';
 }
 
 /**
@@ -15,7 +18,9 @@ interface AuthLayoutProps {
  * "Royal Commerce" header, and a max-w-md card holding the page's form.
  * Reused across every auth page for visual consistency.
  */
-export default function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
+export default function AuthLayout({ title, subtitle, children, footer, theme = 'store' }: AuthLayoutProps) {
+  useDarkTheme(theme === 'admin');
+
   return (
     <div className="flex min-h-screen w-full items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">

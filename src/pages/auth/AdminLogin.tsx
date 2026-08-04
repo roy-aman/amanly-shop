@@ -46,6 +46,7 @@ export default function AdminLogin() {
 
   return (
     <AuthLayout
+      theme="admin"
       title="Admin Console"
       subtitle="Staff & administrator sign-in"
       footer={

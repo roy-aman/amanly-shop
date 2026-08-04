@@ -6,6 +6,7 @@ import AuthLayout from '@/components/layout/AuthLayout';
 export default function Forbidden() {
   return (
     <AuthLayout
+      theme="admin"
       title="Access denied"
       footer={
         <Link to="/admin/login" className="font-medium text-gold-400 hover:text-gold-300">

@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { getPublicStore } from '@/api/store';
 import { titleCase } from '@/lib/format';
+import { useDarkTheme } from '@/lib/useDarkTheme';
 import {
   Breadcrumbs,
   cn,
@@ -108,6 +109,10 @@ function buildCrumbs(pathname: string): Crumb[] {
 }
 
 export default function AdminLayout() {
+  // The console keeps the dark palette; the storefront is light. See useDarkTheme
+  // for why the scope has to sit on <html> rather than on this wrapper.
+  useDarkTheme();
+
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
