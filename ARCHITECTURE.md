@@ -1,4 +1,4 @@
-# Royal Commerce Frontend — Architecture & Foundation Contract
+# Amanly Frontend — Architecture & Foundation Contract
 
 React 18 + TypeScript + Vite + Tailwind + React Router v6 + TanStack Query.
 SPA served by Vite in dev (proxy `/api` → :8080); `npm run build:deploy` emits into
@@ -221,7 +221,7 @@ Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reu
   `PageHeaderSkeleton`, `ProductGridSkeleton` (`{count?}`), `RowsSkeleton` (`{rows?}`), and a re-exported
   `SkeletonTable`. Used both as the route fallback (matched to page type) **and** the in-page data-loading
   branch — pages that keep their own header/filters swap only the body (`SkeletonTable`/`RowsSkeleton`).
-- **`@/lib/useDocumentTitle`** — `useDocumentTitle(title?)` sets `document.title` to `Royal Commerce — <title>`
+- **`@/lib/useDocumentTitle`** — `useDocumentTitle(title?)` sets `document.title` to `Amanly — <title>`
   (bare brand when falsy). `RouteTitle {title}` is the declarative form used for static route titles in
   `App.tsx`; `TITLE_BASE` is the brand prefix. **Phase 2:** dynamic pages set specific titles from loaded data,
   e.g. `useDocumentTitle(product?.name ?? 'Product')` (see ProductDetail/OrderDetail/ProductForm for the pattern).
@@ -258,7 +258,7 @@ The three layout shells own all site chrome; page bodies never render their own 
 `TooltipProvider` is mounted once at the app root (`main.tsx`) so tooltips share one hover-delay timer.
 
 - **`StoreLayout`** (storefront shell):
-  - Sticky header (`z-header`): brand = store name from `getPublicStore().name` (falls back to "Royal Commerce"
+  - Sticky header (`z-header`): brand = store name from `getPublicStore().name` (falls back to "Amanly"
     if the request fails); primary nav (Home, Shop) + a **Categories `DropdownMenu`** built from
     `getCategoryTree()` (roots + one level of children), each item linking to `/products?categoryId=<id>`;
     a debounced **`SearchInput`** (desktop) that navigates to `/products?search=<q>`; a cart button showing
