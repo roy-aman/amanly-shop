@@ -47,7 +47,10 @@ export function TabsTrigger({ value, className, children }: { value: string; cla
       className={cn(
         'relative -mb-px inline-flex items-center gap-2 border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium text-slate-400 transition',
         'hover:text-slate-200',
-        'data-[state=active]:border-gold-400 data-[state=active]:text-gold-300',
+        // Selection rides the primary token: an ink underline on the storefront,
+        // gold in the console — a selected tab is state, and on white gold is not
+        // a state anyone can see.
+        'data-[state=active]:border-primary data-[state=active]:text-slate-100',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 rounded-t',
         className,
       )}

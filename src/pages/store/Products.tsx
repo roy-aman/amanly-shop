@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { LayoutGrid, List, PackageSearch, SlidersHorizontal } from 'lucide-react';
@@ -8,10 +8,8 @@ import {
   Button,
   Drawer,
   EmptyState,
-  Field,
   FilterChip,
   Input,
-  PageHeader,
   Pagination,
   SearchInput,
   Select,
@@ -159,24 +157,34 @@ export default function Products() {
   );
   const hiddenByStock = data ? data.content.length - visible.length : 0;
 
-  // ── Filter panel (shared by desktop sidebar + mobile drawer) ─────────────
+  // ── Filter panel (shared by desktop rail + mobile drawer) ────────────────
+  // Filters are a rail of hairline-separated groups, not a bordered card: on a
+  // light page a boxed sidebar competes with the products it is meant to serve.
   const filterPanel = (
-    <div className="space-y-5">
-      <Field label="Category">
-        <Select value={categoryId} onChange={(e) => setFilter({ categoryId: e.target.value || undefined })}>
+    <div className="divide-y divide-ink-700">
+      <FilterGroup label="Category">
+        <Select
+          aria-label="Category"
+          value={categoryId}
+          onChange={(e) => setFilter({ categoryId: e.target.value || undefined })}
+        >
           <option value="">All categories</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
-              {'  '.repeat(c.depth)}
+              {'  '.repeat(c.depth)}
               {c.name}
             </option>
           ))}
         </Select>
-      </Field>
+      </FilterGroup>
 
       {brands.length > 0 && (
-        <Field label="Brand">
-          <Select value={brandId} onChange={(e) => setFilter({ brandId: e.target.value || undefined })}>
+        <FilterGroup label="Brand">
+          <Select
+            aria-label="Brand"
+            value={brandId}
+            onChange={(e) => setFilter({ brandId: e.target.value || undefined })}
+          >
             <option value="">All brands</option>
             {brands.map((b) => (
               <option key={b.id} value={b.id}>
@@ -184,12 +192,11 @@ export default function Products() {
               </option>
             ))}
           </Select>
-        </Field>
+        </FilterGroup>
       )}
 
-      <fieldset className="space-y-2">
-        <legend className="rc-label">Price range</legend>
-        <div className="flex items-center gap-2">
+      <FilterGroup label="Price" as="fieldset">
+        <div className="flex items-center gap-3">
           <Input
             type="number"
             min={0}
@@ -214,22 +221,24 @@ export default function Products() {
             placeholder="Max"
           />
         </div>
-      </fieldset>
+      </FilterGroup>
 
-      <Field label="Availability">
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-300">
+      <FilterGroup label="Availability">
+        <label className="flex cursor-pointer items-start gap-2.5 text-body-sm text-slate-300">
           <input
             type="checkbox"
             checked={inStock}
             onChange={(e) => setFilter({ inStock: e.target.checked ? '1' : undefined })}
-            className="mt-0.5 h-4 w-4 rounded border-ink-600 bg-ink-850 text-gold-400 focus:ring-gold-400/70"
+            className="mt-0.5 h-4 w-4 rounded-none border-ink-600 bg-ink-850 text-slate-100 focus:ring-gold-400/70"
           />
           <span>
             In stock only
-            <span className="mt-0.5 block text-xs text-slate-500">Filters the products loaded on this page.</span>
+            <span className="mt-0.5 block text-caption text-slate-500">
+              Filters the products loaded on this page.
+            </span>
           </span>
         </label>
-      </Field>
+      </FilterGroup>
 
       {/*
         Phase 3 facets deliberately NOT built:
@@ -251,7 +260,7 @@ export default function Products() {
 
   // ── Active-filter chips ──────────────────────────────────────────────────
   const chips = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 pt-4">
       {categoryId && (
         <FilterChip onRemove={() => setFilter({ categoryId: undefined })}>
           {categoryName ?? 'Category'}
@@ -270,29 +279,42 @@ export default function Products() {
       <button
         type="button"
         onClick={clearAll}
-        className="rounded text-sm font-medium text-slate-400 underline-offset-2 transition hover:text-slate-200 hover:underline"
+        className="rounded text-body-sm text-slate-500 underline-offset-4 transition hover:text-slate-100 hover:underline"
       >
         Clear all
       </button>
     </div>
   );
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Shop" subtitle="Browse the full catalog." />
+  const resultCount = data?.totalElements ?? 0;
 
-      <div className="lg:grid lg:grid-cols-[16rem_1fr] lg:gap-8">
-        {/* Desktop sidebar */}
+  return (
+    <div>
+      {/* Page head — the count sits with the title rather than in a toolbar strip,
+          so the first thing read is "what am I looking at, and how much of it". */}
+      <header className="border-b border-ink-700 pb-6">
+        <h1 className="font-display text-h1 text-slate-100">
+          {categoryName ?? (search ? `“${search}”` : 'Shop')}
+        </h1>
+        <p className="mt-2 text-body-sm text-slate-400">
+          {productsQuery.isLoading
+            ? 'Loading the catalog…'
+            : `${resultCount} ${resultCount === 1 ? 'piece' : 'pieces'}`}
+        </p>
+      </header>
+
+      <div className="mt-8 lg:grid lg:grid-cols-[15rem_1fr] lg:gap-12">
+        {/* Desktop filter rail */}
         <aside className="hidden lg:block">
-          <div className="sticky top-24 space-y-4 rounded-2xl border border-ink-800 bg-ink-900/50 p-5">
-            <h2 className="text-h4 text-slate-100">Filters</h2>
-            {filterPanel}
+          <div className="sticky top-28">
+            <p className="text-overline uppercase text-slate-500">Filter</p>
+            <div className="mt-4 border-t border-ink-700">{filterPanel}</div>
           </div>
         </aside>
 
-        <div className="min-w-0 space-y-4">
-          {/* Toolbar: search + controls */}
-          <div className="space-y-3 rounded-2xl border border-ink-800 bg-ink-900/50 p-4">
+        <div className="min-w-0">
+          {/* Toolbar — one hairline-separated row, no panel. */}
+          <div className="border-b border-ink-700 pb-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <SearchInput
                 key={`search-${search}`}
@@ -304,33 +326,32 @@ export default function Products() {
               />
               <div className="flex items-center gap-2">
                 {/* Mobile filter trigger */}
-                <Button
-                  variant="outline"
-                  size="md"
-                  className="lg:hidden"
-                  onClick={() => setFiltersOpen(true)}
-                >
+                <Button variant="outline" size="md" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
                   <SlidersHorizontal className="mr-1.5 h-4 w-4" />
                   Filters
-                  {hasActiveFilters && <span className="ml-1.5 h-2 w-2 rounded-full bg-gold-400" />}
+                  {hasActiveFilters && <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-brand" />}
                 </Button>
 
-                <Field className="w-full sm:w-auto">
-                  <Select
-                    aria-label="Sort products"
-                    value={sort}
-                    onChange={(e) => setFilter({ sort: e.target.value })}
-                  >
-                    {SORTS.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                <Select
+                  aria-label="Sort products"
+                  value={sort}
+                  onChange={(e) => setFilter({ sort: e.target.value })}
+                  className="w-auto"
+                >
+                  {SORTS.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
 
-                {/* Grid / list toggle */}
-                <div className="flex shrink-0 overflow-hidden rounded-lg border border-ink-600" role="group" aria-label="View mode">
+                {/* Grid / list toggle — selected state is ink, not gold: it reports
+                    a preference, and gold is reserved for decoration. */}
+                <div
+                  className="flex shrink-0 overflow-hidden rounded-lg border border-ink-600"
+                  role="group"
+                  aria-label="View mode"
+                >
                   {(['grid', 'list'] as const).map((mode) => (
                     <button
                       key={mode}
@@ -339,8 +360,10 @@ export default function Products() {
                       aria-label={mode === 'grid' ? 'Grid view' : 'List view'}
                       aria-pressed={view === mode}
                       className={cn(
-                        'flex h-9 w-9 items-center justify-center transition',
-                        view === mode ? 'bg-gold-400/15 text-gold-300' : 'text-slate-400 hover:bg-ink-800 hover:text-slate-200',
+                        'flex h-10 w-10 items-center justify-center transition',
+                        view === mode
+                          ? 'bg-primary text-primary-fg'
+                          : 'text-slate-400 hover:bg-ink-800 hover:text-slate-100',
                       )}
                     >
                       {mode === 'grid' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
@@ -354,90 +377,118 @@ export default function Products() {
           </div>
 
           {/* Results */}
-          {productsQuery.isLoading ? (
-            <ProductGridSkeleton />
-          ) : productsQuery.isError ? (
-            <EmptyState
-              icon={<PackageSearch className="h-10 w-10" />}
-              title="Couldn’t load products"
-              message="Something went wrong fetching the catalog. Please try again."
-              action={<Button variant="outline" onClick={() => productsQuery.refetch()}>Retry</Button>}
-            />
-          ) : visible.length === 0 ? (
-            <EmptyState
-              icon={<PackageSearch className="h-10 w-10" />}
-              title="No products found"
-              message={
-                inStock && (data?.content.length ?? 0) > 0
-                  ? 'No in-stock products on this page. Try removing the in-stock filter or viewing another page.'
-                  : 'Try adjusting your filters or search terms.'
-              }
-              action={
-                hasActiveFilters ? (
-                  <Button variant="outline" onClick={clearAll}>
-                    Clear filters
+          <div className="pt-8">
+            {productsQuery.isLoading ? (
+              <ProductGridSkeleton />
+            ) : productsQuery.isError ? (
+              <EmptyState
+                icon={<PackageSearch className="h-10 w-10" />}
+                title="Couldn’t load products"
+                message="Something went wrong fetching the catalog. Please try again."
+                action={
+                  <Button variant="outline" onClick={() => productsQuery.refetch()}>
+                    Retry
                   </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <>
-              <div className="flex items-center justify-between text-sm text-slate-500">
-                <span>
-                  {data?.totalElements ?? 0} {data?.totalElements === 1 ? 'product' : 'products'}
-                  {inStock && hiddenByStock > 0 && ` · ${hiddenByStock} hidden (out of stock) on this page`}
-                </span>
-                <Field>
+                }
+              />
+            ) : visible.length === 0 ? (
+              <EmptyState
+                icon={<PackageSearch className="h-10 w-10" />}
+                title="No products found"
+                message={
+                  inStock && (data?.content.length ?? 0) > 0
+                    ? 'No in-stock products on this page. Try removing the in-stock filter or viewing another page.'
+                    : 'Try adjusting your filters or search terms.'
+                }
+                action={
+                  hasActiveFilters ? (
+                    <Button variant="outline" onClick={clearAll}>
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <>
+                {inStock && hiddenByStock > 0 && (
+                  <p className="mb-6 text-caption text-slate-500">
+                    {hiddenByStock} out-of-stock {hiddenByStock === 1 ? 'piece' : 'pieces'} hidden on this page.
+                  </p>
+                )}
+
+                {view === 'grid' ? (
+                  // Generous row gap: portrait cards need vertical air between rows
+                  // or the grid reads as a wall.
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-3 xl:grid-cols-4">
+                    {visible.map((p) => (
+                      <ProductCard key={p.id} product={p} variant="grid" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col">
+                    {visible.map((p) => (
+                      <ProductCard key={p.id} product={p} variant="list" />
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-14 flex flex-col items-center gap-6 border-t border-ink-700 pt-8 sm:flex-row sm:justify-between">
                   <Select
                     aria-label="Results per page"
                     value={String(size)}
                     onChange={(e) => setFilter({ size: e.target.value })}
-                    className="h-8 py-0 text-sm"
+                    className="w-auto"
                   >
                     {PAGE_SIZES.map((n) => (
                       <option key={n} value={n}>
-                        {n} / page
+                        {n} per page
                       </option>
                     ))}
                   </Select>
-                </Field>
-              </div>
 
-              {view === 'grid' ? (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
-                  {visible.map((p) => (
-                    <ProductCard key={p.id} product={p} variant="grid" />
-                  ))}
+                  <Pagination
+                    page={data?.number ?? 0}
+                    totalPages={data?.totalPages ?? 0}
+                    onChange={(p) => updateParams({ page: String(p) })}
+                  />
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {visible.map((p) => (
-                    <ProductCard key={p.id} product={p} variant="list" />
-                  ))}
-                </div>
-              )}
-
-              <Pagination
-                page={data?.number ?? 0}
-                totalPages={data?.totalPages ?? 0}
-                onChange={(p) => updateParams({ page: String(p) })}
-              />
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Mobile filter drawer */}
       <Drawer open={filtersOpen} onOpenChange={setFiltersOpen} side="left" title="Filters">
-        {filterPanel}
+        <div className="border-t border-ink-700">{filterPanel}</div>
         {hasActiveFilters && (
           <div className="mt-6">
-            <Button variant="ghost" fullWidth onClick={clearAll}>
+            <Button variant="outline" fullWidth onClick={clearAll}>
               Clear all filters
             </Button>
           </div>
         )}
       </Drawer>
     </div>
+  );
+}
+
+/** One hairline-separated block in the filter rail. */
+function FilterGroup({
+  label,
+  children,
+  as = 'div',
+}: {
+  label: string;
+  children: ReactNode;
+  as?: 'div' | 'fieldset';
+}) {
+  const Wrapper = as;
+  const Label = as === 'fieldset' ? 'legend' : 'p';
+  return (
+    <Wrapper className="py-5">
+      <Label className="mb-3 block text-overline uppercase text-slate-500">{label}</Label>
+      {children}
+    </Wrapper>
   );
 }

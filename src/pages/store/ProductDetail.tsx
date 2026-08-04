@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PackageX, Share2, ShoppingCart } from 'lucide-react';
+import { PackageX, Share2 } from 'lucide-react';
 import { getProduct, listProducts } from '@/api/catalog';
 import { addToCart } from '@/api/cart';
 import { ApiError } from '@/lib/http';
@@ -150,7 +150,9 @@ function ZoomImage({ src, alt }: { src?: string; alt: string }) {
 
   return (
     <div
-      className="relative aspect-square overflow-hidden rounded-2xl border border-ink-800 bg-ink-850"
+      // Square-cornered and borderless, on the same pale tile as the cards: a
+      // rounded, outlined frame around product photography reads app-like.
+      className="relative aspect-[4/5] overflow-hidden bg-ink-850"
       onMouseEnter={() => setZoom(true)}
       onMouseLeave={() => setZoom(false)}
       onMouseMove={(e) => {
@@ -177,11 +179,11 @@ function ZoomImage({ src, alt }: { src?: string; alt: string }) {
 function ProductRail({ title, products }: { title: string; products: ProductSummaryResponse[] }) {
   if (products.length === 0) return null;
   return (
-    <section className="space-y-4">
-      <h2 className="text-h3 font-semibold text-slate-100">{title}</h2>
-      <div className="-mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-2">
+    <section>
+      <h2 className="border-b border-ink-700 pb-5 font-display text-h2 text-slate-100">{title}</h2>
+      <div className="mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 sm:gap-6">
         {products.map((p) => (
-          <div key={p.id} className="w-44 shrink-0 snap-start sm:w-52">
+          <div key={p.id} className="w-44 shrink-0 snap-start sm:w-56">
             <ProductCard product={p} variant="grid" />
           </div>
         ))}
@@ -374,17 +376,17 @@ export default function ProductDetail() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-20">
       <Breadcrumbs items={crumbs} />
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-16">
         {/* Gallery — hover-zoom on desktop, swipeable Carousel on mobile. */}
         <div>
           {/* Desktop */}
-          <div className="hidden space-y-3 md:block" data-testid="pdp-gallery-desktop">
+          <div className="hidden md:block" data-testid="pdp-gallery-desktop">
             <ZoomImage src={main?.url} alt={main?.altText ?? product.name} />
             {images.length > 1 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-3">
                 {images.map((img, i) => (
                   <button
                     key={img.id}
@@ -393,8 +395,10 @@ export default function ProductDetail() {
                     aria-label={`Show image ${i + 1}`}
                     aria-current={i === activeImage}
                     className={cn(
-                      'h-16 w-16 overflow-hidden rounded-lg border transition',
-                      i === activeImage ? 'border-gold-400' : 'border-ink-700 hover:border-ink-500',
+                      // Selection is a solid ink outline, not a gold one: it is a
+                      // state, and gold does not survive on white.
+                      'h-20 w-16 overflow-hidden bg-ink-850 outline-offset-2 transition',
+                      i === activeImage ? 'outline outline-1 outline-slate-100' : 'opacity-70 hover:opacity-100',
                     )}
                   >
                     <ImageWithFallback src={img.url} alt="" wrapperClassName="h-full w-full" />
@@ -417,55 +421,53 @@ export default function ProductDetail() {
                     key={img.id}
                     src={img.url}
                     alt={img.altText ?? product.name}
-                    wrapperClassName="aspect-square w-full rounded-2xl border border-ink-800"
+                    wrapperClassName="aspect-[4/5] w-full bg-ink-850"
                   />
                 ))}
               </Carousel>
             ) : (
-              <ImageWithFallback
-                alt={product.name}
-                wrapperClassName="aspect-square w-full rounded-2xl border border-ink-800"
-              />
+              <ImageWithFallback alt={product.name} wrapperClassName="aspect-[4/5] w-full bg-ink-850" />
             )}
           </div>
         </div>
 
-        {/* Buy box */}
-        <div className="space-y-5">
+        {/* Buy box — sticky on desktop so the price and CTA stay reachable while
+            the gallery scrolls. */}
+        <div className="lg:sticky lg:top-28 lg:self-start">
           <div>
             {product.categoryName && (
               <p className="text-overline uppercase text-slate-500">{product.categoryName}</p>
             )}
-            <h1 className="mt-1 font-display text-h1 text-slate-50 md:text-display">{product.name}</h1>
+            {/* h1, not display: a product name is a label, not a brand statement,
+                and display type wraps a long name into a wall. */}
+            <h1 className="mt-3 font-display text-h1 text-slate-100">{product.name}</h1>
             {product.brandName && (
-              <p className="mt-1.5 text-body-sm text-slate-400">
-                by{' '}
+              <p className="mt-2 text-body-sm text-slate-400">
                 {product.brandId ? (
                   <Link
                     to={`/products?brandId=${product.brandId}`}
-                    className="rounded font-medium text-gold-300 underline-offset-2 transition hover:text-gold-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                    className="rounded text-slate-300 underline decoration-ink-600 underline-offset-4 transition hover:text-slate-100 hover:decoration-slate-100"
                   >
                     {product.brandName}
                   </Link>
                 ) : (
-                  <span className="font-medium text-slate-300">{product.brandName}</span>
+                  <span className="text-slate-300">{product.brandName}</span>
                 )}
               </p>
             )}
             {product.ratingAvg != null && (product.ratingCount ?? 0) > 0 && (
-              <div className="mt-2">
+              <div className="mt-3">
                 <RatingStars value={product.ratingAvg} count={product.ratingCount} size="md" />
               </div>
             )}
-            <p className="mt-2 text-caption text-slate-500">SKU: {product.sku}</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="mt-6">
             {needsSelection ? (
               minVariantPrice === maxVariantPrice ? (
                 <PriceTag price={minVariantPrice} currency={product.currency} size="lg" />
               ) : (
-                <span className="text-h2 font-bold text-slate-100">
+                <span className="text-h2 font-semibold text-slate-100">
                   {money(minVariantPrice, product.currency)} – {money(maxVariantPrice, product.currency)}
                 </span>
               )
@@ -477,32 +479,45 @@ export default function ProductDetail() {
                 size="lg"
               />
             )}
-            {needsSelection ? (
-              fullySelected ? (
-                <Badge tone="red">Unavailable</Badge>
-              ) : (
-                <Badge tone="gray">Select options</Badge>
-              )
-            ) : outOfStock ? (
-              <Badge tone="red">Out of stock</Badge>
-            ) : lowStock ? (
-              <Badge tone="amber">Only {activeStock} left</Badge>
-            ) : (
-              <Badge tone="green">In stock</Badge>
-            )}
+
+            {/* Availability reads as a line of text rather than a coloured pill.
+                A green "In stock" badge on every product is noise; the states
+                that matter (low, gone, unavailable) still carry their colour. */}
+            <p
+              className={cn(
+                'mt-2 text-caption',
+                needsSelection && fullySelected && 'text-danger-300',
+                !needsSelection && outOfStock && 'text-danger-300',
+                !needsSelection && lowStock && 'text-warning-300',
+                !needsSelection && !outOfStock && !lowStock && 'text-slate-500',
+                needsSelection && !fullySelected && 'text-slate-500',
+              )}
+            >
+              {needsSelection
+                ? fullySelected
+                  ? 'This combination is unavailable'
+                  : 'Select options to see availability'
+                : outOfStock
+                  ? 'Out of stock'
+                  : lowStock
+                    ? `Only ${activeStock} left`
+                    : 'In stock'}
+            </p>
           </div>
 
-          {product.shortDescription && <p className="text-body-sm text-slate-300">{product.shortDescription}</p>}
+          {product.shortDescription && (
+            <p className="mt-6 text-body text-slate-400">{product.shortDescription}</p>
+          )}
 
           {/* Variant selector (WP-3.5) — one radiogroup per option axis. */}
           {requiresVariant && (
-            <div className="space-y-4" data-testid="pdp-variant-selector">
+            <div className="mt-8 space-y-6" data-testid="pdp-variant-selector">
               {optionAxes.map((axis) => (
                 <div key={axis.name}>
-                  <p className="mb-1.5 text-caption font-medium uppercase text-slate-400">
+                  <p className="mb-3 text-overline uppercase text-slate-500">
                     {titleCase(axis.name)}
                     {selectedOptions[axis.name] && (
-                      <span className="ml-1.5 font-normal normal-case text-slate-300">
+                      <span className="ml-2 normal-case tracking-normal text-slate-100">
                         {selectedOptions[axis.name]}
                       </span>
                     )}
@@ -521,10 +536,10 @@ export default function ProductDetail() {
                           disabled={status === 'incompatible'}
                           onClick={() => setSelectedOptions((prev) => ({ ...prev, [axis.name]: value }))}
                           className={cn(
-                            'min-w-[2.75rem] rounded-lg border px-3 py-2 text-sm font-medium transition',
+                            'min-w-[3rem] border px-4 py-2.5 text-body-sm transition',
                             isSelected
-                              ? 'border-gold-400 bg-gold-400/15 text-gold-200'
-                              : 'border-ink-700 text-slate-200 hover:border-ink-500',
+                              ? 'border-primary bg-primary text-primary-fg'
+                              : 'border-ink-600 text-slate-200 hover:border-slate-100',
                             status === 'incompatible' && 'cursor-not-allowed opacity-40',
                             status === 'oos' && !isSelected && 'text-slate-500 line-through',
                           )}
@@ -536,51 +551,78 @@ export default function ProductDetail() {
                   </div>
                 </div>
               ))}
-              {needsSelection && (
-                <p className="text-caption text-slate-500">
-                  {fullySelected
-                    ? 'This combination is unavailable — try another.'
-                    : 'Select each option to see price and availability.'}
-                </p>
-              )}
               {selectedVariant && <p className="text-caption text-slate-500">SKU: {selectedVariant.sku}</p>}
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-4">
-            <QuantityStepper
-              value={qty}
-              onChange={setQty}
-              min={1}
-              max={maxQty}
+          {/* Actions — the primary sits alone and full-width; quantity above it,
+              secondary actions demoted to text so nothing competes with it. */}
+          <div className="mt-8 space-y-4">
+            <div className="flex items-center gap-4">
+              <span className="text-overline uppercase text-slate-500">Qty</span>
+              <QuantityStepper
+                value={qty}
+                onChange={setQty}
+                min={1}
+                max={maxQty}
+                disabled={outOfStock || needsSelection}
+              />
+            </div>
+
+            <Button
+              onClick={handleAdd}
+              loading={adding}
               disabled={outOfStock || needsSelection}
-            />
-            <Button onClick={handleAdd} loading={adding} disabled={outOfStock || needsSelection} size="lg">
-              <ShoppingCart className="h-4 w-4" />
+              size="xl"
+              fullWidth
+            >
               {needsSelection
                 ? fullySelected
                   ? 'Unavailable'
                   : 'Select options'
                 : outOfStock
                   ? 'Out of stock'
-                  : 'Add to cart'}
+                  : 'Add to bag'}
             </Button>
-            <WishlistButton productId={product.id} productName={product.name} variant="inline" withLabel />
-            <Button variant="outline" size="lg" onClick={handleShare} aria-label="Share this product">
-              <Share2 className="h-4 w-4" />
-              Share
-            </Button>
+
+            <div className="flex items-center gap-6 pt-1">
+              <WishlistButton
+                productId={product.id}
+                productName={product.name}
+                variant="inline"
+                withLabel
+                className="!h-auto !border-0 !bg-transparent !px-0 text-slate-400 hover:text-slate-100"
+              />
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label="Share this product"
+                className="flex items-center gap-2 rounded text-body-sm text-slate-400 transition hover:text-slate-100"
+              >
+                <Share2 className="h-4 w-4" aria-hidden />
+                Share
+              </button>
+            </div>
           </div>
 
-          {product.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {product.tags.map((t) => (
-                <Badge key={t} tone="gray">
-                  {t}
-                </Badge>
-              ))}
+          <dl className="mt-10 divide-y divide-ink-700 border-t border-ink-700">
+            <div className="flex justify-between gap-4 py-3">
+              <dt className="text-body-sm text-slate-500">SKU</dt>
+              <dd className="text-body-sm text-slate-300">{product.sku}</dd>
             </div>
-          )}
+            {product.tags.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <dt className="text-body-sm text-slate-500">Tags</dt>
+                <dd className="flex flex-wrap gap-2">
+                  {product.tags.map((t) => (
+                    <Badge key={t} tone="gray">
+                      {t}
+                    </Badge>
+                  ))}
+                </dd>
+              </div>
+            )}
+          </dl>
         </div>
       </div>
 
@@ -594,17 +636,17 @@ export default function ProductDetail() {
 
         <TabsContent value="description">
           {product.description ? (
-            <p className="max-w-3xl whitespace-pre-line text-body-sm text-slate-300">{product.description}</p>
+            <p className="max-w-2xl whitespace-pre-line text-body text-slate-400">{product.description}</p>
           ) : (
             <p className="text-body-sm text-slate-500">No description available for this product yet.</p>
           )}
         </TabsContent>
 
         <TabsContent value="specs">
-          <dl className="max-w-xl divide-y divide-ink-800 overflow-hidden rounded-2xl border border-ink-800">
+          <dl className="max-w-xl divide-y divide-ink-700 border-y border-ink-700">
             {specs.map((row) => (
-              <div key={row.label} className="grid grid-cols-3 gap-4 px-4 py-3">
-                <dt className="text-body-sm font-medium text-slate-400">{row.label}</dt>
+              <div key={row.label} className="grid grid-cols-3 gap-4 py-3.5">
+                <dt className="text-body-sm text-slate-500">{row.label}</dt>
                 <dd className="col-span-2 break-words text-body-sm text-slate-200">{row.value}</dd>
               </div>
             ))}
@@ -616,7 +658,7 @@ export default function ProductDetail() {
         </TabsContent>
       </Tabs>
 
-      <ProductRail title="Similar products" products={similar} />
+      <ProductRail title="You may also like" products={similar} />
       <ProductRail title="Recently viewed" products={recentlyViewed} />
     </div>
   );

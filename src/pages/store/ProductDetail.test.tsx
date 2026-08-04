@@ -125,7 +125,7 @@ describe('ProductDetail (PDP)', () => {
     expect(screen.getByTestId('pdp-main-image')).toHaveAttribute('src', '/img-b.jpg');
   });
 
-  it('disables Add to cart and labels it "Out of stock" when stock is zero', async () => {
+  it('disables the add button and labels it "Out of stock" when stock is zero', async () => {
     getProductMock.mockResolvedValue(product({ stockQuantity: 0 }));
     renderPDP();
 
@@ -137,7 +137,7 @@ describe('ProductDetail (PDP)', () => {
     const user = userEvent.setup();
     renderPDP();
 
-    const addBtn = await screen.findByRole('button', { name: /add to cart/i });
+    const addBtn = await screen.findByRole('button', { name: /add to bag/i });
     await user.click(addBtn);
 
     await waitFor(() => expect(addToCartMock).toHaveBeenCalledWith('p1', 1, undefined));
@@ -159,9 +159,9 @@ describe('ProductDetail (PDP)', () => {
     const preselect = await screen.findByRole('button', { name: /select options/i });
     expect(preselect).toBeDisabled();
 
-    // Pick a size → the variant resolves and the CTA becomes "Add to cart".
+    // Pick a size → the variant resolves and the CTA becomes "Add to bag".
     await user.click(screen.getByRole('radio', { name: /size: M/i }));
-    const addBtn = await screen.findByRole('button', { name: /add to cart/i });
+    const addBtn = await screen.findByRole('button', { name: /add to bag/i });
     await user.click(addBtn);
 
     await waitFor(() => expect(addToCartMock).toHaveBeenCalledWith('p1', 1, 'var-m'));
