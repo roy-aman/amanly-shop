@@ -15,6 +15,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { AddressRequest, AddressResponse, PaymentMethod, PlaceOrderRequest, ShippingDetails } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
+import { BRAND_NAME } from '@/lib/brand';
 import {
   Button,
   Card,
@@ -305,7 +306,7 @@ export default function Checkout() {
         order_id: pa.razorpayOrderId,
         amount: pa.amountMinor,
         currency: pa.currency,
-        name: store?.name ?? 'Royal Commerce',
+        name: store?.name ?? BRAND_NAME,
         description: `Order ${order.id}`,
         prefill: { name: shippingAddress.name, contact: shippingAddress.phone ?? '' },
         theme: { color: '#e0b040' },

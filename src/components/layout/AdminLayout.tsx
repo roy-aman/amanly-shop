@@ -5,7 +5,6 @@ import {
   BarChart3,
   Boxes,
   ChevronDown,
-  Crown,
   FolderTree,
   LayoutDashboard,
   Tags,
@@ -25,6 +24,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getPublicStore } from '@/api/store';
 import { titleCase } from '@/lib/format';
 import { useDarkTheme } from '@/lib/useDarkTheme';
+import { BRAND_NAME } from '@/lib/brand';
 import {
   Breadcrumbs,
   cn,
@@ -34,6 +34,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   Tooltip,
+  Wordmark,
   type Crumb,
 } from '@/components/ui';
 
@@ -127,7 +128,7 @@ export default function AdminLayout() {
   });
 
   const { data: store } = useQuery({ queryKey: ['public-store'], queryFn: getPublicStore, staleTime: 5 * 60_000 });
-  const storeName = store?.name || 'Royal Commerce';
+  const storeName = store?.name || BRAND_NAME;
 
   const crumbs = useMemo(() => buildCrumbs(location.pathname), [location.pathname]);
 
@@ -206,11 +207,14 @@ export default function AdminLayout() {
     return (
       <div className="flex h-full flex-col">
         <div className={cn('flex h-16 items-center gap-2 border-b border-ink-800', compact ? 'justify-center px-2' : 'px-5')}>
-          <Crown className="h-6 w-6 shrink-0 text-gold-400" />
-          {!compact && (
+          {compact ? (
+            <span className="font-display text-lg font-semibold text-slate-100" aria-hidden>
+              A
+            </span>
+          ) : (
             <div className="min-w-0">
-              <p className="truncate font-display text-sm font-bold leading-tight text-slate-100">{storeName}</p>
-              <p className="text-[11px] uppercase tracking-wider text-gold-500">Admin Console</p>
+              <Wordmark name={storeName} size="sm" className="block truncate" />
+              <p className="mt-1 text-[11px] uppercase tracking-wider text-gold-500">Admin Console</p>
             </div>
           )}
         </div>

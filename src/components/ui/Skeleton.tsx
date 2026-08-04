@@ -3,7 +3,8 @@ import { cn } from './cn';
 /**
  * Skeleton — animated placeholder block. Compose freely, or use the pre-built
  * `SkeletonText` / `SkeletonCard` / `SkeletonTable` / `SkeletonDetail` variants
- * for common loading layouts. Dark-theme tokens only.
+ * for common loading layouts. Themed through surface tokens, so it reads on
+ * both the light storefront and the dark console.
  */
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded-md bg-ink-800', className)} aria-hidden />;

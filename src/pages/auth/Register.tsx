@@ -53,7 +53,7 @@ export default function Register() {
   return (
     <AuthLayout
       title="Create account"
-      subtitle="Join Royal Commerce today"
+      subtitle="Create your Amanly account"
       footer={
         <>
           Already have an account?{' '}

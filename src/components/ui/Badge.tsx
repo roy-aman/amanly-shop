@@ -2,11 +2,10 @@ import type { ReactNode } from 'react';
 import { cn } from './cn';
 
 // ── Badge ─────────────────────────────────────────────────────────────
-// Tone → semantic-token map per design-system.md §1.4. The semantic scales
-// (success/warning/danger/info) mirror the Tailwind emerald/amber/rose/sky
-// values previously hard-coded here, so this is a zero-visual-change refactor;
-// the public `tone` prop is unchanged. `purple` stays a `violet` literal (one
-// use — SHIPPED — doesn't yet justify a token, per design-system.md §1.4).
+// Tone → semantic-token map. Every tone resolves through theme-aware tokens,
+// so the same "soft" recipe (tint fill, deep text, faint border) reads on both
+// the light storefront and the dark console: the `-500` tints sit at low alpha
+// and the `-300` text shade flips to a deep hue on light.
 export type Tone = 'gold' | 'green' | 'red' | 'blue' | 'gray' | 'amber' | 'purple';
 const TONES: Record<Tone, string> = {
   gold: 'bg-gold-400/15 text-gold-300 border-gold-400/30',

@@ -29,19 +29,17 @@ export function PriceTag({
 
   return (
     <div className={cn('flex flex-wrap items-baseline gap-2', className)}>
-      <span className={cn('font-bold text-gold-300', priceSize)}>{money(price, currency)}</span>
+      {/* The price is the loudest text in the card, so it takes the strongest
+          ink rather than a colour. Gold pricing reads discount-store, and on
+          white it could not clear AA anyway. */}
+      <span className={cn('font-semibold text-slate-100', priceSize)}>{money(price, currency)}</span>
       {onSale && (
         <>
           <span className={cn('text-slate-500 line-through', compareSize)}>{money(compareAtPrice, currency)}</span>
           {showDiscountBadge && (
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full border border-success-500/30 bg-success-500/15 px-2 py-0.5 font-semibold text-success-300',
-                compareSize,
-              )}
-            >
-              −{discountPct}%
-            </span>
+            // A quiet text mark, not a pill: a filled badge next to a struck
+            // price is two loud signals for one fact.
+            <span className={cn('font-semibold text-danger-300', compareSize)}>−{discountPct}%</span>
           )}
         </>
       )}

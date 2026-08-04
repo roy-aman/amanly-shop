@@ -63,7 +63,7 @@ export default function AdminLogin() {
             type="email"
             name="email"
             autoComplete="email"
-            placeholder="staff@royalcommerce.com"
+            placeholder="staff@amanly.in"
             value={email}
             invalid={!!errors.email}
             onChange={(e) => setEmail(e.target.value)}

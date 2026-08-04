@@ -1,5 +1,5 @@
 /* ===================================================================
-   Royal Commerce — shared UI kit (barrel)
+   Amanly — shared UI kit (barrel)
    Small, themed primitives used across storefront & admin.
 
    This barrel re-exports the ENTIRE historical `@/components/ui` surface
@@ -16,6 +16,7 @@ export { Field, Input, PasswordInput, Textarea, Select } from './Field';
 export { Card } from './Card';
 export { Badge } from './Badge';
 export type { Tone } from './Badge';
+export { Wordmark } from './Wordmark';
 export { Spinner, PageLoader } from './Spinner';
 export { EmptyState } from './EmptyState';
 export { Modal } from './Modal';

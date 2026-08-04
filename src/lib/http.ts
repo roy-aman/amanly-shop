@@ -1,5 +1,5 @@
 /* ===================================================================
-   Royal Commerce — HTTP client
+   Amanly — HTTP client
    Token storage, automatic access-token refresh, and typed errors.
    Ported from the original js/api.js so behavior matches the backend
    (Bearer JWT + refresh-token rotation).

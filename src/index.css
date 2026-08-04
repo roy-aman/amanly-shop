@@ -56,9 +56,20 @@
     --brand: 212 175 55; /*     #D4AF37  DECORATION ONLY          */
     --brand-ink: 138 109 31; /* #8A6D1F  gold that may hold text  */
 
+    /* Primary action. Black, not gold: on a light palette black is the
+       confident choice (Apple, COS, Zara all do this), and a #D4AF37 fill
+       cannot carry legible text at any weight. Gold stays a garnish. */
+    --primary: 17 17 17; /*      #111111 */
+    --primary-fg: 255 255 255; /*#FFFFFF  18.9:1 */
+    --primary-hover: 51 51 51; /*#333333 */
+
     /* Status. Only the shades used as text/icons flip; the `-500` steps stay
        static because they are only ever used at low alpha as tints/borders,
-       which read correctly on both palettes. */
+       which read correctly on both palettes. `violet` carries the SHIPPED
+       badge only — tokenised now because a literal `violet-300` is invisible
+       on white. */
+    --violet-300: 109 40 217; /*  #6D28D9  7.6:1 */
+    --violet-400: 109 40 217;
     --success-300: 4 120 87; /*   #047857  5.6:1 */
     --success-400: 4 120 87;
     --warning-300: 180 83 9; /*   #B45309  4.9:1 */
@@ -103,6 +114,14 @@
 
     --brand: 224 176 64;
     --brand-ink: 230 191 93;
+
+    /* The console keeps gold as its primary action — unchanged. */
+    --primary: 224 176 64;
+    --primary-fg: 12 14 20;
+    --primary-hover: 230 191 93;
+
+    --violet-300: 196 181 253;
+    --violet-400: 167 139 250;
 
     --success-300: 110 231 183;
     --success-400: 52 211 153;

@@ -1,5 +1,5 @@
 /* ===================================================================
-   Royal Commerce — API type contracts
+   Amanly — API type contracts
    These mirror the backend DTOs and enums EXACTLY (verified against the
    Spring controllers/DTOs). Keep in sync with src/main/java/.../*.dto.
    =================================================================== */

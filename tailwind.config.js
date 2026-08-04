@@ -27,6 +27,15 @@ export default {
           ink: role('brand-ink'),
         },
 
+        /* The primary action surface. Black on the storefront, gold in the
+           console — a variable rather than a utility swap so `Button` has one
+           definition instead of a per-theme branch. */
+        primary: {
+          DEFAULT: role('primary'),
+          fg: role('primary-fg'),
+          hover: role('primary-hover'),
+        },
+
         /* The legacy `gold` ramp. On light it resolves to a deep antique gold
            so that every inherited `text-gold-300` / `ring-gold-400` in the
            not-yet-redesigned pages stays legible instead of washing out. */
@@ -99,6 +108,12 @@ export default {
           50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd',
           300: role('info-300'), 400: role('info-400'),
           500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1', 800: '#075985', 900: '#0c4a6e', 950: '#082f49',
+        },
+        /* Carries the SHIPPED badge only. Not a semantic role — it exists
+           because that one badge needs a colour that survives both palettes. */
+        violet: {
+          300: role('violet-300'), 400: role('violet-400'),
+          500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9',
         },
 
         /* Role-named aliases for new code. Deliberately a SMALL set — the

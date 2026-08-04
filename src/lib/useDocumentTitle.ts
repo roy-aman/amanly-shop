@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 
-/** Brand prefix for every page title, e.g. `Royal Commerce — Products`. */
-export const TITLE_BASE = 'Royal Commerce';
+import { BRAND_NAME } from './brand';
+
+/** Brand prefix for every page title, e.g. `Amanly — Products`. */
+export const TITLE_BASE = BRAND_NAME;
 
 /**
  * Sets `document.title` for the lifetime of the calling component. Pass a page
- * name to get `Royal Commerce — <name>`; pass nothing/falsy (e.g. while data is
+ * name to get `Amanly — <name>`; pass nothing/falsy (e.g. while data is
  * still loading) to fall back to the bare brand so the tab never flashes
  * "undefined". The title is not restored on unmount — the next route sets its own.
  *
