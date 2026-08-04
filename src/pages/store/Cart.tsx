@@ -14,13 +14,11 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import {
   Badge,
   Button,
-  Card,
   EmptyState,
   Field,
   ImageWithFallback,
   Input,
   LinkButton,
-  PageHeader,
   QuantityStepper,
   Skeleton,
 } from '@/components/ui';
@@ -250,34 +248,45 @@ export default function Cart() {
 
   if (items.length === 0) {
     return (
-      <div className="space-y-6">
-        <PageHeader title="Your cart" />
-        <EmptyState
-          icon={<ShoppingBag className="h-10 w-10" />}
-          title="Your cart is empty"
-          message="Browse the catalog and add something you love — your picks will show up here."
-          action={<LinkButton to="/products">Start shopping</LinkButton>}
-        />
+      <div>
+        <h1 className="border-b border-ink-700 pb-6 font-display text-h1 text-slate-100">Your bag</h1>
+        <div className="py-16">
+          <EmptyState
+            icon={<ShoppingBag className="h-10 w-10" />}
+            title="Your bag is empty"
+            message="Everything you add will show up here."
+            action={<LinkButton to="/products">Start shopping</LinkButton>}
+          />
+        </div>
         {undoSnackbar()}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Your cart"
-        subtitle={`${items.length} item${items.length === 1 ? '' : 's'}`}
-        action={
-          <Button variant="ghost" size="sm" onClick={handleClear} loading={clearing} disabled={busyId != null}>
-            <Trash2 className="h-4 w-4" /> Clear cart
-          </Button>
-        }
-      />
+    <div>
+      <header className="flex items-end justify-between gap-4 border-b border-ink-700 pb-6">
+        <div>
+          <h1 className="font-display text-h1 text-slate-100">Your bag</h1>
+          <p className="mt-2 text-body-sm text-slate-400">
+            {items.length} {items.length === 1 ? 'item' : 'items'}
+          </p>
+        </div>
+        {/* Destructive, so it stays a quiet text control rather than a button
+            sitting at the same weight as Checkout. */}
+        <button
+          type="button"
+          onClick={handleClear}
+          disabled={clearing || busyId != null}
+          className="rounded text-body-sm text-slate-500 underline-offset-4 transition hover:text-slate-100 hover:underline disabled:opacity-50"
+        >
+          Clear bag
+        </button>
+      </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-[1fr_22rem]">
         {/* ── Line items ─────────────────────────────────────────────── */}
-        <div className="space-y-3 lg:col-span-2">
+        <div className="divide-y divide-ink-700 border-b border-ink-700">
           {items.map((item) => {
             const busy = busyId === item.cartItemId;
             const reservedMinutes =
@@ -285,96 +294,102 @@ export default function Cart() {
                 ? Math.max(0, item.reservationRemainingMinutes - elapsedMinutes)
                 : null;
             return (
-              <Card key={item.cartItemId} className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+              <div key={item.cartItemId} className="flex gap-5 py-6 first:pt-0">
                 <Link
                   to={`/products/${item.productSlug}`}
-                  className="shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                  className="shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
                   aria-label={item.productName}
                 >
-                  <ImageWithFallback
-                    alt={item.productName}
-                    wrapperClassName="h-20 w-20 rounded-lg border border-ink-800"
-                  />
+                  <ImageWithFallback alt={item.productName} wrapperClassName="h-28 w-24 bg-ink-850" />
                 </Link>
 
-                <div className="min-w-0 flex-1">
-                  <Link
-                    to={`/products/${item.productSlug}`}
-                    className="font-semibold text-slate-100 transition hover:text-gold-300"
-                  >
-                    {item.productName}
-                  </Link>
-                  {item.variantOptionsLabel && (
-                    <p className="mt-0.5 text-xs text-slate-300">{item.variantOptionsLabel}</p>
-                  )}
-                  <p className="text-xs text-slate-500">SKU: {item.variantSku ?? item.sku}</p>
-                  <p className="mt-1 text-sm text-slate-400">{money(item.unitPrice, currency)} each</p>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <Link
+                        to={`/products/${item.productSlug}`}
+                        className="text-body-sm font-medium text-slate-100 transition hover:text-slate-400"
+                      >
+                        {item.productName}
+                      </Link>
+                      {item.variantOptionsLabel && (
+                        <p className="mt-1 text-caption text-slate-400">{item.variantOptionsLabel}</p>
+                      )}
+                      <p className="mt-0.5 text-caption text-slate-500">
+                        SKU: {item.variantSku ?? item.sku}
+                      </p>
+                      <p className="mt-1.5 text-body-sm text-slate-400">
+                        {money(item.unitPrice, currency)} each
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-body-sm font-semibold text-slate-100">
+                      {money(item.subtotal, currency)}
+                    </span>
+                  </div>
+
                   {reservedMinutes != null && (
-                    <div className="mt-2">
+                    <div className="mt-3">
                       <Badge tone={reservedMinutes <= RESERVATION_LOW_MINUTES ? 'amber' : 'gray'}>
                         <Clock className="h-3 w-3" />
-                        {reservedMinutes <= 0
-                          ? 'Reservation expiring'
-                          : `Reserved for ${reservedMinutes} min`}
+                        {reservedMinutes <= 0 ? 'Reservation expiring' : `Reserved for ${reservedMinutes} min`}
                       </Badge>
                     </div>
                   )}
-                </div>
 
-                <div className="flex items-center justify-between gap-4 sm:justify-end">
-                  <QuantityStepper
-                    value={item.quantity}
-                    onChange={(q) => changeQty(item, q)}
-                    min={1}
-                    max={99}
-                    size="sm"
-                    disabled={busy}
-                    aria-label={`Quantity for ${item.productName}`}
-                  />
+                  <div className="mt-auto flex flex-wrap items-center gap-x-5 gap-y-3 pt-4">
+                    <QuantityStepper
+                      value={item.quantity}
+                      onChange={(q) => changeQty(item, q)}
+                      min={1}
+                      max={99}
+                      size="sm"
+                      disabled={busy}
+                      aria-label={`Quantity for ${item.productName}`}
+                    />
 
-                  <div className="w-24 text-right text-sm font-semibold text-slate-100">
-                    {money(item.subtotal, currency)}
+                    {/* Text actions, not icon buttons: on a light row, two grey
+                        glyphs read as decoration and get missed. */}
+                    <button
+                      type="button"
+                      onClick={() => saveForLater(item)}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 rounded text-caption text-slate-500 transition hover:text-slate-100 disabled:opacity-40"
+                      aria-label={`Save ${item.productName} for later`}
+                    >
+                      <Heart className="h-3.5 w-3.5" aria-hidden /> Save for later
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => remove(item)}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 rounded text-caption text-slate-500 transition hover:text-danger-300 disabled:opacity-40"
+                      aria-label={`Remove ${item.productName}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove
+                    </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => saveForLater(item)}
-                    disabled={busy}
-                    className="rounded-lg p-2 text-slate-500 transition hover:bg-ink-800 hover:text-gold-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-40"
-                    aria-label={`Save ${item.productName} for later`}
-                    title="Save for later"
-                  >
-                    <Heart className="h-4 w-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => remove(item)}
-                    disabled={busy}
-                    className="rounded-lg p-2 text-slate-500 transition hover:bg-ink-800 hover:text-danger-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-40"
-                    aria-label={`Remove ${item.productName}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
 
         {/* ── Order summary ──────────────────────────────────────────── */}
-        <aside>
-          <Card className="space-y-4 p-5">
-            <h2 className="text-sm font-semibold text-slate-200">Order summary</h2>
+        {/* The one place a filled panel earns its keep: the totals need to read
+            as a single settled block, and it stays in view while items scroll. */}
+        <aside className="lg:sticky lg:top-28 lg:self-start">
+          <div className="bg-ink-850 p-6">
+            <h2 className="text-overline uppercase text-slate-500">Summary</h2>
 
-            <dl className="space-y-2 text-sm">
+            <dl className="mt-5 space-y-3 text-body-sm">
               <div className="flex items-center justify-between">
                 <dt className="text-slate-400">Subtotal</dt>
-                <dd className="font-medium text-slate-100">{money(cart?.totalAmount, currency)}</dd>
+                <dd className="text-slate-100">{money(cart?.totalAmount, currency)}</dd>
               </div>
               {appliedCoupon && (
                 <div className="flex items-center justify-between text-success-300">
-                  <dt className="flex items-center gap-1">
+                  <dt className="flex items-center gap-1.5">
                     <Tag className="h-3.5 w-3.5" /> Discount ({appliedCoupon.code})
                   </dt>
                   <dd className="font-medium">−{money(discountAmount, currency)}</dd>
@@ -390,22 +405,20 @@ export default function Cart() {
                 Preview is advisory (always HTTP 200 — read `valid`); the real
                 discount is recomputed at placement. Applied code is persisted so
                 Checkout can carry it into placeOrder. */}
-            <div className="border-t border-ink-800 pt-4">
+            <div className="mt-6 border-t border-ink-600 pt-6">
               {appliedCoupon ? (
-                <div className="flex items-center justify-between gap-2 rounded-xl border border-success-500/30 bg-success-500/10 px-3 py-2.5 text-sm">
+                <div className="flex items-center justify-between gap-2 border border-success-500/30 bg-success-500/10 px-3 py-2.5 text-body-sm">
                   <span className="flex min-w-0 items-center gap-2 text-success-300">
                     <Tag className="h-4 w-4 shrink-0" />
                     <span className="min-w-0">
                       <span className="font-semibold">{appliedCoupon.code}</span> applied
-                      <span className="block text-xs text-success-400/90">
-                        You save {money(discountAmount, currency)}
-                      </span>
+                      <span className="block text-caption">You save {money(discountAmount, currency)}</span>
                     </span>
                   </span>
                   <button
                     type="button"
                     onClick={removeCoupon}
-                    className="rounded-lg p-1.5 text-success-300 transition hover:bg-success-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                    className="rounded p-1.5 text-success-300 transition hover:bg-success-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
                     aria-label={`Remove coupon ${appliedCoupon.code}`}
                   >
                     <X className="h-4 w-4" />
@@ -429,7 +442,7 @@ export default function Cart() {
                       disabled={couponBusy}
                     />
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       onClick={applyCoupon}
                       loading={couponBusy}
                       disabled={!couponInput.trim()}
@@ -440,25 +453,27 @@ export default function Cart() {
                 </Field>
               )}
               {preview && !preview.valid && (
-                <p className="mt-2 text-xs text-danger-300" role="alert">
+                <p className="mt-2 text-caption text-danger-300" role="alert">
                   {preview.message}
                 </p>
               )}
             </div>
 
-            <div className="flex items-center justify-between border-t border-ink-800 pt-4 text-base font-bold">
-              <span className="text-slate-300">Total</span>
-              <span className="text-gold-300">{money(payableTotal, currency)}</span>
+            <div className="mt-6 flex items-baseline justify-between border-t border-ink-600 pt-6">
+              <span className="text-body-sm text-slate-400">Total</span>
+              <span className="text-h3 text-slate-100">{money(payableTotal, currency)}</span>
             </div>
-            <p className="-mt-2 text-xs text-slate-500">Shipping &amp; taxes calculated at checkout.</p>
+            <p className="mt-2 text-caption text-slate-500">Shipping &amp; taxes calculated at checkout.</p>
 
-            <LinkButton to="/checkout" fullWidth size="lg">
-              Proceed to checkout
-            </LinkButton>
-            <LinkButton to="/products" variant="ghost" fullWidth>
-              Continue shopping
-            </LinkButton>
-          </Card>
+            <div className="mt-6 space-y-3">
+              <LinkButton to="/checkout" fullWidth size="xl">
+                Checkout
+              </LinkButton>
+              <LinkButton to="/products" variant="ghost" fullWidth>
+                Continue shopping
+              </LinkButton>
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -476,7 +491,7 @@ export default function Cart() {
         role="status"
         className="fixed inset-x-0 bottom-6 z-toast flex justify-center px-4"
       >
-        <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border border-ink-700 bg-ink-850/95 p-3 pl-4 shadow-lift backdrop-blur">
+        <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 border border-ink-700 bg-ink-950 p-3 pl-4 shadow-lift">
           <p className="min-w-0 flex-1 truncate text-sm text-slate-200">
             Removed <span className="font-medium text-slate-100">{undo!.productName}</span>
           </p>
@@ -491,29 +506,29 @@ export default function Cart() {
 
 function CartSkeleton() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-40" />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-3 lg:col-span-2">
+    <div>
+      <Skeleton className="h-9 w-40" />
+      <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-[1fr_22rem]">
+        <div className="divide-y divide-ink-700 border-b border-ink-700">
           {[0, 1, 2].map((i) => (
-            <Card key={i} className="flex items-center gap-4 p-4">
-              <Skeleton className="h-20 w-20 rounded-lg" />
+            <div key={i} className="flex gap-5 py-6 first:pt-0">
+              <Skeleton className="h-28 w-24 rounded-none" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-4 w-1/2" />
                 <Skeleton className="h-3 w-1/4" />
                 <Skeleton className="h-3 w-1/3" />
+                <Skeleton className="mt-4 h-9 w-28" />
               </div>
-              <Skeleton className="h-9 w-28" />
-            </Card>
+            </div>
           ))}
         </div>
-        <Card className="space-y-4 p-5">
-          <Skeleton className="h-5 w-32" />
+        <div className="space-y-4 bg-ink-850 p-6">
+          <Skeleton className="h-4 w-24" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-11 w-full rounded-lg" />
+          <Skeleton className="h-14 w-full rounded-lg" />
           <Skeleton className="h-10 w-full rounded-lg" />
-        </Card>
+        </div>
       </div>
     </div>
   );

@@ -171,7 +171,7 @@ describe('Cart (WP-2.4)', () => {
     currentCart = cart([]);
     renderCart();
 
-    expect(screen.getByText('Your cart is empty')).toBeInTheDocument();
+    expect(screen.getByText('Your bag is empty')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /start shopping/i })).toHaveAttribute('href', '/products');
   });
 

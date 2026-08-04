@@ -7,7 +7,7 @@ import { ApiError } from '@/lib/http';
 import { money, formatDateTime, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/context/ToastContext';
-import { Button, Card, EmptyState, LinkButton, Modal, PageHeader } from '@/components/ui';
+import { Button, EmptyState, LinkButton, Modal } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
@@ -63,17 +63,21 @@ export default function OrderDetail() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Order #${order.id.slice(0, 8)}`}
-        subtitle={`Placed ${formatDateTime(order.createdAt)}`}
-        action={
-          canCancel ? (
-            <Button variant="danger" size="sm" onClick={() => setConfirmOpen(true)}>
-              Cancel order
-            </Button>
-          ) : undefined
-        }
-      />
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-700 pb-6">
+        <div>
+          <h1 className="font-display text-h1 text-slate-100">Order #{order.id.slice(0, 8)}</h1>
+          <p className="mt-2 text-body-sm text-slate-400">Placed {formatDateTime(order.createdAt)}</p>
+        </div>
+        {canCancel && (
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            className="rounded text-body-sm text-slate-500 underline-offset-4 transition hover:text-danger-300 hover:underline"
+          >
+            Cancel order
+          </button>
+        )}
+      </header>
 
       <div className="flex flex-wrap items-center gap-2">
         <OrderStatusBadge status={order.status} />
@@ -81,38 +85,38 @@ export default function OrderDetail() {
         <span className="text-xs text-slate-500">Payment: {titleCase(order.paymentMethod)}</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_20rem]">
         {/* Items */}
-        <div className="space-y-6 lg:col-span-2">
-          <Card className="overflow-hidden">
+        <div className="space-y-10">
+          <div className="border-y border-ink-700">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-ink-800 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-3 font-medium">Item</th>
-                    <th className="px-4 py-3 text-right font-medium">Price</th>
-                    <th className="px-4 py-3 text-right font-medium">Qty</th>
-                    <th className="px-4 py-3 text-right font-medium">Subtotal</th>
+                  <tr className="border-b border-ink-700 text-left text-overline uppercase text-slate-500">
+                    <th className="px-2 py-4 font-medium">Item</th>
+                    <th className="px-2 py-4 text-right font-medium">Price</th>
+                    <th className="px-2 py-4 text-right font-medium">Qty</th>
+                    <th className="px-2 py-4 text-right font-medium">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
                   {order.items.map((it) => (
-                    <tr key={it.id} className="border-b border-ink-850 last:border-0">
-                      <td className="px-4 py-3">
+                    <tr key={it.id} className="border-b border-ink-700 last:border-0">
+                      <td className="px-2 py-4">
                         <div className="font-medium text-slate-100">{it.productName}</div>
                         {it.variantOptions && <div className="text-xs text-slate-300">{it.variantOptions}</div>}
                         <div className="text-xs text-slate-500">SKU: {it.variantSku ?? it.sku}</div>
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-300">{money(it.unitPrice, order.currency)}</td>
-                      <td className="px-4 py-3 text-right text-slate-300">{it.quantity}</td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-100">{money(it.subtotal, order.currency)}</td>
+                      <td className="px-2 py-4 text-right text-slate-300">{money(it.unitPrice, order.currency)}</td>
+                      <td className="px-2 py-4 text-right text-slate-300">{it.quantity}</td>
+                      <td className="px-2 py-4 text-right font-medium text-slate-100">{money(it.subtotal, order.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             {order.discountAmount > 0 ? (
-              <dl className="space-y-2 border-t border-ink-800 px-4 py-4 text-sm">
+              <dl className="space-y-2 border-t border-ink-700 px-2 py-5 text-sm">
                 <div className="flex items-center justify-between">
                   <dt className="text-slate-400">Subtotal</dt>
                   <dd className="text-slate-200">
@@ -125,31 +129,31 @@ export default function OrderDetail() {
                   </dt>
                   <dd className="font-medium">−{money(order.discountAmount, order.currency)}</dd>
                 </div>
-                <div className="flex items-center justify-between border-t border-ink-800 pt-2 text-base font-bold">
+                <div className="flex items-center justify-between border-t border-ink-700 pt-2 text-base font-bold">
                   <span className="text-slate-300">Total</span>
-                  <span className="text-gold-300">{money(order.totalAmount, order.currency)}</span>
+                  <span className="text-h3 text-slate-100">{money(order.totalAmount, order.currency)}</span>
                 </div>
               </dl>
             ) : (
-              <div className="flex items-center justify-between border-t border-ink-800 px-4 py-4 text-base font-bold">
+              <div className="flex items-center justify-between border-t border-ink-700 px-2 py-5 text-base font-bold">
                 <span className="text-slate-300">Total</span>
-                <span className="text-gold-300">{money(order.totalAmount, order.currency)}</span>
+                <span className="text-h3 text-slate-100">{money(order.totalAmount, order.currency)}</span>
               </div>
             )}
-          </Card>
+          </div>
 
           {order.notes && (
-            <Card className="p-5">
-              <h2 className="mb-2 text-sm font-semibold text-slate-200">Order notes</h2>
-              <p className="whitespace-pre-line text-sm text-slate-400">{order.notes}</p>
-            </Card>
+            <div className="bg-ink-850 p-6">
+              <h2 className="mb-2 text-overline uppercase text-slate-500">Order notes</h2>
+              <p className="whitespace-pre-line text-body-sm text-slate-400">{order.notes}</p>
+            </div>
           )}
         </div>
 
         {/* Shipping + meta */}
         <div className="space-y-6">
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-200">Shipping address</h2>
+          <div>
+            <h2 className="mb-3 text-overline uppercase text-slate-500">Shipping address</h2>
             <address className="space-y-0.5 text-sm not-italic text-slate-300">
               <p className="font-medium text-slate-100">{a.name}</p>
               {a.phone && <p className="text-slate-400">{a.phone}</p>}
@@ -160,9 +164,9 @@ export default function OrderDetail() {
               </p>
               <p>{a.country}</p>
             </address>
-          </Card>
+          </div>
 
-          <Card className="p-5 text-sm text-slate-400">
+          <div className="border-t border-ink-700 pt-5 text-body-sm text-slate-500">
             <div className="flex justify-between py-1">
               <span>Placed</span>
               <span className="text-slate-300">{formatDateTime(order.createdAt)}</span>
@@ -171,7 +175,7 @@ export default function OrderDetail() {
               <span>Last updated</span>
               <span className="text-slate-300">{formatDateTime(order.updatedAt)}</span>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
 

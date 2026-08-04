@@ -5,7 +5,7 @@ import { Package } from 'lucide-react';
 import { listOrders } from '@/api/orders';
 import { money, formatDate } from '@/lib/format';
 import { OrderStatusBadge } from '@/components/StatusBadge';
-import { Card, EmptyState, LinkButton, PageHeader, Pagination } from '@/components/ui';
+import { EmptyState, LinkButton, Pagination } from '@/components/ui';
 import { ListSkeleton } from '@/components/RouteSkeletons';
 
 export default function Orders() {
@@ -23,47 +23,60 @@ export default function Orders() {
 
   if (!data || data.content.length === 0) {
     return (
-      <div className="space-y-6">
-        <PageHeader title="My orders" />
-        <EmptyState
-          icon={<Package className="h-10 w-10" />}
-          title="No orders yet"
-          message="When you place an order, it will show up here."
-          action={<LinkButton to="/products">Start shopping</LinkButton>}
-        />
+      <div>
+        <h1 className="border-b border-ink-700 pb-6 font-display text-h1 text-slate-100">Orders</h1>
+        <div className="py-16">
+          <EmptyState
+            icon={<Package className="h-10 w-10" />}
+            title="No orders yet"
+            message="When you place an order, it will show up here."
+            action={<LinkButton to="/products">Start shopping</LinkButton>}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="My orders" subtitle={`${data.totalElements} order${data.totalElements === 1 ? '' : 's'}`} />
+    <div>
+      <header className="border-b border-ink-700 pb-6">
+        <h1 className="font-display text-h1 text-slate-100">Orders</h1>
+        <p className="mt-2 text-body-sm text-slate-400">
+          {data.totalElements} {data.totalElements === 1 ? 'order' : 'orders'}
+        </p>
+      </header>
 
-      <div className="space-y-3">
+      {/* A ledger of hairline rows rather than a stack of cards: orders are a
+          list to scan down, and card chrome on each one fights that. */}
+      <div className="divide-y divide-ink-700 border-b border-ink-700">
         {data.content.map((o) => (
-          <Link key={o.id} to={`/orders/${o.id}`} className="block">
-            <Card className="flex flex-col gap-3 p-4 transition hover:border-ink-600 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm text-slate-200">#{o.id.slice(0, 8)}</span>
-                  <OrderStatusBadge status={o.status} />
-                </div>
-                <p className="text-xs text-slate-500">
-                  {formatDate(o.createdAt)} · {o.itemCount} item{o.itemCount === 1 ? '' : 's'}
-                  {(o.shippingCity || o.shippingCountry) && (
-                    <> · {[o.shippingCity, o.shippingCountry].filter(Boolean).join(', ')}</>
-                  )}
-                </p>
+          <Link
+            key={o.id}
+            to={`/orders/${o.id}`}
+            className="flex flex-col gap-3 py-5 transition-colors hover:bg-ink-850 sm:flex-row sm:items-center sm:justify-between sm:px-2"
+          >
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-body-sm text-slate-100">#{o.id.slice(0, 8)}</span>
+                <OrderStatusBadge status={o.status} />
               </div>
-              <div className="text-right">
-                <span className="text-base font-bold text-gold-300">{money(o.totalAmount, o.currency)}</span>
-              </div>
-            </Card>
+              <p className="text-caption text-slate-500">
+                {formatDate(o.createdAt)} · {o.itemCount} item{o.itemCount === 1 ? '' : 's'}
+                {(o.shippingCity || o.shippingCountry) && (
+                  <> · {[o.shippingCity, o.shippingCountry].filter(Boolean).join(', ')}</>
+                )}
+              </p>
+            </div>
+            <span className="text-body-sm font-semibold text-slate-100 sm:text-right">
+              {money(o.totalAmount, o.currency)}
+            </span>
           </Link>
         ))}
       </div>
 
-      <Pagination page={data.number} totalPages={data.totalPages} onChange={setPage} />
+      <div className="mt-10">
+        <Pagination page={data.number} totalPages={data.totalPages} onChange={setPage} />
+      </div>
     </div>
   );
 }

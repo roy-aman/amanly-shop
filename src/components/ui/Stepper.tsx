@@ -24,8 +24,8 @@ export function Stepper({ steps, current, className }: { steps: Step[]; current:
               <span
                 className={cn(
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition',
-                  status === 'complete' && 'border-gold-400 bg-gold-400 text-ink-950',
-                  status === 'current' && 'border-gold-400 text-gold-300',
+                  status === 'complete' && 'border-primary bg-primary text-primary-fg',
+                  status === 'current' && 'border-primary text-slate-100',
                   status === 'upcoming' && 'border-ink-600 text-slate-500',
                 )}
               >
@@ -45,7 +45,7 @@ export function Stepper({ steps, current, className }: { steps: Step[]; current:
             </li>
             {!isLast && (
               <span
-                className={cn('mx-3 h-px flex-1 transition-colors', i < current ? 'bg-gold-400/60' : 'bg-ink-700')}
+                className={cn('mx-3 h-px flex-1 transition-colors', i < current ? 'bg-primary' : 'bg-ink-700')}
                 aria-hidden
               />
             )}

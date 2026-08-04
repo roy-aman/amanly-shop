@@ -18,11 +18,9 @@ import { useToast } from '@/context/ToastContext';
 import { BRAND_NAME } from '@/lib/brand';
 import {
   Button,
-  Card,
   Field,
   Input,
   LinkButton,
-  PageHeader,
   PageLoader,
   Stepper,
   Textarea,
@@ -355,16 +353,18 @@ export default function Checkout() {
   const currency = cart.currency;
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Checkout" subtitle="Complete your order in three quick steps." />
+    <div>
+      <header className="border-b border-ink-700 pb-6">
+        <h1 className="font-display text-h1 text-slate-100">Checkout</h1>
+      </header>
 
-      <Stepper steps={STEPS} current={step} className="max-w-2xl" />
+      <Stepper steps={STEPS} current={step} className="mt-8 max-w-2xl" />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-[1fr_22rem]">
         {/* ── Step content ─────────────────────────────────────────────── */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="space-y-6">
           {step === 0 && (
-            <Card className="space-y-4 p-5">
+            <section className="space-y-5 border border-ink-700 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Delivery address
               </h2>
@@ -378,7 +378,7 @@ export default function Checkout() {
                         key={a.id}
                         className={
                           'flex cursor-pointer gap-3 rounded-xl border px-4 py-3 transition ' +
-                          (active ? 'border-gold-400/50 bg-gold-400/5' : 'border-ink-700 hover:border-ink-500')
+                          (active ? 'border-primary bg-ink-850' : 'border-ink-600 hover:border-slate-100')
                         }
                       >
                         <input
@@ -390,12 +390,12 @@ export default function Checkout() {
                             setSelectedAddressId(a.id);
                             setAddressError(null);
                           }}
-                          className="mt-1 h-4 w-4 shrink-0 accent-gold-400"
+                          className="mt-1 h-4 w-4 shrink-0 accent-primary"
                         />
                         <span className="min-w-0 text-sm">
                           <span className="flex items-center gap-2">
                             <span className="font-medium text-slate-100">{a.label}</span>
-                            {a.isDefault && <span className="text-xs text-gold-300">Default</span>}
+                            {a.isDefault && <span className="text-overline uppercase text-slate-500">Default</span>}
                           </span>
                           <span className="block text-slate-400">{a.recipientName}</span>
                           {a.phone && <span className="block text-slate-500">{a.phone}</span>}
@@ -452,7 +452,7 @@ export default function Checkout() {
                       type="checkbox"
                       checked={addForm.makeDefault}
                       onChange={(e) => setAdd('makeDefault', e.target.checked)}
-                      className="h-4 w-4 accent-gold-400"
+                      className="h-4 w-4 accent-primary"
                     />
                     Set as default address
                   </label>
@@ -482,11 +482,11 @@ export default function Checkout() {
                   {addressError}
                 </p>
               )}
-            </Card>
+            </section>
           )}
 
           {step === 1 && (
-            <Card className="space-y-3 p-5">
+            <section className="space-y-4 border border-ink-700 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Payment method
               </h2>
@@ -499,7 +499,7 @@ export default function Checkout() {
                       key={m.value}
                       className={
                         'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ' +
-                        (active ? 'border-gold-400/50 bg-gold-400/5' : 'border-ink-700 hover:border-ink-500')
+                        (active ? 'border-primary bg-ink-850' : 'border-ink-600 hover:border-slate-100')
                       }
                     >
                       <span className="flex items-center gap-3">
@@ -509,7 +509,7 @@ export default function Checkout() {
                           value={m.value}
                           checked={active}
                           onChange={() => setPaymentMethod(m.value)}
-                          className="h-4 w-4 accent-gold-400"
+                          className="h-4 w-4 accent-primary"
                         />
                         <Icon className="h-5 w-5 text-slate-400" />
                         <span className="text-sm font-medium text-slate-100">{m.label}</span>
@@ -524,11 +524,11 @@ export default function Checkout() {
                   Online payment is currently unavailable for this store — orders are placed as Cash on Delivery.
                 </p>
               )}
-            </Card>
+            </section>
           )}
 
           {step === 2 && (
-            <Card className="space-y-5 p-5">
+            <section className="space-y-6 border border-ink-700 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Review &amp; place order
               </h2>
@@ -553,7 +553,7 @@ export default function Checkout() {
                 )}
               </section>
 
-              <section className="space-y-1 border-t border-ink-800 pt-4">
+              <section className="space-y-1 border-t border-ink-600 pt-5">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-200">Payment</h3>
                   <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
@@ -565,7 +565,7 @@ export default function Checkout() {
                 </p>
               </section>
 
-              <section className="border-t border-ink-800 pt-4">
+              <section className="border-t border-ink-600 pt-5">
                 <Field label="Order notes">
                   <Textarea
                     value={notes}
@@ -577,14 +577,14 @@ export default function Checkout() {
               </section>
 
               {paymentIssue && (
-                <div className="flex items-start gap-2 rounded-xl border border-warning-500/30 bg-warning-500/15 p-3 text-sm text-warning-300" role="alert">
+                <div className="flex items-start gap-2 border border-warning-500/30 bg-warning-500/15 p-3 text-sm text-warning-300" role="alert">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <p>{paymentIssue}</p>
                 </div>
               )}
 
               {placeErrors.length > 0 && (
-                <div className="rounded-xl border border-danger-500/30 bg-danger-500/15 p-3 text-sm text-danger-300" role="alert">
+                <div className="border border-danger-500/30 bg-danger-500/15 p-3 text-sm text-danger-300" role="alert">
                   <ul className="list-inside list-disc space-y-1">
                     {placeErrors.map((msg, i) => (
                       <li key={i}>{msg}</li>
@@ -592,7 +592,7 @@ export default function Checkout() {
                   </ul>
                 </div>
               )}
-            </Card>
+            </section>
           )}
 
           {/* ── Step navigation ────────────────────────────────────────── */}
@@ -610,7 +610,7 @@ export default function Checkout() {
             {step === 0 && <Button onClick={goToPayment}>Continue to payment</Button>}
             {step === 1 && <Button onClick={() => setStep(2)}>Continue to review</Button>}
             {step === 2 && (
-              <Button onClick={handlePlaceOrder} loading={submitting} size="lg">
+              <Button onClick={handlePlaceOrder} loading={submitting} size="xl">
                 Place order
               </Button>
             )}
@@ -618,9 +618,9 @@ export default function Checkout() {
         </div>
 
         {/* ── Sticky order summary ─────────────────────────────────────── */}
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <Card className="space-y-4 p-5">
-            <h2 className="text-sm font-semibold text-slate-200">Order summary</h2>
+        <aside className="lg:sticky lg:top-28 lg:self-start">
+          <div className="space-y-4 bg-ink-850 p-6">
+            <h2 className="text-overline uppercase text-slate-500">Order summary</h2>
             <div className="space-y-2">
               {cart.items.map((i) => (
                 <div key={i.cartItemId} className="flex items-start justify-between gap-3 text-sm">
@@ -633,13 +633,13 @@ export default function Checkout() {
             </div>
 
             {couponDropped && (
-              <div className="flex items-start gap-2 rounded-xl border border-warning-500/30 bg-warning-500/15 p-3 text-xs text-warning-300" role="status">
+              <div className="flex items-start gap-2 border border-warning-500/30 bg-warning-500/15 p-3 text-xs text-warning-300" role="status">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <p>Your coupon was removed — {couponDropped}</p>
               </div>
             )}
 
-            <dl className="space-y-2 border-t border-ink-800 pt-4 text-sm">
+            <dl className="space-y-2 border-t border-ink-600 pt-5 text-sm">
               <div className="flex items-center justify-between">
                 <dt className="text-slate-400">Subtotal</dt>
                 <dd className="text-slate-200">{money(cart.totalAmount, currency)}</dd>
@@ -654,16 +654,16 @@ export default function Checkout() {
               )}
             </dl>
 
-            <div className="flex items-center justify-between border-t border-ink-800 pt-4 text-base font-bold">
+            <div className="flex items-center justify-between border-t border-ink-600 pt-5 text-base font-bold">
               <span className="text-slate-300">Total</span>
-              <span className="text-gold-300">{money(appliedCoupon?.total ?? cart.totalAmount, currency)}</span>
+              <span className="text-h3 text-slate-100">{money(appliedCoupon?.total ?? cart.totalAmount, currency)}</span>
             </div>
             <p className="text-xs text-slate-500">
               {appliedCoupon
                 ? 'Final discount is confirmed when you place the order.'
                 : 'Shipping & taxes calculated at checkout.'}
             </p>
-          </Card>
+          </div>
         </aside>
       </div>
     </div>
