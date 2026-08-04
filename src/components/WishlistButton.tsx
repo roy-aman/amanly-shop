@@ -61,8 +61,8 @@ export default function WishlistButton({
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-50',
         variant === 'overlay'
-          ? 'h-9 w-9 border border-ink-700 bg-ink-950/70 text-slate-200 backdrop-blur hover:bg-ink-900 hover:text-gold-300'
-          : 'h-11 rounded-xl border border-ink-700 bg-ink-900/60 px-4 text-slate-200 hover:border-ink-500 hover:text-gold-300',
+          ? 'h-9 w-9 bg-ink-950/80 text-slate-300 backdrop-blur hover:bg-ink-950 hover:text-slate-100'
+          : 'h-11 rounded-xl border border-ink-700 bg-ink-900/60 px-4 text-slate-200 hover:border-ink-500 hover:text-slate-100',
         className,
       )}
     >
@@ -70,7 +70,10 @@ export default function WishlistButton({
         className={cn(
           variant === 'overlay' ? 'h-4 w-4' : 'h-5 w-5',
           'transition',
-          active ? 'fill-gold-400 text-gold-400' : 'fill-none',
+          // Filled in ink, not gold: a saved item is a state, and gold is
+          // reserved for decoration. A solid dark heart also reads instantly
+          // against the pale product tile.
+          active ? 'fill-slate-100 text-slate-100' : 'fill-none',
         )}
         aria-hidden
       />

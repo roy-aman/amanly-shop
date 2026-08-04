@@ -1,49 +1,68 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+
+/** What `useInView` reports, mapped straight onto the `data-reveal` attribute. */
+export type RevealState = 'pending' | 'in' | undefined;
 
 /**
  * Reveals an element once it scrolls into view. Pair with the `rc-reveal`
- * class: `<section ref={ref} className="rc-reveal" data-inview={shown}>`.
+ * class: `<section ref={ref} className="rc-reveal" data-reveal={state}>`.
  *
- * Deliberately hand-rolled rather than pulling in an animation library — the
- * whole requirement is "fade sections up once", and IntersectionObserver does
- * that in ~20 lines with no bundle cost.
+ * Fails VISIBLE, which is the whole design of this hook. The naive version —
+ * base CSS of `opacity: 0`, flipped by an observer — means any environment
+ * where the callback doesn't run (no IntersectionObserver, a crawler, a
+ * scripting error earlier in the tree) renders a blank page. So nothing is
+ * hidden until this hook has confirmed, before paint, that it can observe:
+ * no attribute → no `opacity: 0` rule → content shows.
  *
- * Reveals once and disconnects: re-animating on every scroll-back is the kind
- * of motion that gets tiring fast. Elements already in view on first paint are
- * revealed immediately, so above-the-fold content never waits on an observer.
+ * Hand-rolled rather than pulling in an animation library — the requirement is
+ * "fade sections up once", which IntersectionObserver does at no bundle cost.
+ *
+ * Reveals once and disconnects; re-animating on every scroll-back gets tiring.
  */
 export function useInView<T extends HTMLElement = HTMLDivElement>(): [
   React.RefObject<T>,
-  boolean,
+  RevealState,
 ] {
   const ref = useRef<T>(null);
-  const [inView, setInView] = useState(false);
+  const [state, setState] = useState<RevealState>(undefined);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
 
-    // No observer (older browsers, jsdom in tests): show the content rather
-    // than leaving it invisible forever. Failing open is the only safe default.
-    if (typeof IntersectionObserver === 'undefined') {
-      setInView(true);
-      return;
-    }
+    // Hide before first paint, so the element never flashes in and then out.
+    setState('pending');
+
+    // Second safety net. An observer always delivers one callback per observed
+    // element, intersecting or not — so the first callback proves it is alive
+    // and we can trust it for the rest of the page. If nothing arrives at all,
+    // something is wrong with the environment and hidden content would never
+    // come back: reveal it rather than lose it.
+    let alive = false;
+    const failsafe = window.setTimeout(() => {
+      if (!alive) setState('in');
+    }, 1500);
 
     const observer = new IntersectionObserver(
       (entries) => {
+        alive = true;
+        window.clearTimeout(failsafe);
         if (entries.some((e) => e.isIntersecting)) {
-          setInView(true);
+          setState('in');
           observer.disconnect();
         }
       },
-      // Fire slightly before the element's edge reaches the viewport so the
-      // section has finished animating by the time it is properly on screen.
-      { rootMargin: '0px 0px -10% 0px', threshold: 0.05 },
+      // A small negative bottom margin so a section has finished animating by
+      // the time it is properly on screen — but not so large that a section
+      // already on screen at load fails to trigger.
+      { rootMargin: '0px 0px -5% 0px', threshold: 0 },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      window.clearTimeout(failsafe);
+      observer.disconnect();
+    };
   }, []);
 
-  return [ref, inView];
+  return [ref, state];
 }
