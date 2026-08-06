@@ -1,8 +1,9 @@
 # Amanly Frontend — Architecture & Foundation Contract
 
 React 18 + TypeScript + Vite + Tailwind + React Router v6 + TanStack Query.
-SPA served by Vite in dev (proxy `/api` → :8080); `npm run build:deploy` emits into
-`../src/main/resources/static` for the Spring Boot JAR to serve same-origin.
+SPA served by Vite in dev (proxy `/api` → :8080, so requests stay same-origin). In production
+`npm run build` emits a static `dist/` that Caddy serves as its own Railway service, calling the
+backend cross-origin at `VITE_API_BASE_URL`. See `README.md`.
 
 ## Golden rules for building pages
 

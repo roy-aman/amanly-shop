@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:deploy": "tsc && vite build --outDir ../src/main/resources/static --emptyOutDir",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
