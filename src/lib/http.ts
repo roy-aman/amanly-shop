@@ -7,6 +7,27 @@
 
 import type { AuthResponse, ErrorEnvelope, FieldViolation, UserResponse } from './types';
 
+/**
+ * Backend origin, baked in at build time from VITE_API_BASE_URL.
+ *
+ * Empty string = same origin, which is both the local-dev case (Vite proxies /api to :8080)
+ * and the single-JAR deployment where Spring serves this bundle itself. When the frontend is
+ * hosted separately, this becomes the API's absolute origin.
+ *
+ * Every call site keeps writing root-relative paths like '/api/v1/products'; only `apiUrl`
+ * below knows about the origin. That is why splitting the frontend out did not require
+ * touching the twenty-odd modules under src/api.
+ */
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+
+/** Resolves a root-relative backend path against {@link API_BASE_URL}. */
+export function apiUrl(path: string): string {
+  // Absolute URLs pass through untouched — a caller that already knows its full target
+  // (an image host, a payment gateway) must not get the API origin prepended.
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 const ACCESS_KEY = 'rc_access_token';
 const REFRESH_KEY = 'rc_refresh_token';
 const USER_KEY = 'rc_user';
@@ -101,7 +122,7 @@ async function silentRefresh(): Promise<boolean> {
     try {
       const refreshToken = TokenStore.getRefreshToken();
       if (!refreshToken) return false;
-      const res = await fetch('/api/v1/auth/refresh', {
+      const res = await fetch(apiUrl('/api/v1/auth/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -136,7 +157,7 @@ export async function request<T>(
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     method,
     headers,
     body: body != null ? JSON.stringify(body) : undefined,

@@ -1,0 +1,20 @@
+# Railway assigns the listening port at runtime via $PORT, so it cannot be hardcoded.
+:{$PORT:80} {
+	root * /srv
+	encode gzip zstd
+
+	# React Router owns every path. Without this, a deep link or a refresh on /products/foo
+	# asks the static host for a file that does not exist and returns 404 — the job
+	# SpaForwardingController used to do when Spring served this bundle.
+	# Hashed asset filenames still resolve as real files and never reach the fallback.
+	try_files {path} /index.html
+	file_server
+
+	# Vite emits content-hashed asset names, so those are immutable and safe to cache hard.
+	# index.html must NOT be, or browsers keep booting an old bundle against a new API.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	@html path /index.html /
+	header @html Cache-Control "no-cache"
+}

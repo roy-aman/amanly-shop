@@ -1,0 +1,8 @@
+# Host-built output must never enter the context: the image builds the bundle itself, and a
+# copied-in dist/ would silently ship whatever was last built locally.
+node_modules/
+dist/
+.git/
+.env
+.env.*
+*.log

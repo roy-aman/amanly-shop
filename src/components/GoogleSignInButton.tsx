@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { request } from '@/lib/http';
+import { apiUrl, request } from '@/lib/http';
 import { Button } from '@/components/ui';
 
 function GoogleIcon() {
@@ -83,7 +83,10 @@ export default function GoogleSignInButton({
         variant="outline"
         fullWidth
         onClick={() => {
-          window.location.href = '/oauth2/authorization/google';
+          // Resolved against the backend origin: this is a full-page navigation the backend
+          // must answer, not an XHR, so it does not go through `request` and would otherwise
+          // hit the static host when the frontend is deployed separately.
+          window.location.href = apiUrl('/oauth2/authorization/google');
         }}
       >
         <GoogleIcon />
