@@ -3,9 +3,11 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PackageX, Share2 } from 'lucide-react';
 import { getProduct, listProducts } from '@/api/catalog';
+import { getPublicStore } from '@/api/store';
 import { addToCart } from '@/api/cart';
 import { ApiError } from '@/lib/http';
 import { money, titleCase } from '@/lib/format';
+import { taxLabel } from '@/lib/totals';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
@@ -150,9 +152,11 @@ function ZoomImage({ src, alt }: { src?: string; alt: string }) {
 
   return (
     <div
-      // Square-cornered and borderless, on the same pale tile as the cards: a
-      // rounded, outlined frame around product photography reads app-like.
-      className="relative aspect-[4/5] overflow-hidden bg-ink-850"
+      // Softly rounded and borderless, on the same pale tile as the cards — the
+      // corner radius matches ProductCard so a product keeps its shape from the
+      // grid through to here. Still no outline: a framed box around product
+      // photography reads app-like.
+      className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-ink-850"
       onMouseEnter={() => setZoom(true)}
       onMouseLeave={() => setZoom(false)}
       onMouseMove={(e) => {
@@ -181,7 +185,7 @@ function ProductRail({ title, products }: { title: string; products: ProductSumm
   return (
     <section>
       <h2 className="border-b border-ink-700 pb-5 font-display text-h2 text-slate-100">{title}</h2>
-      <div className="mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 sm:gap-6">
+      <div className="rc-rail mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 sm:gap-6">
         {products.map((p) => (
           <div key={p.id} className="w-44 shrink-0 snap-start sm:w-56">
             <ProductCard product={p} variant="grid" />
@@ -197,6 +201,8 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
+  const storeQuery = useQuery({ queryKey: ['public-store'], queryFn: getPublicStore, staleTime: 5 * 60_000 });
+  const storeTaxLabel = taxLabel(storeQuery.data);
   const { refresh } = useCart();
   const toast = useToast();
 
@@ -397,8 +403,11 @@ export default function ProductDetail() {
                     className={cn(
                       // Selection is a solid ink outline, not a gold one: it is a
                       // state, and gold does not survive on white.
-                      'h-20 w-16 overflow-hidden bg-ink-850 outline-offset-2 transition',
-                      i === activeImage ? 'outline outline-1 outline-slate-100' : 'opacity-70 hover:opacity-100',
+                      'h-20 w-16 overflow-hidden rounded-lg bg-ink-850 outline-offset-2',
+                      'transition duration-200 ease-emphasized active:scale-95',
+                      i === activeImage
+                        ? 'outline outline-1 outline-slate-100'
+                        : 'opacity-60 hover:scale-[1.04] hover:opacity-100',
                     )}
                   >
                     <ImageWithFallback src={img.url} alt="" wrapperClassName="h-full w-full" />
@@ -421,12 +430,12 @@ export default function ProductDetail() {
                     key={img.id}
                     src={img.url}
                     alt={img.altText ?? product.name}
-                    wrapperClassName="aspect-[4/5] w-full bg-ink-850"
+                    wrapperClassName="aspect-[4/5] w-full overflow-hidden rounded-2xl bg-ink-850"
                   />
                 ))}
               </Carousel>
             ) : (
-              <ImageWithFallback alt={product.name} wrapperClassName="aspect-[4/5] w-full bg-ink-850" />
+              <ImageWithFallback alt={product.name} wrapperClassName="aspect-[4/5] w-full overflow-hidden rounded-2xl bg-ink-850" />
             )}
           </div>
         </div>
@@ -479,6 +488,12 @@ export default function ProductDetail() {
                 size="lg"
               />
             )}
+
+            {/* Whether the shelf price already contains tax is a consumer-law
+                statement, not a decoration — so it sits with the price rather
+                than being discovered at checkout. Empty when the store charges
+                no tax. */}
+            {storeTaxLabel && <p className="mt-1 text-caption text-slate-500">{storeTaxLabel}</p>}
 
             {/* Availability reads as a line of text rather than a coloured pill.
                 A green "In stock" badge on every product is noise; the states
@@ -536,10 +551,15 @@ export default function ProductDetail() {
                           disabled={status === 'incompatible'}
                           onClick={() => setSelectedOptions((prev) => ({ ...prev, [axis.name]: value }))}
                           className={cn(
-                            'min-w-[3rem] border px-4 py-2.5 text-body-sm transition',
+                            'min-w-[3rem] rounded-full border px-4 py-2.5 text-body-sm',
+                            'transition duration-200 ease-emphasized',
+                            // A size that can be chosen gives under the finger;
+                            // one that cannot must stay inert, or the press
+                            // reads as "accepted" and the disabled state lies.
+                            status !== 'incompatible' && 'active:scale-95',
                             isSelected
-                              ? 'border-primary bg-primary text-primary-fg'
-                              : 'border-ink-600 text-slate-200 hover:border-slate-100',
+                              ? 'border-primary bg-primary text-primary-fg shadow-sm'
+                              : 'border-ink-600 text-slate-200 hover:border-slate-100 hover:bg-ink-850',
                             status === 'incompatible' && 'cursor-not-allowed opacity-40',
                             status === 'oos' && !isSelected && 'text-slate-500 line-through',
                           )}

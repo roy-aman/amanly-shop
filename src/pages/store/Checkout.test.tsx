@@ -83,7 +83,7 @@ function codOrder(overrides: Partial<OrderResponse> = {}): OrderResponse {
 }
 
 function store(overrides: Partial<PublicStoreResponse> = {}): PublicStoreResponse {
-  return { name: 'Royal', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true, ...overrides };
+  return { slug: 'royal', name: 'Royal', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true, ...overrides };
 }
 
 function cart(): CartResponse {

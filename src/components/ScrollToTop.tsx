@@ -27,7 +27,12 @@ export default function ScrollToTop(): null {
         return;
       }
     }
-    window.scrollTo(0, 0);
+    // `behavior: 'instant'` is load-bearing, not a default spelled out.
+    // `html { scroll-behavior: smooth }` (index.css) makes in-page anchors ease,
+    // but it also captures programmatic scrolls — without this override, landing
+    // on a new route from halfway down a long catalogue would slowly glide back
+    // to the top while the new page is already rendering.
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname, hash, navigationType]);
 
   return null;

@@ -34,11 +34,17 @@ export function QuantityStepper({
   };
   const dim = size === 'sm' ? 'h-8 w-8' : 'h-10 w-10';
   const btn =
-    'flex shrink-0 items-center justify-center text-slate-300 transition hover:bg-ink-800 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40';
+    'flex shrink-0 items-center justify-center text-slate-300 transition duration-200 ease-emphasized ' +
+    'hover:bg-ink-800 hover:text-slate-100 active:scale-90 ' +
+    'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:hover:bg-transparent';
 
   return (
     <div
-      className={cn('inline-flex items-center overflow-hidden rounded-lg border border-ink-600 bg-ink-850', className)}
+      className={cn(
+        'inline-flex items-center overflow-hidden rounded-full border border-ink-600 bg-ink-850',
+        'transition-colors duration-200 focus-within:border-slate-100',
+        className,
+      )}
     >
       <button
         type="button"

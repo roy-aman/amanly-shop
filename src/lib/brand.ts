@@ -12,9 +12,9 @@
 
 export const BRAND_NAME = 'Amanly';
 
-/** The primary tagline. Short, declarative, and a claim about curation —
- *  which is the exact perception the brand needs to earn. */
-export const BRAND_TAGLINE = 'Fewer things, better made.';
+/** The lockup line that sits under the mark on the brand sheet. Kept verbatim
+ *  so the site and the printed identity say the same thing. */
+export const BRAND_TAGLINE = 'Built for modern men.';
 
 /** Supporting line for meta descriptions, footers and auth chrome. */
 export const BRAND_DESCRIPTION = 'Considered essentials for men.';

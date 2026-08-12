@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, MessageCircle } from 'lucide-react';
+import { CreditCard, MessageCircle, Truck } from 'lucide-react';
 import { adminStore } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type {
   StoreSettingsResponse,
+  UpdateCommerceSettingsRequest,
   UpdatePaymentSettingsRequest,
   UpdateWhatsappSettingsRequest,
 } from '@/lib/types';
@@ -24,12 +25,128 @@ export default function AdminSettings() {
 
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Settings" subtitle="Payment and messaging integrations for your store." />
+      <PageHeader title="Settings" subtitle="Delivery, tax, payment and messaging for your store." />
       <div className="space-y-6">
+        <CommerceCard store={data} />
         <PaymentsCard store={data} />
         <WhatsappCard store={data} />
       </div>
     </div>
+  );
+}
+
+// ── Delivery & tax (WP-P.6) ───────────────────────────────────────────
+function CommerceCard({ store }: { store: StoreSettingsResponse }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  // Every field is applied as sent, so the form starts from the current values
+  // and submits all of them; a partial save would zero what it omitted.
+  const [shipping, setShipping] = useState(String(store.shippingFlatAmount ?? 0));
+  const [threshold, setThreshold] = useState(store.freeShippingThreshold == null ? '' : String(store.freeShippingThreshold));
+  const [taxRate, setTaxRate] = useState(String(store.taxRatePercent ?? 0));
+  const [inclusive, setInclusive] = useState(store.pricesIncludeTax ?? true);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setShipping(String(store.shippingFlatAmount ?? 0));
+    setThreshold(store.freeShippingThreshold == null ? '' : String(store.freeShippingThreshold));
+    setTaxRate(String(store.taxRatePercent ?? 0));
+    setInclusive(store.pricesIncludeTax ?? true);
+  }, [store]);
+
+  const mutation = useMutation({
+    mutationFn: (body: UpdateCommerceSettingsRequest) => adminStore.updateCommerce(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'store'] });
+      // The public bootstrap carries the same figures, so the storefront's
+      // estimates would otherwise keep quoting the old delivery charge.
+      qc.invalidateQueries({ queryKey: ['public-store'] });
+      toast.success('Delivery & tax saved', 'Applies to future orders; placed orders keep their own figures.');
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.hasFieldErrors()) setErrors(e.fieldErrorMap());
+      else toast.error('Could not save', e instanceof Error ? e.message : 'Please try again.');
+    },
+  });
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    const next: Record<string, string> = {};
+    const shippingNum = Number(shipping);
+    const rateNum = Number(taxRate);
+    const thresholdNum = threshold.trim() === '' ? null : Number(threshold);
+    if (!Number.isFinite(shippingNum) || shippingNum < 0) next.shipping = 'Must be zero or more';
+    if (!Number.isFinite(rateNum) || rateNum < 0 || rateNum > 100) next.taxRate = 'Must be between 0 and 100';
+    if (thresholdNum != null && (!Number.isFinite(thresholdNum) || thresholdNum < 0)) {
+      next.threshold = 'Must be zero or more, or empty for never free';
+    }
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+
+    mutation.mutate({
+      shippingFlatAmount: shippingNum,
+      freeShippingThreshold: thresholdNum,
+      taxRatePercent: rateNum,
+      pricesIncludeTax: inclusive,
+    });
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+        <Truck className="h-4 w-4 text-gold-400" /> Delivery &amp; tax
+      </h2>
+      <p className="mt-1 text-caption text-slate-400">
+        Applies to orders placed from now on. Orders already placed keep the figures snapshotted at the time, so
+        changing these never rewrites an invoice.
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-5 space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Delivery charge" error={errors.shipping} hint={`Flat, in ${store.currency}.`}>
+            <Input type="number" min={0} step="0.01" value={shipping} invalid={!!errors.shipping} onChange={(e) => setShipping(e.target.value)} />
+          </Field>
+          <Field
+            label="Free delivery over"
+            error={errors.threshold}
+            hint="Compared against the total after any discount. Empty = never free."
+          >
+            <Input type="number" min={0} step="0.01" value={threshold} invalid={!!errors.threshold} onChange={(e) => setThreshold(e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="Tax rate (%)" error={errors.taxRate}>
+          <Input type="number" min={0} max={100} step="0.001" value={taxRate} invalid={!!errors.taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+        </Field>
+
+        <fieldset className="space-y-2">
+          <legend className="text-body-sm font-medium text-slate-300">How prices are entered</legend>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 p-3 transition hover:bg-ink-800/60">
+            <input type="radio" className="mt-1 accent-gold-400" checked={inclusive} onChange={() => setInclusive(true)} />
+            <span>
+              <span className="block text-body-sm text-slate-100">Prices include tax</span>
+              <span className="block text-caption text-slate-400">
+                Shoppers see “incl. tax” and the total is what the price says.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 p-3 transition hover:bg-ink-800/60">
+            <input type="radio" className="mt-1 accent-gold-400" checked={!inclusive} onChange={() => setInclusive(false)} />
+            <span>
+              <span className="block text-body-sm text-slate-100">Tax added at checkout</span>
+              <span className="block text-caption text-slate-400">
+                Shoppers see “+ tax at checkout” and tax is charged on goods and delivery.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
+        <Button type="submit" loading={mutation.isPending}>
+          Save delivery &amp; tax
+        </Button>
+      </form>
+    </Card>
   );
 }
 

@@ -36,6 +36,19 @@ export default {
           hover: role('primary-hover'),
         },
 
+        /* Large filled ink areas — the announcement strip and the closing
+           marketing band. Deliberately NOT `primary`: a control inverts on the
+           dark palette, but a full-width slab must go quiet instead of turning
+           into a near-white glare. See index.css. */
+        banner: {
+          DEFAULT: role('banner'),
+          fg: role('banner-fg'),
+        },
+        band: {
+          DEFAULT: role('band'),
+          fg: role('band-fg'),
+        },
+
         /* The legacy `gold` ramp. On light it resolves to a deep antique gold
            so that every inherited `text-gold-300` / `ring-gold-400` in the
            not-yet-redesigned pages stays legible instead of washing out. */
@@ -129,11 +142,11 @@ export default {
       },
 
       fontFamily: {
+        // The brand sheet's pairing: Poppins for the mark and headings, Inter
+        // for everything read at length. Poppins' geometric round bowls are
+        // what the wordmark is drawn from, so headings and logo agree.
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        // Archivo: a tight grotesk that holds up in uppercase at display sizes.
-        // Replaces Playfair Display — a serif reads heritage/luxury-boutique,
-        // not modern menswear.
-        display: ['Archivo', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Poppins', 'Inter', 'system-ui', 'sans-serif'],
       },
 
       /* ── Type scale ────────────────────────────────────────────────────
@@ -194,11 +207,40 @@ export default {
           from: { transform: 'translateY(100%)' },
           to: { transform: 'translateY(0)' },
         },
+        // Drawer entrances. A side panel should arrive from the edge it is
+        // anchored to — a generic fade-up reads as a card appearing on top of
+        // the page rather than a surface sliding in from off-screen.
+        'slide-in-right': { from: { transform: 'translateX(100%)' }, to: { transform: 'translateX(0)' } },
+        'slide-in-left': { from: { transform: 'translateX(-100%)' }, to: { transform: 'translateX(0)' } },
+        'slide-in-top': { from: { transform: 'translateY(-100%)' }, to: { transform: 'translateY(0)' } },
+        'slide-in-bottom': { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } },
+        // Dialogs settle in place instead of dropping in.
+        'scale-in': {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
         spin: { to: { transform: 'rotate(360deg)' } },
+        // NOTE: keyframes for the hand-written `.rc-*` classes are declared in
+        // index.css, NOT here. Tailwind only emits an `@keyframes` block when
+        // the matching `animate-*` utility is actually generated, so a keyframe
+        // added here for a plain CSS class would be silently dropped.
+        // Count badges (bag, wishlist). Overshoots then settles, so a number
+        // changing in the header actually catches the eye.
+        pop: {
+          '0%': { transform: 'scale(0.5)', opacity: '0' },
+          '60%': { transform: 'scale(1.18)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         'fade-up': 'fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both',
+        pop: 'pop 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-right': 'slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-left': 'slide-in-left 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-top': 'slide-in-top 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-bottom': 'slide-in-bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+        'scale-in': 'scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
       },
     },
   },

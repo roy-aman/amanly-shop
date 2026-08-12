@@ -1,9 +1,13 @@
-# Static host for the built SPA. Railway serves this container; the backend is a separate
-# service and is reached cross-origin via VITE_API_BASE_URL.
+# Static host for the built SPA, with Caddy proxying /api to the backend service.
 #
-# VITE_API_BASE_URL is a BUILD-time value, not a runtime one: Vite inlines import.meta.env into
-# the bundle. Changing it therefore requires a rebuild, not a restart — set it as a Railway
-# build variable, and expect a redeploy after any change.
+# The proxy is deliberate: the backend resolves which store a request belongs to
+# from the Host header, so the browser must talk to the shop's own domain and
+# never to the API's. See the Caddyfile and docs/storefront-api-guide.md §1.2.
+#
+# Consequently API_UPSTREAM is a RUNTIME variable (read by Caddy), not a build
+# argument. VITE_API_BASE_URL remains available as an escape hatch for a
+# deployment that genuinely cannot proxy — leave it unset for the normal case,
+# and remember Vite inlines it into the bundle, so setting it needs a rebuild.
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

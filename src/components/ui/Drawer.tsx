@@ -12,11 +12,14 @@ import { cn } from './cn';
  */
 export type DrawerSide = 'left' | 'right' | 'top' | 'bottom';
 
+// Position + the entrance that matches it. A drawer must arrive from the edge
+// it is anchored to; a shared fade-up reads as a card landing on the page
+// rather than a panel sliding in from off-screen.
 const SIDE_CLASSES: Record<DrawerSide, string> = {
-  left: 'inset-y-0 left-0 h-full w-[min(22rem,90vw)] border-r',
-  right: 'inset-y-0 right-0 h-full w-[min(22rem,90vw)] border-l',
-  top: 'inset-x-0 top-0 w-full max-h-[85vh] border-b',
-  bottom: 'inset-x-0 bottom-0 w-full max-h-[85vh] border-t',
+  left: 'inset-y-0 left-0 h-full w-[min(22rem,90vw)] border-r animate-slide-in-left',
+  right: 'inset-y-0 right-0 h-full w-[min(22rem,90vw)] border-l animate-slide-in-right',
+  top: 'inset-x-0 top-0 w-full max-h-[85vh] border-b animate-slide-in-top',
+  bottom: 'inset-x-0 bottom-0 w-full max-h-[85vh] border-t animate-slide-in-bottom',
 };
 
 export function Drawer({
@@ -44,7 +47,8 @@ export function Drawer({
         <Dialog.Overlay className="fixed inset-0 z-drawer bg-black/60 backdrop-blur-sm animate-fade-in" />
         <Dialog.Content
           className={cn(
-            'fixed z-drawer flex flex-col border-ink-700 bg-ink-900 shadow-lift animate-fade-in focus:outline-none',
+            // Entrance comes from SIDE_CLASSES — see the note there.
+            'fixed z-drawer flex flex-col border-ink-700 bg-ink-900 shadow-lift focus:outline-none',
             SIDE_CLASSES[side],
             className,
           )}
@@ -56,7 +60,7 @@ export function Drawer({
               {description && <Dialog.Description className="mt-1 text-sm text-slate-400">{description}</Dialog.Description>}
             </div>
             <Dialog.Close
-              className="z-overlay shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-ink-800 hover:text-slate-100"
+              className="z-overlay shrink-0 rounded-full p-1.5 text-slate-400 transition duration-200 ease-emphasized hover:bg-ink-800 hover:text-slate-100 active:scale-90"
               aria-label="Close"
             >
               <X className="h-5 w-5" />

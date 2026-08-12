@@ -29,10 +29,16 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm sm:items-center">
       <div className="absolute inset-0" onClick={onClose} aria-hidden />
-      <div className={cn('relative z-10 w-full animate-fade-in rounded-2xl border border-ink-700 bg-ink-900 shadow-lift', width)}>
+      {/* Settles in place rather than dropping in — a dialog that scales up from
+          the centre reads as the page focusing, not as a new page arriving. */}
+      <div className={cn('relative z-10 w-full animate-scale-in rounded-2xl border border-ink-700 bg-ink-900 shadow-lift', width)}>
         <div className="flex items-center justify-between border-b border-ink-700 px-5 py-4">
           <h2 className="text-base font-semibold text-slate-100">{title}</h2>
-          <button onClick={onClose} className="rounded p-1 text-slate-500 hover:text-slate-200" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="rounded-full p-1.5 text-slate-500 transition duration-200 ease-emphasized hover:bg-ink-800 hover:text-slate-200 active:scale-90"
+            aria-label="Close"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>

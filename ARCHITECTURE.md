@@ -2,8 +2,16 @@
 
 React 18 + TypeScript + Vite + Tailwind + React Router v6 + TanStack Query.
 SPA served by Vite in dev (proxy `/api` → :8080, so requests stay same-origin). In production
-`npm run build` emits a static `dist/` that Caddy serves as its own Railway service, calling the
-backend cross-origin at `VITE_API_BASE_URL`. See `README.md`.
+`npm run build` emits a static `dist/` that Caddy serves as its own Railway service, **proxying
+`/api/*` to the backend from the shop's own domain** (`API_UPSTREAM`). That proxy is load-bearing:
+one backend serves many shops and picks which one from the `Host` header, so calling the API's own
+origin from the browser would resolve every request to the fallback store. `VITE_API_BASE_URL`
+survives only as an escape hatch for clients that cannot proxy. See `README.md` and
+`docs/storefront-api-guide.md` §1.2.
+
+**This app is Amanly's storefront + admin, plus the platform console** (`/platform`,
+`PLATFORM_ADMIN` only) for managing the other shops on the platform — see
+`docs/platform-console-guide.md`.
 
 ## Golden rules for building pages
 
@@ -14,16 +22,29 @@ backend cross-origin at `VITE_API_BASE_URL`. See `README.md`.
 - Errors: `catch (e) { if (e instanceof ApiError) ... }`. For forms use `e.fieldErrorMap()`
   (record keyed by field name); otherwise `toast.error('Title', e.message)`.
 - Money: `money(amount, currency)`. Dates: `formatDate` / `formatDateTime` / `timeAgo`.
-- Theme: dark, gold accents. Use `text-slate-*`, `bg-ink-*`, `text-gold-*`, `border-ink-*`.
+- Theme: **light and dark, both live.** Always use the role tokens — `text-slate-*` (text),
+  `bg-ink-*` (surfaces), `border-ink-*`, `bg-primary`/`text-primary-fg` (actions),
+  `bg-banner`/`bg-band` (full-bleed ink areas). Never hard-code a colour or reach for a stock
+  Tailwind shade: the scale *names* are legacy, but every step resolves through a CSS variable
+  that flips with the palette, and a literal `bg-white`/`slate-900` silently will not.
+  - `ThemeProvider` (`@/context/ThemeContext`) is the **only** writer of the `dark` class on
+    `<html>`. Read state with `useTheme()`; never touch `classList` yourself.
+  - The storefront follows the shopper's choice (light / dark / system, persisted under
+    `rc_theme`, with a no-flash bootstrap inline in `index.html`).
+  - The consoles hold dark regardless, by calling `useDarkTheme()` — which registers a claim
+    with the provider rather than setting the class, so leaving `/admin` cannot wipe a
+    shopper's preference. They also get `.theme-console`, which restores the gold primary and
+    the ambient gold wash; the storefront in dark gets neither.
 - Icons: `lucide-react`.
 
 ## Exact module exports (source of truth)
 
 ### `@/lib/types` — types & enums
-Enums (string unions): `RoleName` = 'CUSTOMER'|'STAFF'|'ADMIN'; `UserStatus` = 'ACTIVE'|'LOCKED'|'DISABLED';
+Enums (string unions): `RoleName` = 'CUSTOMER'|'STAFF'|'ADMIN'|'PLATFORM_ADMIN' (the last is GLOBAL — the same account holds it at every store — and is never grantable through the admin user API); `UserStatus` = 'ACTIVE'|'LOCKED'|'DISABLED';
 `AuthProvider` = 'LOCAL'|'GOOGLE'; `ProductStatus` = 'DRAFT'|'ACTIVE'|'ARCHIVED';
 `OrderStatus` = 'PENDING'|'PROCESSING'|'SHIPPED'|'DELIVERED'|'CANCELLED';
-`OrderPaymentStatus` = 'PENDING'|'PAID'|'FAILED'|'REFUNDED'; `PaymentMethod` = 'CASH'|'UPI'|'RAZORPAY'.
+`OrderPaymentStatus` = 'PENDING'|'PAID'|'FAILED'|'PARTIALLY_REFUNDED'|'REFUNDED'; `PaymentMethod` = 'CASH'|'UPI'|'RAZORPAY';
+`StoreStatus` = 'ACTIVE'|'SUSPENDED'|'CLOSED' (a SUSPENDED/CLOSED store answers 503 `STORE_UNAVAILABLE` on its domain).
 Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), size, first, last, numberOfElements, empty};
 `UserResponse` {id,email,fullName,provider,status,roles:RoleName[],emailVerifiedAt,createdAt,updatedAt};
 `AuthResponse` {tokenType,accessToken,expiresInSeconds,refreshToken,user};
@@ -48,7 +69,7 @@ Brands & variants (WP-3.5): `BrandResponse` {id,name,slug,description:string|nul
 `ShippingDetails`/`ShippingAddressRequest` {name,phone?,addressLine1,addressLine2?,city,state?,postalCode,country};
 `OrderItemResponse` {id,productId,productName,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptions`?:string|null,unitPrice,quantity,subtotal} (WP-3.5 variant snapshot null for a variantless line);
 `PaymentAction` {provider,razorpayKeyId,razorpayOrderId,amountMinor,currency};
-`OrderResponse` {id,userId,status,paymentMethod,paymentStatus,`totalAmount`(payable),`subtotalAmount`(WP-P.6),`discountAmount`:number(0 when none, WP-3.4),`shippingAmount`(WP-P.6),`taxAmount`(WP-P.6),`taxRatePercent`(WP-P.6),`taxInclusive`:boolean(WP-P.6),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
+`OrderResponse` {id,`orderNumber`?:string|null,userId,status,paymentMethod,paymentStatus,`totalAmount`(payable),`subtotalAmount`(WP-P.6),`discountAmount`:number(0 when none, WP-3.4),`shippingAmount`(WP-P.6),`taxAmount`(WP-P.6),`taxRatePercent`(WP-P.6),`taxInclusive`:boolean(WP-P.6),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
   - **Money breakdown (WP-P.6).** All figures are placement-time snapshots — editing store settings never changes a placed order. The relationship depends on `taxInclusive`:
     `taxInclusive=false` → `total = subtotal - discount + shipping + tax` (tax added on top);
     `taxInclusive=true` → `total = subtotal - discount + shipping` (`taxAmount` is the portion already inside `total` — **do not add it again** when rendering).
@@ -56,7 +77,7 @@ Brands & variants (WP-3.5): `BrandResponse` {id,name,slug,description:string|nul
 `OrderSummaryResponse` {id,status,paymentMethod,totalAmount,currency,itemCount,shippingCity,shippingCountry,createdAt} (order LIST — NO discount fields);
 `PlaceOrderRequest` {shippingAddress,notes?,paymentMethod?,`couponCode`?(WP-3.4 — re-validated at placement; an invalid code REJECTS the order, never silently dropped)};
 `RazorpayVerifyRequest` {orderId,razorpayPaymentId,razorpayOrderId,razorpaySignature};
-`PublicStoreResponse` {name,currency,codEnabled,onlinePaymentEnabled,`shippingFlatAmount`(WP-P.6),`freeShippingThreshold`:number|null(WP-P.6, null = never free),`taxRatePercent`(WP-P.6),`pricesIncludeTax`:boolean(WP-P.6)};
+`PublicStoreResponse` {`slug`,name,currency,codEnabled,onlinePaymentEnabled,`shippingFlatAmount`(WP-P.6),`freeShippingThreshold`:number|null(WP-P.6, null = never free),`taxRatePercent`(WP-P.6),`pricesIncludeTax`:boolean(WP-P.6)};
   - Enough to render delivery cost and "free delivery over X" messaging before checkout, and to label prices "incl. tax" vs "+ tax at checkout". **There is no cart totals-preview endpoint yet** — the storefront must apply the same rules client-side (discounted subtotal ≥ threshold → free; tax on goods + shipping), and the placed `OrderResponse` remains authoritative.
 `StoreSettingsResponse` {id,slug,name,currency,status,codEnabled,onlinePaymentEnabled,razorpayKeyId,razorpayConfigured,whatsappEnabled};
 `UpdatePaymentSettingsRequest` {codEnabled,onlinePaymentEnabled,razorpayKeyId?,razorpayKeySecret?,razorpayWebhookSecret?};
@@ -93,7 +114,9 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
 ### `@/lib/http`
 `TokenStore` {save,getAccessToken,getRefreshToken,getUser,setUser,isExpired,isAuthenticated,clear};
 `class ApiError` {status:number, code:string, message:string, fieldViolations[], hasFieldErrors(), fieldErrorMap():Record<string,string>};
-`request<T>(method,url,{body,auth,retry,signal})`, `buildQuery(params)`. (Pages rarely call these directly — use api modules.)
+`request<T>(method,url,{body,auth,retry,signal})`, `requestWithStatus<T>(...)`:`{status,data}` (only for
+endpoints where two success codes mean different things — `POST /auth/login` answers 200 *or* 202),
+`buildQuery(params)`. (Pages rarely call these directly — use api modules.)
 
 ### `@/lib/format`
 `money(amount,currency='USD')`, `formatDate(iso)`, `formatDateTime(iso)`, `titleCase(s)`, `timeAgo(iso)`.
@@ -144,8 +167,32 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
   store currency (no currency field on the DTOs — use `getPublicStore().currency`); `changePct` is null when the
   previous period was 0 (render "—", never 0). `Dashboard.tsx` / `Reports.tsx` are built on these.
 
+### `@/api/platform` — platform surface (PLATFORM_ADMIN)
+`platformStores`.{list():StoreAdminSummaryResponse[] (NOT paginated), get(storeId), create(CreateStoreRequest),
+update(storeId,UpdateStoreRequest), updateEntitlements(storeId,UpdateStoreEntitlementsRequest)};
+`platformDomains`.{list(storeId), add(storeId,AddStoreDomainRequest), makePrimary(storeId,domainId), remove(storeId,domainId)};
+`platformAdmins`.{list(), grant(GrantPlatformAdminRequest), revoke(userId)}.
+  - **Entitlements are applied as sent** — load current values and submit the whole object, or omitted
+    fields are switched off. Turning off `customDomainAllowed` DETACHES every domain (the only
+    destructive withdrawal; warn first). Codes: `STORE_SLUG_EXISTS`, `DOMAIN_TAKEN`,
+    `CUSTOM_DOMAIN_NOT_ALLOWED`, `CANNOT_REMOVE_PRIMARY_DOMAIN`, `USER_NOT_FOUND`,
+    `CANNOT_REVOKE_OWN_PLATFORM_ADMIN`, `ADMIN_PASSWORD_REQUIRED`, `INVALID_OTP`.
+  - Domains are trusted, not DNS-verified, and no certificate is issued — never imply otherwise in UI.
+
+### `@/lib/totals` — money breakdown (WP-P.6)
+`orderTotals(order):MoneyBreakdown` (reads a PLACED order; `totalAmount` passes through untouched,
+`hasShipping` false for pre-WP-P.6 payloads so "unknown" is never rendered as "Free");
+`estimateCartTotals(subtotal,discount,store):MoneyBreakdown|null` (pre-placement ESTIMATE — null when the
+store published no rules); `amountToFreeShipping(discountedSubtotal,store)`; `taxLabel(store)`.
+Render placed orders with `@/components/OrderTotals`; never recompute a placed order's figures.
+
 ### Contexts
-`@/context/AuthContext` → `useAuth()`: {user, isAuthenticated, isStaff, isAdmin, loading, login(email,pw), register(email,name,pw), logout(), refreshUser(), setUser(u)}.
+`@/context/AuthContext` → `useAuth()`: {user, isAuthenticated, isStaff, isAdmin, `isPlatformAdmin`, `showsPlatformConsole`, `signedInVia`, loading, `login(email,pw,via?)`, `verifyLoginOtp(email,code,via?)`, register(email,name,pw), logout(), refreshUser(), setUser(u)}.
+  - `login` is TWO-ARMED: `{kind:'session'}` or `{kind:'otpRequired'}` (a 202 for a platform operator — nobody is signed in until `verifyLoginOtp`).
+  - **`isPlatformAdmin` vs `showsPlatformConsole`.** An operator is granted STAFF and ADMIN inside *every* store, so role alone cannot say whether to offer the platform console — `isStaff` matches them too. `via` records the door (`'store'` from /login and /register, `'platform'` from /admin/login), and `showsPlatformConsole` is role AND platform context. Guard routes on the role (`RequirePlatformAdmin`); decide what to OFFER with `showsPlatformConsole`. Persisted next to the tokens and cleared on logout; a token refresh never changes it.
+`@/context/ThemeContext` → `useTheme()`: {preference:'light'|'dark'|'system', setPreference(p), resolved:'light'|'dark', forcedByConsole, acquireForcedDark()}.
+  - **Sole owner of the `dark` class on `<html>`.** Console layouts call `useDarkTheme()` (`@/lib/useDarkTheme`), which registers a claim instead of writing the class — the previous add-on-mount/remove-on-unmount version silently reverted a shopper's dark choice on the way out of `/admin`. Claims are counted, so nested console layouts each release independently.
+  - `resolved` is what is on screen after the OS and any console claim; `preference` is what the shopper asked for. Render pickers off `preference`, colours off tokens.
 `@/context/CartContext` → `useCart()`: {cart, itemCount, loading, refresh(), setCart(c)}. Call `refresh()` after cart mutations.
 `@/context/WishlistContext` → `useWishlist()`: {ids:Set<string>, count, ready, isWishlisted(id), toggle(id), refresh()}
   (WP-3.3b). Loads wishlisted ids once for authenticated users (skips all network calls when logged out); `toggle`
@@ -157,7 +204,8 @@ Stats (WP-3.1a): `StatsMoneyMetric`/`StatsCountMetric` {current,previous,changeP
 
 ### UI kit `@/components/ui`
 Split into a `src/components/ui/` directory (one file per component) behind a barrel — import from `@/components/ui`
-only, never a deep path. Built to `docs/design-system.md` tokens; dark-theme only; every interactive element is
+only, never a deep path. Built entirely on the role tokens, so every component renders correctly in **both**
+palettes — light and dark are both live (see Theme above); every interactive element is
 keyboard-operable with the standard gold focus ring. Radix-backed components (marked ⚛) provide focus-trap/ARIA.
 A dev-only `/dev/kitchen-sink` route renders all of them in every variant (mounted only when `import.meta.env.DEV`;
 tree-shaken out of production).
@@ -201,7 +249,9 @@ New deps: `@radix-ui/react-{tabs,dropdown-menu,tooltip,dialog,accordion,alert-di
 `OrderStatusBadge`, `PaymentStatusBadge`, `ProductStatusBadge`, `UserStatusBadge` — each takes `{status}`.
 
 ### `@/components/guards`
-`RequireAuth`, `RequireStaff` (STAFF|ADMIN), `RequireAdmin` — used as route elements wrapping `<Outlet/>`.
+`RequireAuth`, `RequireStaff` (STAFF|ADMIN), `RequireAdmin`, `RequirePlatformAdmin` (PLATFORM_ADMIN —
+the platform console; an operator need not be a member of the current store) — used as route elements
+wrapping `<Outlet/>`.
 
 ### `@/components/WishlistButton` (WP-3.3b)
 Heart toggle backed by `useWishlist()`. Props `{productId, productName?, variant?:'overlay'|'inline', withLabel?,
@@ -252,6 +302,9 @@ Sales), `/admin/inventory`, `/admin/inventory/new`, `/admin/inventory/:id`,
 `/admin/categories`, `/admin/brands` (WP-3.5 — brand CRUD/deactivate, STAFF+ADMIN, sidebar under Catalog; no
 delete), `/admin/reviews` (WP-3.2b — review moderation, STAFF+ADMIN, sidebar under Catalog),
 `/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`, `/admin/forbidden`.
+Platform (in `PlatformLayout`, `RequirePlatformAdmin`): `/platform` stores list, `/platform/stores/:storeId`
+store detail (entitlements + domains), `/platform/operators`. Reached from the admin user menu, which
+shows the entry only to an operator.
 
 ## Layout & navigation chrome (WP-1.3)
 
@@ -265,7 +318,9 @@ The three layout shells own all site chrome; page bodies never render their own 
     a debounced **`SearchInput`** (desktop) that navigates to `/products?search=<q>`; a cart button showing
     `useCart().itemCount` that opens a **slide-out mini-cart `Drawer`** (reads `useCart()`, links to `/cart`
     and `/checkout`); an account **`DropdownMenu`** (login/register when logged out; account/orders/settings/
-    logout — and Admin console when `isStaff` — when logged in, via `useAuth()`).
+    logout — when logged in, via `useAuth()`). Above those, the console entries: **Manage store** (`/admin`, when
+    `isStaff`, labelled with the store name and Admin/Staff) and **Platform console** (`/platform`, only when
+    `showsPlatformConsole`). Management sits above the shopping links; the mobile drawer repeats both.
   - Mobile: a hamburger opens a left nav `Drawer` (search + nav + categories + account actions).
   - Footer: link columns (Shop / Account / Policies / Contact), a **newsletter input UI that is stubbed**
     (no endpoint until WP-6.4 — submit shows a "coming soon" toast, nothing is stored), placeholder social

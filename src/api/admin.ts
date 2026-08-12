@@ -30,6 +30,7 @@ import type {
   UpdatePaymentSettingsRequest,
   UpdateProductRequest,
   UpdateVariantRequest,
+  UpdateCommerceSettingsRequest,
   UpdateWhatsappSettingsRequest,
   UserResponse,
 } from '@/lib/types';
@@ -230,5 +231,11 @@ export const adminStore = {
   },
   updateWhatsapp(body: UpdateWhatsappSettingsRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/whatsapp-settings`, { body, auth: true });
+  },
+  /** Shipping and tax rules (WP-P.6). Applies to FUTURE orders only — placed
+   *  orders keep the figures snapshotted at placement. Every field is applied
+   *  as sent, so submit the loaded values, not a partial patch. */
+  updateCommerce(body: UpdateCommerceSettingsRequest): Promise<StoreSettingsResponse> {
+    return request('PUT', `${A}/store/commerce-settings`, { body, auth: true });
   },
 };

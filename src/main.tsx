@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import { WishlistProvider } from '@/context/WishlistContext';
@@ -25,19 +26,24 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <ToastProvider>
-          <AuthProvider>
-            <CartProvider>
-              <WishlistProvider>
-                <TooltipProvider>
-                  <ErrorBoundary>
-                    <App />
-                  </ErrorBoundary>
-                </TooltipProvider>
-              </WishlistProvider>
-            </CartProvider>
-          </AuthProvider>
-        </ToastProvider>
+        {/* Outermost of the app providers: it owns the `dark` class on <html>,
+            which every surface below (including portalled dialogs and toasts)
+            reads through CSS variables. */}
+        <ThemeProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <CartProvider>
+                <WishlistProvider>
+                  <TooltipProvider>
+                    <ErrorBoundary>
+                      <App />
+                    </ErrorBoundary>
+                  </TooltipProvider>
+                </WishlistProvider>
+              </CartProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

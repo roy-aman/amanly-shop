@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Clock, Heart, ShoppingBag, Tag, Trash2, Undo2, X } from 'lucide-react';
 import { addToCart, clearCart, removeCartItem, updateCartItem } from '@/api/cart';
+import { getPublicStore } from '@/api/store';
 import { addToWishlist } from '@/api/wishlist';
 import { validateCoupon } from '@/api/coupons';
 import { clearStoredCoupon, getStoredCoupon, setStoredCoupon } from '@/lib/couponStorage';
 import type { CartItemResponse, CartResponse, CouponPreviewResponse } from '@/lib/types';
 import { money } from '@/lib/format';
+import { amountToFreeShipping, estimateCartTotals } from '@/lib/totals';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useToast } from '@/context/ToastContext';
@@ -53,6 +56,9 @@ export default function Cart() {
   const { cart, loading, refresh, setCart } = useCart();
   const { refresh: refreshWishlist } = useWishlist();
   const toast = useToast();
+  // Shipping and tax rules for the pre-checkout estimate. Shares the cache key
+  // used across the app, so this rarely costs a request.
+  const storeQuery = useQuery({ queryKey: ['public-store'], queryFn: getPublicStore, staleTime: 5 * 60_000 });
 
   // Per-line in-flight guard (keyed by cartItemId — a product can appear as several
   // variant lines): disables that row's controls to prevent double-submits and keeps
@@ -246,6 +252,13 @@ export default function Cart() {
   const discountAmount = appliedCoupon?.discountAmount ?? 0;
   const payableTotal = appliedCoupon?.total ?? cart?.totalAmount;
 
+  // Estimated delivery and tax, from the store's published rules. There is no
+  // totals-preview endpoint, so this is the storefront doing the arithmetic —
+  // null when the store has not published the rules, which keeps the panel
+  // honest instead of guessing. The placed order is what actually counts.
+  const estimate = estimateCartTotals(cart?.totalAmount ?? 0, discountAmount, storeQuery.data);
+  const toFreeShipping = amountToFreeShipping((cart?.totalAmount ?? 0) - discountAmount, storeQuery.data);
+
   if (items.length === 0) {
     return (
       <div>
@@ -396,10 +409,28 @@ export default function Cart() {
                 </div>
               )}
               <div className="flex items-center justify-between">
-                <dt className="text-slate-400">Shipping</dt>
-                <dd className="text-slate-500">Calculated at checkout</dd>
+                <dt className="text-slate-400">Delivery</dt>
+                <dd className={estimate?.shipping === 0 ? 'text-success-300' : 'text-slate-100'}>
+                  {estimate ? (estimate.shipping === 0 ? 'Free' : money(estimate.shipping, currency)) : (
+                    <span className="text-slate-500">Calculated at checkout</span>
+                  )}
+                </dd>
               </div>
+              {estimate?.hasTax && !estimate.taxInclusive && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-400">Tax ({estimate.taxRatePercent}%)</dt>
+                  <dd className="text-slate-100">{money(estimate.tax, currency)}</dd>
+                </div>
+              )}
             </dl>
+
+            {/* "Spend X more" only appears when it is actually reachable —
+                a threshold the cart has already cleared is not news. */}
+            {toFreeShipping != null && (
+              <p className="mt-4 border border-ink-600 px-3 py-2 text-caption text-slate-300">
+                Add {money(toFreeShipping, currency)} more for free delivery.
+              </p>
+            )}
 
             {/* ── Coupon entry (WP-3.4) ─────────────────────────────────────
                 Preview is advisory (always HTTP 200 — read `valid`); the real
@@ -460,10 +491,16 @@ export default function Cart() {
             </div>
 
             <div className="mt-6 flex items-baseline justify-between border-t border-ink-600 pt-6">
-              <span className="text-body-sm text-slate-400">Total</span>
-              <span className="text-h3 text-slate-100">{money(payableTotal, currency)}</span>
+              <span className="text-body-sm text-slate-400">{estimate ? 'Estimated total' : 'Total'}</span>
+              <span className="text-h3 text-slate-100">{money(estimate?.total ?? payableTotal, currency)}</span>
             </div>
-            <p className="mt-2 text-caption text-slate-500">Shipping &amp; taxes calculated at checkout.</p>
+            <p className="mt-2 text-caption text-slate-500">
+              {estimate
+                ? estimate.taxInclusive && estimate.hasTax
+                  ? `Includes ${money(estimate.tax, currency)} tax. Confirmed at checkout.`
+                  : 'Confirmed at checkout.'
+                : 'Shipping & taxes calculated at checkout.'}
+            </p>
 
             <div className="mt-6 space-y-3">
               <LinkButton to="/checkout" fullWidth size="xl">

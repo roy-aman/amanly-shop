@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Boxes, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Boxes, Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
 import { adminCategories, adminProducts, adminProductVariants } from '@/api/admin';
 import { listBrands } from '@/api/catalog';
 import { ApiError } from '@/lib/http';
+import { AiImageStudio, useAiQuota } from '@/components/admin/AiImageStudio';
 import { money } from '@/lib/format';
 import type {
   CreateProductRequest,
@@ -942,6 +943,9 @@ function ImagesManager({ productId }: { productId: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [form, setForm] = useState({ url: '', altText: '', sortOrder: '0', isPrimary: false });
+  const [studioOpen, setStudioOpen] = useState(false);
+  // Asked for up front so the button is hidden rather than offered and refused.
+  const aiQuota = useAiQuota();
 
   const productQ = useQuery({
     queryKey: ['admin', 'product', productId],
@@ -973,7 +977,14 @@ function ImagesManager({ productId }: { productId: string }) {
 
   return (
     <Card className="mt-6 space-y-4 p-5">
-      <h2 className="text-sm font-semibold text-slate-200">Images</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-slate-200">Images</h2>
+        {aiQuota.data?.allowed && (
+          <Button type="button" size="sm" variant="outline" onClick={() => setStudioOpen(true)}>
+            <Sparkles className="h-4 w-4" /> Generate with AI
+          </Button>
+        )}
+      </div>
 
       {images.length === 0 ? (
         <p className="text-sm text-slate-500">No images yet.</p>
@@ -1000,6 +1011,25 @@ function ImagesManager({ productId }: { productId: string }) {
           ))}
         </div>
       )}
+
+      {/* Prompts are drafted from the SAVED product, so the model is told the
+          real category, brand and name rather than whatever is in the form. */}
+      <AiImageStudio
+        open={studioOpen}
+        onClose={() => setStudioOpen(false)}
+        context={{ productId }}
+        closeOnUse={false}
+        onUse={(url, view) =>
+          addMutation.mutate({
+            url,
+            altText: view ? `${view.charAt(0)}${view.slice(1).toLowerCase()} view` : null,
+            sortOrder: images.length,
+            // The first image a product gets becomes its thumbnail; later ones must not
+            // silently steal that role.
+            isPrimary: images.length === 0,
+          })
+        }
+      />
 
       <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Add image</h3>

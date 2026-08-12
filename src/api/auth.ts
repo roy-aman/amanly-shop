@@ -1,10 +1,39 @@
-import { request, TokenStore } from '@/lib/http';
-import type { AuthResponse } from '@/lib/types';
+import { request, requestWithStatus, TokenStore } from '@/lib/http';
+import type { AuthResponse, LoginResult, OtpChallengeResponse } from '@/lib/types';
 
 const P = '/api/v1/auth';
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
-  const data = await request<AuthResponse>('POST', `${P}/login`, { body: { email, password } });
+/**
+ * Sign in. Two outcomes, distinguished by STATUS CODE rather than body shape:
+ *
+ *   200 → a session; tokens are stored and `kind` is `'session'`.
+ *   202 → the account holds PLATFORM_ADMIN, so a password alone is not enough
+ *         (their credential reaches every merchant). No tokens exist yet —
+ *         finish with {@link verifyLoginOtp}.
+ *
+ * Ordinary customers never see 202, but the same form posts both, so callers
+ * must handle each arm. See docs/platform-console-guide.md §2.
+ */
+export async function login(email: string, password: string): Promise<LoginResult> {
+  const res = await requestWithStatus<AuthResponse | OtpChallengeResponse>('POST', `${P}/login`, {
+    body: { email, password },
+  });
+  if (res.status === 202) {
+    return { kind: 'otpRequired', challenge: res.data as OtpChallengeResponse };
+  }
+  const auth = res.data as AuthResponse;
+  TokenStore.save(auth);
+  return { kind: 'session', auth };
+}
+
+/**
+ * Second step of a platform operator's sign-in.
+ *
+ * A wrong, expired or already-spent code all come back as `401 INVALID_OTP` —
+ * identical on purpose, so do not try to tell the user which it was.
+ */
+export async function verifyLoginOtp(email: string, code: string): Promise<AuthResponse> {
+  const data = await request<AuthResponse>('POST', `${P}/login/verify-otp`, { body: { email, code } });
   TokenStore.save(data);
   return data;
 }

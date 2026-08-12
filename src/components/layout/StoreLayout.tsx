@@ -5,16 +5,18 @@ import {
   ChevronDown,
   Heart,
   Instagram,
+  LayoutDashboard,
   LogOut,
   Menu,
   Package,
   Search,
-  Settings,
+  ShieldCheck,
   ShoppingBag,
   User,
   X,
   Youtube,
 } from 'lucide-react';
+import { ThemeSegmented, ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -32,6 +34,7 @@ import {
   DropdownMenuSeparator,
   EmptyState,
   LinkButton,
+  AmanlyMark,
   Wordmark,
 } from '@/components/ui';
 
@@ -52,7 +55,7 @@ const SOCIALS = [
 const PAYMENT_METHODS = ['Visa', 'Mastercard', 'UPI', 'Razorpay', 'Cash on delivery'];
 
 export default function StoreLayout() {
-  const { user, isAuthenticated, isStaff, logout } = useAuth();
+  const { user, isAuthenticated, isStaff, isAdmin, showsPlatformConsole, logout } = useAuth();
   const { cart, itemCount } = useCart();
   const { count: wishlistCount } = useWishlist();
   const toast = useToast();
@@ -130,7 +133,8 @@ export default function StoreLayout() {
   }
 
   const iconButton =
-    'relative flex h-11 w-11 items-center justify-center rounded-full text-slate-200 transition hover:bg-ink-800 hover:text-slate-100';
+    'relative flex h-11 w-11 items-center justify-center rounded-full text-slate-200 ' +
+    'transition duration-200 ease-emphasized hover:bg-ink-800 hover:text-slate-100 active:scale-90';
 
   return (
     <div className="flex min-h-full flex-col">
@@ -145,18 +149,29 @@ export default function StoreLayout() {
           A brand line, not a promotion. The public store endpoint exposes no
           shipping threshold, and inventing "Free delivery over ₹X" would be
           stating a number the backend cannot back up. */}
-      <p className="bg-primary px-4 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-primary-fg">
+      {/* `banner`, not `primary`: this is a filled strip pinned across the top
+          of every page, and on the dark palette a primary-coloured one would
+          invert into a near-white glare. See index.css. */}
+      <p className="bg-banner px-4 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-banner-fg">
         {BRAND_TAGLINE}
       </p>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header
         className={cn(
-          'sticky top-0 z-header border-b bg-ink-950/90 backdrop-blur-lg transition-colors duration-300',
-          scrolled ? 'border-ink-700' : 'border-transparent',
+          'sticky top-0 z-header border-b bg-ink-950/80 backdrop-blur-xl transition-all duration-300 ease-emphasized',
+          scrolled ? 'border-ink-700 shadow-card' : 'border-transparent',
         )}
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6 lg:px-8">
+        {/* The bar tightens by 8px once the page moves. Small enough that nobody
+            consciously notices it, large enough that the header feels attached
+            to the scroll rather than merely pinned on top of it. */}
+        <div
+          className={cn(
+            'mx-auto flex max-w-7xl items-center gap-2 px-4 transition-[height] duration-300 ease-emphasized sm:px-6 lg:px-8',
+            scrolled ? 'h-14' : 'h-16',
+          )}
+        >
           <button
             onClick={() => setMobileOpen(true)}
             className={cn(iconButton, '-ml-2 md:hidden')}
@@ -165,7 +180,12 @@ export default function StoreLayout() {
             <Menu className="h-5 w-5" />
           </button>
 
-          <Link to="/" className="shrink-0 md:pr-6" aria-label={`${storeName} home`}>
+          <Link
+            to="/"
+            className="group flex shrink-0 items-center gap-2.5 md:pr-6"
+            aria-label={`${storeName} home`}
+          >
+            <AmanlyMark className="h-7 w-7 text-slate-100 transition-transform duration-500 ease-emphasized group-hover:rotate-[-6deg] group-hover:scale-110" />
             <Wordmark name={storeName} size="lg" />
           </Link>
 
@@ -182,7 +202,10 @@ export default function StoreLayout() {
                   )
                 }
               >
-                {n.label}
+                {/* The rule belongs under the word, not under the tap target —
+                    `rc-link` on the NavLink itself would draw it across the
+                    horizontal padding too. */}
+                <span className="rc-link">{n.label}</span>
               </NavLink>
             ))}
 
@@ -209,6 +232,12 @@ export default function StoreLayout() {
               <Search className="h-5 w-5" />
             </button>
 
+            {/* In the header rather than the footer: this is a comfort control,
+                and someone squinting at a too-bright page should not have to
+                scroll to the bottom of it to find the fix. Hidden on the
+                narrowest screens, where the drawer carries it instead. */}
+            <ThemeToggle className={cn(iconButton, 'hidden sm:flex')} />
+
             {isAuthenticated && (
               <Link to="/account/wishlist" className={cn(iconButton, 'hidden sm:flex')} aria-label="Wishlist">
                 <Heart className="h-5 w-5" />
@@ -228,6 +257,9 @@ export default function StoreLayout() {
             <AccountMenu
               isAuthenticated={isAuthenticated}
               isStaff={isStaff}
+              isAdmin={isAdmin}
+              showsPlatformConsole={showsPlatformConsole}
+              storeName={storeName}
               userLabel={user?.fullName || user?.email}
               wishlistCount={wishlistCount}
               onLogout={handleLogout}
@@ -251,7 +283,7 @@ export default function StoreLayout() {
                   <div key={root.id}>
                     <Link
                       to={`/products?categoryId=${root.id}`}
-                      className="text-overline uppercase text-slate-500 transition-colors hover:text-slate-100"
+                      className="rc-link text-overline uppercase text-slate-500 transition-colors hover:text-slate-100"
                     >
                       {root.name}
                     </Link>
@@ -261,7 +293,7 @@ export default function StoreLayout() {
                           <li key={child.id}>
                             <Link
                               to={`/products?categoryId=${child.id}`}
-                              className="text-body-sm text-slate-300 transition-colors hover:text-slate-100"
+                              className="inline-block text-body-sm text-slate-300 transition-transform duration-300 ease-emphasized hover:translate-x-1 hover:text-slate-100"
                             >
                               {child.name}
                             </Link>
@@ -296,7 +328,10 @@ export default function StoreLayout() {
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-12">
             <div className="lg:col-span-5">
-              <Wordmark name={storeName} size="xl" />
+              <div className="flex items-center gap-3">
+                <AmanlyMark className="h-9 w-9 text-slate-100" />
+                <Wordmark name={storeName} size="xl" />
+              </div>
               <p className="mt-4 max-w-sm text-body text-slate-400">
                 {BRAND_TAGLINE} {BRAND_DESCRIPTION} Chosen for fit, fabric, and how they wear over time.
               </p>
@@ -427,13 +462,18 @@ export default function StoreLayout() {
             {isAuthenticated ? (
               <div className="flex flex-col">
                 {[
+                  // Same order as the desktop menu — management first for whoever
+                  // runs the shop, then the shopping links.
+                  ...consoleEntries({ isStaff, isAdmin, showsPlatformConsole, storeName }).map((e) => ({
+                    to: e.to,
+                    label: `${e.label} · ${e.detail}`,
+                  })),
                   { to: '/account', label: 'Account' },
                   { to: '/orders', label: 'Orders' },
                   {
                     to: '/account/wishlist',
                     label: `Wishlist${wishlistCount > 0 ? ` (${wishlistCount})` : ''}`,
                   },
-                  ...(isStaff ? [{ to: '/admin', label: 'Admin console' }] : []),
                 ].map((l) => (
                   <Link
                     key={l.to}
@@ -465,6 +505,10 @@ export default function StoreLayout() {
               </div>
             )}
           </div>
+
+          {/* A segmented control rather than the header's dropdown: opening a
+              menu on top of an already-open drawer is a second layer to dismiss. */}
+          <ThemeSegmented className="mt-8 border-t border-ink-700 pt-6" />
         </div>
       </Drawer>
 
@@ -541,7 +585,13 @@ export default function StoreLayout() {
 /** Count indicator on the bag/wishlist icons. */
 function CountDot({ value }: { value: number }) {
   return (
-    <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-fg">
+    // `key={value}` remounts the badge whenever the count changes, which
+    // restarts the animation — so adding to the bag visibly registers up in the
+    // header instead of the number silently ticking over.
+    <span
+      key={value}
+      className="absolute right-1.5 top-1.5 flex h-4 min-w-4 animate-pop items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-fg ring-2 ring-ink-950"
+    >
       {value > 99 ? '99+' : value}
     </span>
   );
@@ -597,9 +647,53 @@ function SearchOverlay({ onClose, onSearch }: { onClose: () => void; onSearch: (
   );
 }
 
+/**
+ * What this person may run from the storefront, in the order they should see it.
+ *
+ * A platform operator is granted ADMIN and STAFF inside *every* store, so an
+ * `isStaff` test matches them too — which is correct (they really can run this
+ * shop) but is not where they belong by default. Both entries are offered, with
+ * the platform one named for what it reaches.
+ */
+function consoleEntries({
+  isStaff,
+  isAdmin,
+  showsPlatformConsole,
+  storeName,
+}: {
+  isStaff: boolean;
+  isAdmin: boolean;
+  showsPlatformConsole: boolean;
+  storeName: string;
+}) {
+  const entries: { to: string; label: string; detail: string; icon: typeof LayoutDashboard }[] = [];
+  if (isStaff) {
+    entries.push({
+      to: '/admin',
+      label: 'Manage store',
+      // The console shows a staff member less than it shows an admin, so naming
+      // the role here sets the expectation before they arrive.
+      detail: `${storeName} · ${isAdmin ? 'Admin' : 'Staff'}`,
+      icon: LayoutDashboard,
+    });
+  }
+  if (showsPlatformConsole) {
+    entries.push({
+      to: '/platform',
+      label: 'Platform console',
+      detail: 'Every store on the platform',
+      icon: ShieldCheck,
+    });
+  }
+  return entries;
+}
+
 function AccountMenu({
   isAuthenticated,
   isStaff,
+  isAdmin,
+  showsPlatformConsole,
+  storeName,
   userLabel,
   wishlistCount,
   onLogout,
@@ -607,11 +701,16 @@ function AccountMenu({
 }: {
   isAuthenticated: boolean;
   isStaff: boolean;
+  isAdmin: boolean;
+  showsPlatformConsole: boolean;
+  storeName: string;
   userLabel?: string;
   wishlistCount: number;
   onLogout: () => void;
   className: string;
 }) {
+  const consoles = consoleEntries({ isStaff, isAdmin, showsPlatformConsole, storeName });
+
   return (
     <DropdownMenu
       align="end"
@@ -625,6 +724,22 @@ function AccountMenu({
         <>
           <DropdownMenuLabel>{userLabel}</DropdownMenuLabel>
           <DropdownMenuSeparator />
+
+          {/* Above the shopping links, not below them: someone who runs this shop
+              opened this menu to get to work, not to check their wishlist. */}
+          {consoles.map((entry) => (
+            <DropdownMenuItem key={entry.to} asChild>
+              <Link to={entry.to}>
+                <entry.icon className="h-4 w-4 text-brand-ink" />
+                <span className="min-w-0">
+                  <span className="block truncate">{entry.label}</span>
+                  <span className="block truncate text-caption text-slate-500">{entry.detail}</span>
+                </span>
+              </Link>
+            </DropdownMenuItem>
+          ))}
+          {consoles.length > 0 && <DropdownMenuSeparator />}
+
           <DropdownMenuItem asChild>
             <Link to="/account">
               <User className="h-4 w-4" /> Account
@@ -643,21 +758,6 @@ function AccountMenu({
               )}
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to="/account/settings">
-              <Settings className="h-4 w-4" /> Settings
-            </Link>
-          </DropdownMenuItem>
-          {isStaff && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/admin">
-                  <Settings className="h-4 w-4" /> Admin console
-                </Link>
-              </DropdownMenuItem>
-            </>
-          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem destructive onSelect={onLogout}>
             <LogOut className="h-4 w-4" /> Log out
@@ -694,7 +794,10 @@ function FooterColumn({ title, links }: { title: string; links: FooterLink[] }) 
         {links.map((l) => (
           <li key={l.label}>
             {l.to ? (
-              <Link to={l.to} className="text-body-sm text-slate-400 transition-colors hover:text-slate-100">
+              <Link
+                to={l.to}
+                className="rc-link inline-block text-body-sm text-slate-400 transition-colors hover:text-slate-100"
+              >
                 {l.label}
               </Link>
             ) : (

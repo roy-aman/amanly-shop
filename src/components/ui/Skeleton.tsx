@@ -7,7 +7,7 @@ import { cn } from './cn';
  * both the light storefront and the dark console.
  */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-md bg-ink-800', className)} aria-hidden />;
+  return <div className={cn('rc-shimmer rounded-lg bg-ink-850', className)} aria-hidden />;
 }
 
 /** N lines of shimmering text; the last line is shortened for a natural look. */

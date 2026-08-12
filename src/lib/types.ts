@@ -5,13 +5,18 @@
    =================================================================== */
 
 // ── Enums (verbatim backend constants) ────────────────────────────────
-export type RoleName = 'CUSTOMER' | 'STAFF' | 'ADMIN';
+// `PLATFORM_ADMIN` is the platform-operator role. It is GLOBAL (the same account
+// holds it at every store) while every other role is per store, so it is the one
+// role that may be read from the session at any store's domain — see
+// docs/platform-console-guide.md §2.3.
+export type RoleName = 'CUSTOMER' | 'STAFF' | 'ADMIN' | 'PLATFORM_ADMIN';
 export type UserStatus = 'ACTIVE' | 'LOCKED' | 'DISABLED';
 export type AuthProvider = 'LOCAL' | 'GOOGLE';
 export type ProductStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 export type OrderStatus = 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
-export type OrderPaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+export type OrderPaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
 export type PaymentMethod = 'CASH' | 'UPI' | 'RAZORPAY';
+export type StoreStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
 
 // ── Error envelope ────────────────────────────────────────────────────
 export interface FieldViolation {
@@ -73,6 +78,9 @@ export interface CategoryResponse {
   depth: number;
   sortOrder: number;
   active: boolean;
+  imageUrl: string | null;
+  imageAltText: string | null;
+  bannerUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,6 +90,10 @@ export interface CategoryTreeResponse {
   name: string;
   slug: string;
   sortOrder: number;
+  // Carried on the tree so the home page can draw category tiles without a
+  // second round trip per category just to find out what picture to show.
+  imageUrl: string | null;
+  imageAltText: string | null;
   children: CategoryTreeResponse[];
 }
 
@@ -283,12 +295,18 @@ export interface CreateCategoryRequest {
   slug: string;
   description?: string | null;
   parentId?: string | null;
+  imageUrl?: string | null;
+  imageAltText?: string | null;
+  bannerUrl?: string | null;
 }
 export interface UpdateCategoryRequest {
   name: string;
   description?: string | null;
   sortOrder?: number | null;
   active?: boolean | null;
+  imageUrl?: string | null;
+  imageAltText?: string | null;
+  bannerUrl?: string | null;
 }
 
 // ── Cart ──────────────────────────────────────────────────────────────
@@ -354,14 +372,32 @@ export interface PaymentAction {
 
 export interface OrderResponse {
   id: string;
+  /** Human-facing reference (e.g. "AM-1042"). Optional so pre-WP-P.6 cached
+   *  payloads still compile; fall back to a shortened `id` when absent. */
+  orderNumber?: string | null;
   userId: string;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: OrderPaymentStatus;
-  /** Amount payable AFTER any coupon discount (subtotal − discountAmount). */
+  /** The amount actually payable — complete, including shipping and (when
+   *  `taxInclusive`) tax. Always render this figure rather than re-deriving it. */
   totalAmount: number;
+  /** Goods total before discount, shipping and tax (WP-P.6). Optional: older
+   *  cached payloads predate it, so read it through `orderTotals()`. */
+  subtotalAmount?: number;
   /** Coupon discount applied at placement; 0 when no coupon was used (WP-3.4). */
   discountAmount: number;
+  /** Delivery charged at placement; 0 when the order qualified for free
+   *  delivery or the store charges none (WP-P.6). */
+  shippingAmount?: number;
+  /** Tax on the order. When `taxInclusive` is true this is the portion ALREADY
+   *  inside `totalAmount` — adding it again double-counts (WP-P.6). */
+  taxAmount?: number;
+  /** Rate snapshotted at placement, so editing store settings never rewrites a
+   *  placed order's figures (WP-P.6). */
+  taxRatePercent?: number;
+  /** Whether displayed prices already contain the tax (WP-P.6). */
+  taxInclusive?: boolean;
   /** Coupon code applied at placement; null when none was used (WP-3.4). */
   couponCode: string | null;
   currency: string;
@@ -403,11 +439,29 @@ export interface RazorpayVerifyRequest {
 }
 
 // ── Store ─────────────────────────────────────────────────────────────
+/**
+ * `GET /api/v1/store` — the bootstrap call. The backend picks WHICH store this
+ * describes from the request's Host header, so nothing here may be hardcoded.
+ *
+ * The commerce fields (WP-P.6) are what let the storefront quote delivery and
+ * label tax before an order exists. There is no cart totals-preview endpoint:
+ * any pre-checkout figure is the storefront applying these rules itself, and
+ * the placed `OrderResponse` stays authoritative.
+ */
 export interface PublicStoreResponse {
+  /** Tenant key. Namespaces anything this browser persists for this store. */
+  slug: string;
   name: string;
   currency: string;
   codEnabled: boolean;
   onlinePaymentEnabled: boolean;
+  /** Flat delivery charge applied when the order is below the threshold. */
+  shippingFlatAmount?: number;
+  /** Discounted subtotal at or above this ships free. `null` = never free. */
+  freeShippingThreshold?: number | null;
+  taxRatePercent?: number;
+  /** true → shelf prices already include tax; false → tax is added at checkout. */
+  pricesIncludeTax?: boolean;
 }
 
 export interface StoreSettingsResponse {
@@ -415,12 +469,33 @@ export interface StoreSettingsResponse {
   slug: string;
   name: string;
   currency: string;
-  status: string;
+  status: StoreStatus;
   codEnabled: boolean;
   onlinePaymentEnabled: boolean;
   razorpayKeyId: string | null;
   razorpayConfigured: boolean;
   whatsappEnabled: boolean;
+  /** Commerce rules (WP-P.6) — same figures the storefront reads from /store. */
+  shippingFlatAmount?: number;
+  freeShippingThreshold?: number | null;
+  taxRatePercent?: number;
+  pricesIncludeTax?: boolean;
+}
+
+/**
+ * `PUT /api/v1/admin/store/commerce-settings` (ADMIN).
+ *
+ * Applies to FUTURE orders only — placed orders keep their snapshot. Every
+ * field is applied as sent, so load the current values before submitting.
+ */
+export interface UpdateCommerceSettingsRequest {
+  shippingFlatAmount: number;
+  /** null = never free. */
+  freeShippingThreshold?: number | null;
+  taxRatePercent: number;
+  pricesIncludeTax: boolean;
+  /** Days a delivered order stays returnable. null = returns disabled. */
+  returnWindowDays?: number | null;
 }
 
 export interface UpdatePaymentSettingsRequest {
@@ -702,4 +777,302 @@ export interface UpdateCouponRequest {
   maxRedemptions?: number | null;
   perUserLimit?: number | null;
   active: boolean;
+}
+
+// ── Two-step sign-in for platform operators ───────────────────────────
+// Mirrors POST /api/v1/auth/login, which answers with EITHER shape:
+//   200 → AuthResponse            ordinary user, session issued
+//   202 → OtpChallengeResponse    correct password, now prove it's you
+// Branch on the STATUS CODE, not on which fields happen to be present — the
+// same form posts both outcomes. See docs/platform-console-guide.md §2.
+export interface OtpChallengeResponse {
+  status: 'OTP_REQUIRED';
+  message: string;
+  /** DEV ONLY. Non-null only while `app.auth.expose-verification-otp` is on
+   *  (barred from production by a startup guard) because outbound email is not
+   *  wired up yet. Treat as a convenience for prefilling; the typed input must
+   *  remain the real path. */
+  otp?: string | null;
+}
+
+/** Discriminated result of `login()` — the caller must handle both arms. */
+export type LoginResult =
+  | { kind: 'session'; auth: AuthResponse }
+  | { kind: 'otpRequired'; challenge: OtpChallengeResponse };
+
+export interface VerifyLoginOtpRequest {
+  email: string;
+  code: string;
+}
+
+// ── Platform surface (PLATFORM_ADMIN) ─────────────────────────────────
+// Mirrors com.royalcommerce.application.platform.dto.*. Not part of the
+// storefront: these endpoints manage the OTHER stores on the platform.
+
+/**
+ * One store as the platform sees it. Note the two families of flag:
+ * `*Configured` is what actually works (the merchant did their setup);
+ * `*Allowed` is what the platform permits. They differ whenever a merchant
+ * has not configured a capability they are entitled to — an operator
+ * debugging "why can't they take payments" needs both.
+ */
+export interface StoreAdminSummaryResponse {
+  id: string;
+  slug: string;
+  name: string;
+  status: StoreStatus;
+  currency: string;
+  codEnabled: boolean;
+  onlinePaymentConfigured: boolean;
+  whatsappConfigured: boolean;
+  // ── Entitlements ──
+  onlinePaymentsAllowed: boolean;
+  whatsappNotificationsAllowed: boolean;
+  whatsappCommerceAllowed: boolean;
+  emailNotificationsAllowed: boolean;
+  marketingEmailAllowed: boolean;
+  customDomainAllowed: boolean;
+  imageUploadAllowed: boolean;
+  aiImageGenerationAllowed: boolean;
+  /** Max STAFF/ADMIN members. null = unlimited. Never send 0. */
+  maxStaffSeats: number | null;
+  maxImageUploads: number | null;
+  maxAiImageGenerations: number | null;
+  createdAt: string;
+}
+
+/** `adminEmail` + `adminPassword` also create the store's first ADMIN. Without
+ *  one the store cannot be signed into and is inert, so the UI pushes for it. */
+export interface CreateStoreRequest {
+  slug: string;
+  name: string;
+  currency?: string;
+  /** Supplying a domain also grants the custom-domain entitlement. */
+  customDomain?: string | null;
+  adminEmail?: string | null;
+  adminFullName?: string | null;
+  adminPassword?: string | null;
+}
+
+/** `slug` is immutable — it appears in URLs and may be referenced by DNS. */
+export interface UpdateStoreRequest {
+  name?: string | null;
+  status?: StoreStatus | null;
+}
+
+/**
+ * A PUT in PATCH's clothing: every field is applied as given, so send the whole
+ * object or you silently switch capabilities off.
+ */
+export interface UpdateStoreEntitlementsRequest {
+  onlinePaymentsAllowed: boolean;
+  whatsappNotificationsAllowed: boolean;
+  whatsappCommerceAllowed: boolean;
+  emailNotificationsAllowed: boolean;
+  marketingEmailAllowed: boolean;
+  customDomainAllowed: boolean;
+  imageUploadAllowed: boolean;
+  aiImageGenerationAllowed: boolean;
+  maxStaffSeats?: number | null;
+  maxImageUploads?: number | null;
+  maxAiImageGenerations?: number | null;
+}
+
+export interface StoreDomainResponse {
+  id: string;
+  hostname: string;
+  /** Exactly one per store: the canonical address order email and reset links
+   *  point at. Cannot be removed while other domains remain. */
+  primary: boolean;
+  createdAt: string;
+}
+
+/** Hostnames are normalised server-side ("HTTPS://NovaSports.in/shop " →
+ *  "novasports.in"), so a pasted URL is accepted — show what was stored. */
+export interface AddStoreDomainRequest {
+  hostname: string;
+  makePrimary?: boolean;
+}
+
+export interface PlatformAdminResponse {
+  userId: string;
+  email: string;
+  fullName: string;
+  since: string;
+}
+
+/** Appoints an EXISTING account. 404 USER_NOT_FOUND means "ask them to sign up
+ *  first", not "no such person". */
+export interface GrantPlatformAdminRequest {
+  email: string;
+}
+
+// ── Platform: recorded failures ───────────────────────────────────────
+/** Where a failure was caught. Background sources carry no request, so the HTTP
+ *  fields below are null for them. */
+export type ErrorSource = 'HTTP' | 'SCHEDULED' | 'ASYNC' | 'EMAIL';
+
+/** One distinct failure, not one occurrence — `occurrences` counts how many times
+ *  it has happened. Rejected requests (bad password, forbidden, validation) are
+ *  never recorded, so everything here is something that actually broke. */
+export interface ErrorEventResponse {
+  id: string;
+  /** Quotable code, e.g. ERR-7K4QP2X9, also returned to the caller in the 500. */
+  reference: string;
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  source: ErrorSource;
+  storeId: string | null;
+  httpMethod: string | null;
+  path: string | null;
+  status: number | null;
+  exceptionClass: string;
+  message: string | null;
+  resolved: boolean;
+  /** Muted issues are no longer recorded at all; a recurrence does NOT unmute them. */
+  muted: boolean;
+}
+
+/** No request body and no headers, deliberately: those carry passwords and bearer
+ *  tokens. `queryString` is present with credential-looking values masked. */
+export interface ErrorEventDetailResponse {
+  summary: ErrorEventResponse;
+  queryString: string | null;
+  userId: string | null;
+  stackTrace: string | null;
+  resolvedBy: string | null;
+}
+
+// ── Banners ───────────────────────────────────────────────────────────
+// Mirrors com.royalcommerce.application.banner.dto.*.
+
+/**
+ * Where a banner appears. A closed set, because the storefront has to know how
+ * to lay each one out — a placement it does not recognise is a banner nobody
+ * ever sees.
+ */
+export type BannerPlacement = 'HOME_HERO' | 'HOME_STRIP' | 'PLP_STRIP';
+
+export interface BannerResponse {
+  id: string;
+  placement: BannerPlacement;
+  imageUrl: string;
+  /** Narrow crop for phones. Falls back to imageUrl when null. */
+  mobileImageUrl: string | null;
+  altText: string | null;
+  linkUrl: string | null;
+  headline: string | null;
+  subtext: string | null;
+  ctaLabel: string | null;
+  sortOrder: number;
+  /** The merchant's switch, independent of the schedule below. */
+  active: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  /**
+   * Whether a customer would see this right now — computed by the backend from
+   * `active` AND the schedule. This is what tells a merchant why a banner they
+   * just saved is not on the site yet.
+   */
+  live: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateBannerRequest {
+  placement: BannerPlacement;
+  imageUrl: string;
+  mobileImageUrl?: string | null;
+  altText?: string | null;
+  linkUrl?: string | null;
+  headline?: string | null;
+  subtext?: string | null;
+  ctaLabel?: string | null;
+  sortOrder?: number | null;
+  active?: boolean | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+/** A full replacement: fields left out are cleared, not kept. */
+export type UpdateBannerRequest = CreateBannerRequest;
+
+// ── Media uploads ─────────────────────────────────────────────────────
+// Mirrors com.royalcommerce.application.media.dto.*.
+
+export interface UploadedImageResponse {
+  fileName: string;
+  /** The value to store on a product, category or banner. */
+  url: string;
+  /** Detected from the bytes, not from the request header. */
+  contentType: string;
+  sizeBytes: number;
+}
+
+/** Whether this store may upload at all, and how much room is left. */
+export interface UploadQuotaResponse {
+  allowed: boolean;
+  used: number;
+  /** null = unlimited. */
+  limit: number | null;
+  maxFileSizeBytes: number;
+  maxFilesPerRequest: number;
+  /** null when there is no limit. */
+  remaining: number | null;
+}
+
+// ── AI image generation ───────────────────────────────────────────────
+// Mirrors com.royalcommerce.application.media.dto.AiImageDtos.
+
+/**
+ * Which side of a product to generate. The view is produced purely by
+ * describing it in the prompt — there is no view parameter on the upstream
+ * service — so changing these means changing the wording, not a flag.
+ */
+export type ImageView = 'FRONT' | 'BACK' | 'LEFT' | 'RIGHT' | 'TOP' | 'BOTTOM';
+
+export interface GeneratePromptsRequest {
+  /** Draft from a saved product's own category, brand and name. */
+  productId?: string | null;
+  productName?: string | null;
+  categoryName?: string | null;
+  brandName?: string | null;
+  variantLabel?: string | null;
+  views?: ImageView[];
+  /** Draft for a category tile instead. Views are ignored. */
+  forCategory?: boolean;
+}
+
+export interface PromptSuggestion {
+  view: ImageView | null;
+  prompt: string;
+}
+
+export interface GenerateImageRequest {
+  prompt: string;
+  view?: ImageView | null;
+  barcode?: string | null;
+  isBundle?: boolean;
+  bundleItemNames?: string | null;
+}
+
+export interface GeneratedImageResponse {
+  view: ImageView | null;
+  /** Kept so the wording can be tweaked and rerun without retyping it. */
+  prompt: string;
+  url: string;
+  allUrls: string[];
+}
+
+export interface AiQuotaResponse {
+  allowed: boolean;
+  used: number;
+  /** null = unlimited. */
+  limit: number | null;
+  maxViewsPerRequest: number;
+  /** Measured upstream, ~10s. Used to set expectations before a long wait. */
+  approxSecondsPerImage: number;
+  /** null when there is no limit. */
+  remaining: number | null;
 }

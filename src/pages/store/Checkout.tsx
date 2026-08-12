@@ -11,6 +11,7 @@ import { loadRazorpay } from '@/lib/razorpay';
 import { clearStoredCoupon, getStoredCoupon } from '@/lib/couponStorage';
 import { ApiError } from '@/lib/http';
 import { money } from '@/lib/format';
+import { estimateCartTotals } from '@/lib/totals';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { AddressRequest, AddressResponse, PaymentMethod, PlaceOrderRequest, ShippingDetails } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
@@ -158,6 +159,10 @@ export default function Checkout() {
   const [paymentIssue, setPaymentIssue] = useState<string | null>(null);
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId) ?? null;
+
+  // Pre-placement estimate from the store's published rules; null while they are
+  // unknown. The order response is authoritative once placed.
+  const estimate = estimateCartTotals(cart?.totalAmount ?? 0, appliedCoupon?.discountAmount ?? 0, store);
 
   // Payment methods available from store config (gated by the store flags).
   const codEnabled = !!store?.codEnabled;
@@ -307,7 +312,9 @@ export default function Checkout() {
         name: store?.name ?? BRAND_NAME,
         description: `Order ${order.id}`,
         prefill: { name: shippingAddress.name, contact: shippingAddress.phone ?? '' },
-        theme: { color: '#e0b040' },
+        // Razorpay's modal is their DOM, so this is a literal rather than a
+        // token — it is the brand gold from the identity sheet.
+        theme: { color: '#D4AF37' },
         handler: async (resp: RazorpayHandlerResponse) => {
           try {
             await verifyRazorpayPayment({
@@ -652,16 +659,33 @@ export default function Checkout() {
                   <dd className="font-medium">−{money(appliedCoupon.discountAmount, currency)}</dd>
                 </div>
               )}
+              <div className="flex items-center justify-between">
+                <dt className="text-slate-400">Delivery</dt>
+                <dd className={estimate?.shipping === 0 ? 'text-success-300' : 'text-slate-200'}>
+                  {estimate ? (estimate.shipping === 0 ? 'Free' : money(estimate.shipping, currency)) : '—'}
+                </dd>
+              </div>
+              {estimate?.hasTax && !estimate.taxInclusive && (
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-400">Tax ({estimate.taxRatePercent}%)</dt>
+                  <dd className="text-slate-200">{money(estimate.tax, currency)}</dd>
+                </div>
+              )}
             </dl>
 
             <div className="flex items-center justify-between border-t border-ink-600 pt-5 text-base font-bold">
-              <span className="text-slate-300">Total</span>
-              <span className="text-h3 text-slate-100">{money(appliedCoupon?.total ?? cart.totalAmount, currency)}</span>
+              <span className="text-slate-300">{estimate ? 'Estimated total' : 'Total'}</span>
+              <span className="text-h3 text-slate-100">
+                {money(estimate?.total ?? appliedCoupon?.total ?? cart.totalAmount, currency)}
+              </span>
             </div>
             <p className="text-xs text-slate-500">
-              {appliedCoupon
-                ? 'Final discount is confirmed when you place the order.'
-                : 'Shipping & taxes calculated at checkout.'}
+              {/* The server recomputes everything at placement — the discount
+                  against the live cart, delivery and tax against current
+                  settings — so this figure is always advisory. */}
+              {estimate?.taxInclusive && estimate.hasTax
+                ? `Includes ${money(estimate.tax, currency)} tax. Confirmed when you place the order.`
+                : 'Confirmed when you place the order.'}
             </p>
           </div>
         </aside>

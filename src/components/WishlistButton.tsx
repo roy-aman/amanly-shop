@@ -59,17 +59,24 @@ export default function WishlistButton({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:opacity-50',
+        'inline-flex items-center justify-center gap-2 rounded-full transition duration-200 ease-emphasized',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70',
+        'active:scale-90 disabled:opacity-50 disabled:active:scale-100',
         variant === 'overlay'
-          ? 'h-9 w-9 bg-ink-950/80 text-slate-300 backdrop-blur hover:bg-ink-950 hover:text-slate-100'
-          : 'h-11 rounded-xl border border-ink-700 bg-ink-900/60 px-4 text-slate-200 hover:border-ink-500 hover:text-slate-100',
+          ? 'h-9 w-9 bg-ink-950/80 text-slate-300 backdrop-blur hover:scale-110 hover:bg-ink-950 hover:text-slate-100'
+          : 'h-11 rounded-full border border-ink-700 bg-ink-900/60 px-4 text-slate-200 hover:border-slate-100 hover:text-slate-100',
         className,
       )}
     >
       <Heart
+        // Remounted on toggle so the fill lands with a beat rather than just
+        // appearing — saving something is the one moment on a product card
+        // worth acknowledging.
+        key={String(active)}
         className={cn(
           variant === 'overlay' ? 'h-4 w-4' : 'h-5 w-5',
           'transition',
+          active && 'animate-pop',
           // Filled in ink, not gold: a saved item is a state, and gold is
           // reserved for decoration. A solid dark heart also reads instantly
           // against the pale product tile.

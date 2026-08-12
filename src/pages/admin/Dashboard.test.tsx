@@ -44,7 +44,7 @@ function emptyOrders(): Page<OrderSummaryResponse> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  store.mockResolvedValue({ name: 'Royal Test', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
+  store.mockResolvedValue({ slug: 'royal', name: 'Royal Test', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
   overview.mockResolvedValue(overviewData());
   revenueSeries.mockResolvedValue({ from: '2026-06-16', to: '2026-07-15', granularity: 'DAY', points: [] });
   topProducts.mockResolvedValue([]);

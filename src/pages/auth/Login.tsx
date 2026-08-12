@@ -6,6 +6,8 @@ import { useToast } from '@/context/ToastContext';
 import { Button, Field, Input, PasswordInput } from '@/components/ui';
 import AuthLayout from '@/components/layout/AuthLayout';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
+import OtpChallengeForm from '@/components/auth/OtpChallengeForm';
+import type { OtpChallengeResponse } from '@/lib/types';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,6 +19,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  // Set only when the API answered 202: the password was right but no session
+  // exists yet. Ordinary customers never reach this state.
+  const [challenge, setChallenge] = useState<OtpChallengeResponse | null>(null);
 
   const from = (location.state as { from?: string } | null)?.from ?? '/';
 
@@ -25,7 +30,11 @@ export default function Login() {
     setErrors({});
     setLoading(true);
     try {
-      await login(email, password);
+      const res = await login(email, password, 'store');
+      if (res.kind === 'otpRequired') {
+        setChallenge(res.challenge);
+        return;
+      }
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -41,6 +50,22 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (challenge) {
+    return (
+      <AuthLayout title="Check your email" subtitle="One more step before we sign you in">
+        <OtpChallengeForm
+          email={email}
+          challenge={challenge}
+          onVerified={() => navigate(from, { replace: true })}
+          onStartOver={() => {
+            setChallenge(null);
+            setPassword('');
+          }}
+        />
+      </AuthLayout>
+    );
   }
 
   return (

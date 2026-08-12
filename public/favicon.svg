@@ -1,12 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Amanly">
+  <!-- Same geometry as <AmanlyMark>, inset inside the app-icon square so the
+       mark is one object everywhere it appears. Gold on #111111 is the primary
+       icon variation on the brand sheet and holds up at 16px. -->
   <rect width="64" height="64" rx="14" fill="#111111" />
-  <path
-    d="M15 49 L32 15 L49 49"
-    fill="none"
-    stroke="#FFFFFF"
-    stroke-width="6"
-    stroke-linecap="square"
-    stroke-linejoin="miter"
-  />
-  <path d="M23.5 38 H40.5" fill="none" stroke="#D4AF37" stroke-width="5" stroke-linecap="square" />
+  <g transform="translate(9 9) scale(0.72)">
+    <path d="M2 58 L30 4 H34 L62 58 H48 L32 27 L16 58 Z" fill="#D4AF37" />
+    <path d="M28 37 H35 L43 52 H36 Z" fill="#111111" />
+  </g>
 </svg>

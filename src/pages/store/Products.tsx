@@ -18,6 +18,7 @@ import {
 import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import ProductCard, { type ProductCardVariant } from '@/components/ProductCard';
+import { BannerSlot } from '@/components/BannerSlot';
 
 // Sort options map to the real backend-sortable fields (createdAt / price / name).
 // A "popularity" sort is intentionally absent: WP-3.1a ships /products/top (used
@@ -292,6 +293,9 @@ export default function Products() {
 
   return (
     <div>
+      {/* Renders nothing at all unless the merchant has a listing banner booked. */}
+      <BannerSlot placement="PLP_STRIP" className="pb-6" />
+
       {/* Page head — the count sits with the title rather than in a toolbar strip,
           so the first thing read is "what am I looking at, and how much of it". */}
       <header className="border-b border-ink-700 pb-6">
@@ -422,8 +426,20 @@ export default function Products() {
                   // Generous row gap: portrait cards need vertical air between rows
                   // or the grid reads as a wall.
                   <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-3 xl:grid-cols-4">
-                    {visible.map((p) => (
-                      <ProductCard key={p.id} product={p} variant="grid" />
+                    {visible.map((p, i) => (
+                      // Keyed by product id, so a card that survives a filter
+                      // change keeps its DOM node and does NOT replay the
+                      // entrance — only genuinely new results animate in, which
+                      // is what makes the stagger informative rather than decorative.
+                      <div
+                        key={p.id}
+                        className="rc-enter"
+                        // Capped at 8: past the first two rows the delay is only
+                        // making the reader wait.
+                        style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
+                      >
+                        <ProductCard product={p} variant="grid" />
+                      </div>
                     ))}
                   </div>
                 ) : (

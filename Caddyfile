@@ -3,10 +3,24 @@
 	root * /srv
 	encode gzip zstd
 
-	# React Router owns every path. Without this, a deep link or a refresh on /products/foo
-	# asks the static host for a file that does not exist and returns 404 — the job
-	# SpaForwardingController used to do when Spring served this bundle.
-	# Hashed asset filenames still resolve as real files and never reach the fallback.
+	# Everything under /api and /oauth2 is proxied to the backend from THIS host.
+	#
+	# This is not a convenience — it is what makes multi-tenancy work. The backend
+	# picks the store from the Host header, and Caddy preserves the original Host
+	# by default, so a request to https://amanly.in/api/v1/products arrives with
+	# Host: amanly.in and resolves to Amanly. Calling the backend's own origin
+	# from the browser instead would send Host: api.<something>, which belongs to
+	# no store, and EVERY request would silently resolve to the fallback store.
+	#
+	# Set API_UPSTREAM to the backend's internal address. It is read at runtime,
+	# so pointing this at a different backend needs a restart, not a rebuild.
+	reverse_proxy /api/* /oauth2/* /login/oauth2/* {$API_UPSTREAM:http://backend:8080}
+
+	# React Router owns every other path. Without this, a deep link or a refresh on
+	# /products/foo asks the static host for a file that does not exist and returns
+	# 404 — the job SpaForwardingController used to do when Spring served this
+	# bundle. Hashed asset filenames still resolve as real files and never reach
+	# the fallback.
 	try_files {path} /index.html
 	file_server
 

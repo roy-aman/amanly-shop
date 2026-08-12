@@ -5,6 +5,7 @@ import { useState, type ReactElement, type ReactNode } from 'react';
 import { render, type RenderOptions } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
@@ -20,7 +21,9 @@ function AllProviders({ children }: { children: ReactNode }) {
   const [client] = useState(createTestQueryClient);
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter>{children}</MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

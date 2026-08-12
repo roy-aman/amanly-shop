@@ -46,7 +46,7 @@ function product(id: string, name: string): ProductSummaryResponse {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  store.mockResolvedValue({ name: 'Royal Test', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
+  store.mockResolvedValue({ slug: 'royal', name: 'Royal Test', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
   tree.mockResolvedValue([]);
   products.mockResolvedValue(emptyPage());
   topProducts.mockResolvedValue([]);

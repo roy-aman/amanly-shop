@@ -11,6 +11,7 @@ import { Button, Card, EmptyState, Modal, PageHeader } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
+import { OrderTotals } from '@/components/OrderTotals';
 
 const NEXT_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ['PROCESSING', 'CANCELLED'],
@@ -130,37 +131,10 @@ export default function AdminOrderDetail() {
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  {order.discountAmount > 0 && (
-                    <>
-                      <tr className="border-t border-ink-700">
-                        <td colSpan={4} className="px-2 py-2 text-right text-sm text-slate-400">
-                          Subtotal
-                        </td>
-                        <td className="px-2 py-2 text-right text-sm text-slate-200">
-                          {money(order.totalAmount + order.discountAmount, order.currency)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colSpan={4} className="px-2 py-2 text-right text-sm text-success-300">
-                          Discount{order.couponCode ? ` (${order.couponCode})` : ''}
-                        </td>
-                        <td className="px-2 py-2 text-right text-sm font-medium text-success-300">
-                          −{money(order.discountAmount, order.currency)}
-                        </td>
-                      </tr>
-                    </>
-                  )}
-                  <tr className="border-t border-ink-700">
-                    <td colSpan={4} className="px-2 py-3 text-right text-sm font-medium text-slate-400">
-                      Total
-                    </td>
-                    <td className="px-2 py-3 text-right text-base font-bold text-gold-300">
-                      {money(order.totalAmount, order.currency)}
-                    </td>
-                  </tr>
-                </tfoot>
               </table>
+            </div>
+            <div className="flex justify-end border-t border-ink-700 px-2 py-4">
+              <OrderTotals order={order} className="w-full max-w-xs" />
             </div>
             {order.notes && (
               <p className="mt-4 rounded-lg border border-ink-700 bg-ink-850 p-3 text-sm text-slate-400">
@@ -213,20 +187,6 @@ export default function AdminOrderDetail() {
                 <dt className="text-slate-500">Updated</dt>
                 <dd className="text-slate-300">{formatDateTime(order.updatedAt)}</dd>
               </div>
-              {order.discountAmount > 0 && (
-                <>
-                  <div className="flex justify-between border-t border-ink-700 pt-2">
-                    <dt className="text-slate-500">Subtotal</dt>
-                    <dd className="text-slate-300">
-                      {money(order.totalAmount + order.discountAmount, order.currency)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between text-success-300">
-                    <dt>Discount{order.couponCode ? ` (${order.couponCode})` : ''}</dt>
-                    <dd className="font-medium">−{money(order.discountAmount, order.currency)}</dd>
-                  </div>
-                </>
-              )}
               <div className="flex justify-between border-t border-ink-700 pt-2">
                 <dt className="font-medium text-slate-300">Total</dt>
                 <dd className="font-bold text-gold-300">{money(order.totalAmount, order.currency)}</dd>

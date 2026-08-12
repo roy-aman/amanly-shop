@@ -55,7 +55,7 @@ function page(content: AdminCouponResponse[]): Page<AdminCouponResponse> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  storeMock.mockResolvedValue({ name: 'Royal', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
+  storeMock.mockResolvedValue({ slug: 'royal', name: 'Royal', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true });
   listMock.mockResolvedValue(page([coupon()]));
   createMock.mockResolvedValue(coupon());
 });

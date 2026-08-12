@@ -7,6 +7,7 @@ import type { CategoryResponse, CreateCategoryRequest, UpdateCategoryRequest } f
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea } from '@/components/ui';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { RowsSkeleton } from '@/components/RouteSkeletons';
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -45,18 +46,40 @@ export default function Categories() {
   });
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<{ name: string; slug: string; description: string; parentId: string }>({
+  const [createForm, setCreateForm] = useState<{
+    name: string;
+    slug: string;
+    description: string;
+    parentId: string;
+    imageUrl: string;
+    imageAltText: string;
+    bannerUrl: string;
+  }>({
     name: '',
     slug: '',
     description: '',
     parentId: '',
+    imageUrl: '',
+    imageAltText: '',
+    bannerUrl: '',
   });
   const [editTarget, setEditTarget] = useState<CategoryResponse | null>(null);
-  const [editForm, setEditForm] = useState<{ name: string; description: string; sortOrder: string; active: boolean }>({
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    description: string;
+    sortOrder: string;
+    active: boolean;
+    imageUrl: string;
+    imageAltText: string;
+    bannerUrl: string;
+  }>({
     name: '',
     description: '',
     sortOrder: '0',
     active: true,
+    imageUrl: '',
+    imageAltText: '',
+    bannerUrl: '',
   });
   const [deleteTarget, setDeleteTarget] = useState<CategoryResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -78,7 +101,7 @@ export default function Categories() {
       invalidate();
       toast.success('Category created');
       setCreateOpen(false);
-      setCreateForm({ name: '', slug: '', description: '', parentId: '' });
+      setCreateForm({ name: '', slug: '', description: '', parentId: '', imageUrl: '', imageAltText: '', bannerUrl: '' });
     },
     onError: (e) => onMutationError(e, 'Could not create'),
   });
@@ -113,6 +136,9 @@ export default function Categories() {
       description: c.description ?? '',
       sortOrder: String(c.sortOrder),
       active: c.active,
+      imageUrl: c.imageUrl ?? '',
+      imageAltText: c.imageAltText ?? '',
+      bannerUrl: c.bannerUrl ?? '',
     });
   }
 
@@ -194,6 +220,9 @@ export default function Categories() {
                   slug: createForm.slug.trim(),
                   description: createForm.description.trim() || null,
                   parentId: createForm.parentId || null,
+                  imageUrl: createForm.imageUrl.trim() || null,
+                  imageAltText: createForm.imageAltText.trim() || null,
+                  bannerUrl: createForm.bannerUrl.trim() || null,
                 })
               }
             >
@@ -243,6 +272,31 @@ export default function Categories() {
               onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
             />
           </Field>
+          <ImageUploadField
+            label="Tile image"
+            aspect="square"
+            hint="Shown wherever categories appear in a grid."
+            value={createForm.imageUrl}
+            onChange={(url) => setCreateForm((f) => ({ ...f, imageUrl: url }))}
+            error={errors.imageUrl}
+            aiContext={{ categoryName: createForm.name, forCategory: true }}
+            aiSingleImage
+          />
+          <Field label="Image alt text" hint="Describes the tile for screen readers." error={errors.imageAltText}>
+            <Input
+              value={createForm.imageAltText}
+              onChange={(e) => setCreateForm((f) => ({ ...f, imageAltText: e.target.value }))}
+            />
+          </Field>
+          <ImageUploadField
+            label="Category banner"
+            hint="Wide hero across the top of this category's own page. A stretched tile looks wrong here, so use a separate crop."
+            value={createForm.bannerUrl}
+            onChange={(url) => setCreateForm((f) => ({ ...f, bannerUrl: url }))}
+            error={errors.bannerUrl}
+            aiContext={{ categoryName: createForm.name, forCategory: true }}
+            aiSingleImage
+          />
         </div>
       </Modal>
 
@@ -267,6 +321,9 @@ export default function Categories() {
                     description: editForm.description.trim() || null,
                     sortOrder: Number(editForm.sortOrder) || 0,
                     active: editForm.active,
+                    imageUrl: editForm.imageUrl.trim() || null,
+                    imageAltText: editForm.imageAltText.trim() || null,
+                    bannerUrl: editForm.bannerUrl.trim() || null,
                   },
                 })
               }
@@ -298,6 +355,31 @@ export default function Categories() {
               onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
             />
           </Field>
+          <ImageUploadField
+            label="Tile image"
+            aspect="square"
+            hint="Shown wherever categories appear in a grid."
+            value={editForm.imageUrl}
+            onChange={(url) => setEditForm((f) => ({ ...f, imageUrl: url }))}
+            error={errors.imageUrl}
+            aiContext={{ categoryName: editForm.name, forCategory: true }}
+            aiSingleImage
+          />
+          <Field label="Image alt text" hint="Describes the tile for screen readers." error={errors.imageAltText}>
+            <Input
+              value={editForm.imageAltText}
+              onChange={(e) => setEditForm((f) => ({ ...f, imageAltText: e.target.value }))}
+            />
+          </Field>
+          <ImageUploadField
+            label="Category banner"
+            hint="Wide hero across the top of this category's own page."
+            value={editForm.bannerUrl}
+            onChange={(url) => setEditForm((f) => ({ ...f, bannerUrl: url }))}
+            error={errors.bannerUrl}
+            aiContext={{ categoryName: editForm.name, forCategory: true }}
+            aiSingleImage
+          />
           <label className="flex items-center gap-2 text-sm text-slate-300">
             <input
               type="checkbox"

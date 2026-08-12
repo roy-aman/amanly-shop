@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PackageX, Tag } from 'lucide-react';
+import { PackageX } from 'lucide-react';
 import { getOrder, cancelOrder } from '@/api/orders';
 import { ApiError } from '@/lib/http';
 import { money, formatDateTime, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
+import { OrderTotals } from '@/components/OrderTotals';
 import { useToast } from '@/context/ToastContext';
 import { Button, EmptyState, LinkButton, Modal } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
@@ -115,31 +116,7 @@ export default function OrderDetail() {
                 </tbody>
               </table>
             </div>
-            {order.discountAmount > 0 ? (
-              <dl className="space-y-2 border-t border-ink-700 px-2 py-5 text-sm">
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-400">Subtotal</dt>
-                  <dd className="text-slate-200">
-                    {money(order.totalAmount + order.discountAmount, order.currency)}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between text-success-300">
-                  <dt className="flex items-center gap-1">
-                    <Tag className="h-3.5 w-3.5" /> Discount{order.couponCode ? ` (${order.couponCode})` : ''}
-                  </dt>
-                  <dd className="font-medium">−{money(order.discountAmount, order.currency)}</dd>
-                </div>
-                <div className="flex items-center justify-between border-t border-ink-700 pt-2 text-base font-bold">
-                  <span className="text-slate-300">Total</span>
-                  <span className="text-h3 text-slate-100">{money(order.totalAmount, order.currency)}</span>
-                </div>
-              </dl>
-            ) : (
-              <div className="flex items-center justify-between border-t border-ink-700 px-2 py-5 text-base font-bold">
-                <span className="text-slate-300">Total</span>
-                <span className="text-h3 text-slate-100">{money(order.totalAmount, order.currency)}</span>
-              </div>
-            )}
+            <OrderTotals order={order} className="border-t border-ink-700 px-2 py-5" />
           </div>
 
           {order.notes && (

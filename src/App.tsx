@@ -1,8 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import StoreLayout from '@/components/layout/StoreLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { RequireAdmin, RequireAuth, RequireStaff } from '@/components/guards';
+import PlatformLayout from '@/components/layout/PlatformLayout';
+import { RequireAdmin, RequireAuth, RequirePlatformAdmin, RequireStaff } from '@/components/guards';
 import ScrollToTop from '@/components/ScrollToTop';
 import NotFound from '@/pages/NotFound';
 import { RouteTitle } from '@/lib/useDocumentTitle';
@@ -41,7 +42,6 @@ const OrderDetail = lazy(() => import('@/pages/store/OrderDetail'));
 const Account = lazy(() => import('@/pages/store/Account'));
 const Wishlist = lazy(() => import('@/pages/store/Wishlist'));
 const Addresses = lazy(() => import('@/pages/store/Addresses'));
-const AccountSettings = lazy(() => import('@/pages/store/AccountSettings'));
 
 // Admin console
 const Dashboard = lazy(() => import('@/pages/admin/Dashboard'));
@@ -52,12 +52,20 @@ const Inventory = lazy(() => import('@/pages/admin/Inventory'));
 const ProductForm = lazy(() => import('@/pages/admin/ProductForm'));
 const Categories = lazy(() => import('@/pages/admin/Categories'));
 const Brands = lazy(() => import('@/pages/admin/Brands'));
+const Banners = lazy(() => import('@/pages/admin/Banners'));
 const AdminReviews = lazy(() => import('@/pages/admin/Reviews'));
 const AdminCoupons = lazy(() => import('@/pages/admin/Coupons'));
 const Reports = lazy(() => import('@/pages/admin/Reports'));
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
 const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'));
+
+// Platform console — only a PLATFORM_ADMIN ever loads these chunks.
+const PlatformStores = lazy(() => import('@/pages/platform/PlatformStores'));
+const PlatformStoreDetail = lazy(() => import('@/pages/platform/PlatformStoreDetail'));
+const PlatformStoreMembers = lazy(() => import('@/pages/platform/PlatformStoreMembers'));
+const PlatformOperators = lazy(() => import('@/pages/platform/PlatformOperators'));
+const PlatformErrors = lazy(() => import('@/pages/platform/PlatformErrors'));
 
 // Dev-only UI-kit showcase. `import.meta.env.DEV` is statically `false` in
 // production builds, so Vite drops both this binding and the dynamic import —
@@ -91,7 +99,7 @@ export default function App() {
         <Route path="/reset-password" element={<Page title="Reset password" fallback={<AuthFormSkeleton />}><ResetPassword /></Page>} />
         <Route path="/verify-email" element={<Page title="Verify email" fallback={<AuthFormSkeleton />}><VerifyEmail /></Page>} />
         <Route path="/oauth2-callback" element={<Page title="Signing in" fallback={<AuthFormSkeleton />}><OAuthCallback /></Page>} />
-        <Route path="/admin/login" element={<Page title="Admin sign in" fallback={<AuthFormSkeleton />}><AdminLogin /></Page>} />
+        <Route path="/admin/login" element={<Page title="Platform sign in" fallback={<AuthFormSkeleton />}><AdminLogin /></Page>} />
         <Route path="/admin/forbidden" element={<Page title="Access denied" fallback={<AuthFormSkeleton />}><Forbidden /></Page>} />
 
         {/* Dev-only UI-kit showcase — never registered in production builds. */}
@@ -121,7 +129,9 @@ export default function App() {
             <Route path="/account" element={<Page title="Account" fallback={<FormSkeleton />}><Account /></Page>} />
             <Route path="/account/wishlist" element={<Page title="Wishlist" fallback={<StoreListSkeleton />}><Wishlist /></Page>} />
             <Route path="/account/addresses" element={<Page title="Addresses" fallback={<FormSkeleton />}><Addresses /></Page>} />
-            <Route path="/account/settings" element={<Page title="Settings" fallback={<FormSkeleton />}><AccountSettings /></Page>} />
+            {/* Name and password moved into the profile page. Kept as a redirect rather than
+                deleted so an existing bookmark or emailed link lands somewhere useful. */}
+            <Route path="/account/settings" element={<Navigate to="/account" replace />} />
           </Route>
 
           {/* Storefront + global 404 fallback (renders inside StoreLayout chrome). */}
@@ -142,6 +152,7 @@ export default function App() {
             <Route path="inventory/:id" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
             <Route path="categories" element={<Page title="Categories" fallback={<ListSkeleton />}><Categories /></Page>} />
             <Route path="brands" element={<Page title="Brands" fallback={<ListSkeleton />}><Brands /></Page>} />
+            <Route path="banners" element={<Page title="Banners" fallback={<ListSkeleton />}><Banners /></Page>} />
             <Route path="reviews" element={<Page title="Reviews" fallback={<ListSkeleton />}><AdminReviews /></Page>} />
             <Route path="reports" element={<Page title="Reports" fallback={<DashboardSkeleton />}><Reports /></Page>} />
 
@@ -154,6 +165,20 @@ export default function App() {
 
             {/* Admin 404 — renders inside AdminLayout chrome. */}
             <Route path="*" element={<NotFound homeTo="/admin" homeLabel="Back to dashboard" />} />
+          </Route>
+        </Route>
+
+        {/* Platform console — PLATFORM_ADMIN only. A sibling of /admin rather
+            than a section inside it: an operator manages the OTHER stores and
+            need not be a member of the one they signed in at. */}
+        <Route path="/platform" element={<RequirePlatformAdmin />}>
+          <Route element={<PlatformLayout />}>
+            <Route index element={<Page title="Stores" fallback={<ListSkeleton />}><PlatformStores /></Page>} />
+            <Route path="stores/:storeId" element={<Page fallback={<DetailSkeleton />}><PlatformStoreDetail /></Page>} />
+            <Route path="stores/:storeId/members" element={<Page fallback={<ListSkeleton />}><PlatformStoreMembers /></Page>} />
+            <Route path="operators" element={<Page title="Operators" fallback={<ListSkeleton />}><PlatformOperators /></Page>} />
+            <Route path="errors" element={<Page title="Errors" fallback={<ListSkeleton />}><PlatformErrors /></Page>} />
+            <Route path="*" element={<NotFound homeTo="/platform" homeLabel="Back to stores" />} />
           </Route>
         </Route>
       </Routes>

@@ -22,10 +22,11 @@ export function FilterChip({
   className?: string;
 }) {
   const base =
-    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition';
+    'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium ' +
+    'transition duration-200 ease-emphasized active:scale-95';
   const tone = selected
-    ? 'border-primary bg-primary text-primary-fg'
-    : 'border-ink-600 bg-ink-850 text-slate-300 hover:border-ink-500 hover:text-slate-100';
+    ? 'border-primary bg-primary text-primary-fg shadow-sm'
+    : 'border-ink-600 bg-ink-850 text-slate-300 hover:border-slate-100 hover:bg-ink-800 hover:text-slate-100';
 
   return (
     <span className={cn(base, tone, className)}>

@@ -32,6 +32,21 @@ const ACCESS_KEY = 'rc_access_token';
 const REFRESH_KEY = 'rc_refresh_token';
 const USER_KEY = 'rc_user';
 const EXPIRES_KEY = 'rc_token_expires_at';
+const ENTRY_KEY = 'rc_entry_point';
+
+/**
+ * Which door this session was opened through.
+ *
+ * A platform operator holds every store role at every store, so roles alone
+ * cannot say whether they arrived to run the platform or to shop and help out
+ * at this one shop. The entry point carries that intent: signing in on the
+ * storefront gets the storefront and this store's console, nothing wider.
+ *
+ * It scopes what is OFFERED, not what is permitted — every /platform route is
+ * enforced server-side regardless, so this is a matter of context rather than
+ * a security boundary.
+ */
+export type EntryPoint = 'store' | 'platform';
 
 export const TokenStore = {
   save(auth: AuthResponse) {
@@ -39,6 +54,17 @@ export const TokenStore = {
     localStorage.setItem(REFRESH_KEY, auth.refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(auth.user));
     localStorage.setItem(EXPIRES_KEY, String(Date.now() + auth.expiresInSeconds * 1000));
+  },
+
+  /** Set once at sign-in. Deliberately NOT written by `save`, which a token
+   *  refresh also calls — a refresh must not silently change the context. */
+  setEntryPoint(entry: EntryPoint) {
+    localStorage.setItem(ENTRY_KEY, entry);
+  },
+  /** Defaults to 'store': a session restored from before this existed, or one
+   *  from any other route, is the storefront's. */
+  getEntryPoint(): EntryPoint {
+    return localStorage.getItem(ENTRY_KEY) === 'platform' ? 'platform' : 'store';
   },
   getAccessToken: () => localStorage.getItem(ACCESS_KEY),
   getRefreshToken: () => localStorage.getItem(REFRESH_KEY),
@@ -55,7 +81,7 @@ export const TokenStore = {
   },
   isAuthenticated: () => !!localStorage.getItem(ACCESS_KEY),
   clear() {
-    [ACCESS_KEY, REFRESH_KEY, USER_KEY, EXPIRES_KEY].forEach((k) => localStorage.removeItem(k));
+    [ACCESS_KEY, REFRESH_KEY, USER_KEY, EXPIRES_KEY, ENTRY_KEY].forEach((k) => localStorage.removeItem(k));
   },
 };
 
@@ -141,13 +167,31 @@ async function silentRefresh(): Promise<boolean> {
   return refreshPromise;
 }
 
-export async function request<T>(
+/** A successful response together with its status code. */
+export interface ApiResult<T> {
+  status: number;
+  data: T;
+}
+
+/**
+ * Like {@link request}, but hands back the HTTP status alongside the body.
+ *
+ * Needed wherever two different success codes mean two different things and the
+ * body alone cannot be trusted to tell them apart — `POST /auth/login` answers
+ * 200 with a session and 202 with an OTP challenge. Everything else should keep
+ * using `request`, which discards the status.
+ */
+export async function requestWithStatus<T>(
   method: string,
   url: string,
   { body = null, auth = false, retry = true, signal }: RequestOptions = {},
-): Promise<T> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body != null) headers['Content-Type'] = 'application/json';
+  // FormData goes up untouched and WITHOUT a Content-Type: the browser writes its own multipart
+  // header including the boundary token, and setting one here replaces it with a boundary-less
+  // value the server cannot parse. Everything else is JSON exactly as before.
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body != null && !isFormData) headers['Content-Type'] = 'application/json';
 
   if (auth) {
     if (retry && TokenStore.isExpired() && TokenStore.getRefreshToken()) {
@@ -160,19 +204,23 @@ export async function request<T>(
   const res = await fetch(apiUrl(url), {
     method,
     headers,
-    body: body != null ? JSON.stringify(body) : undefined,
+    body: body != null ? (isFormData ? (body as FormData) : JSON.stringify(body)) : undefined,
     signal,
   });
 
   if (res.status === 401 && auth && retry && TokenStore.getRefreshToken()) {
     if (await silentRefresh()) {
-      return request<T>(method, url, { body, auth, retry: false, signal });
+      return requestWithStatus<T>(method, url, { body, auth, retry: false, signal });
     }
   }
 
   if (!res.ok) throw await parseError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  if (res.status === 204) return { status: res.status, data: undefined as T };
+  return { status: res.status, data: (await res.json()) as T };
+}
+
+export async function request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
+  return (await requestWithStatus<T>(method, url, options)).data;
 }
 
 export function buildQuery(params: Record<string, unknown> = {}): string {

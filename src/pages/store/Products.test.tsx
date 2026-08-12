@@ -55,7 +55,15 @@ function product(id: string, stockQuantity = 5): ProductSummaryResponse {
   };
 }
 
-const CATEGORY: CategoryTreeResponse = { id: 'c1', name: 'Rings', slug: 'rings', sortOrder: 0, children: [] };
+const CATEGORY: CategoryTreeResponse = {
+  id: 'c1',
+  name: 'Rings',
+  slug: 'rings',
+  sortOrder: 0,
+  imageUrl: null,
+  imageAltText: null,
+  children: [],
+};
 
 // Renders Products with a location probe so tests can assert the URL query string.
 function renderPLP(initialEntry = '/products') {

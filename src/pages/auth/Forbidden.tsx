@@ -9,7 +9,7 @@ export default function Forbidden() {
       theme="admin"
       title="Access denied"
       footer={
-        <Link to="/admin/login" className="font-medium text-slate-100 underline decoration-ink-600 underline-offset-4 transition hover:decoration-slate-100">
+        <Link to="/login" className="font-medium text-slate-100 underline decoration-ink-600 underline-offset-4 transition hover:decoration-slate-100">
           Switch accounts
         </Link>
       }

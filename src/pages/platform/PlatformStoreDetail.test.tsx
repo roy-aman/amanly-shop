@@ -1,0 +1,211 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { renderWithProviders } from '@/test/utils';
+import PlatformStoreDetail from './PlatformStoreDetail';
+import { platformDomains, platformStores } from '@/api/platform';
+import { ApiError } from '@/lib/http';
+import type { StoreAdminSummaryResponse, StoreDomainResponse } from '@/lib/types';
+
+vi.mock('@/api/platform', () => ({
+  platformStores: { get: vi.fn(), update: vi.fn(), updateEntitlements: vi.fn(), list: vi.fn(), create: vi.fn() },
+  platformDomains: { list: vi.fn(), add: vi.fn(), makePrimary: vi.fn(), remove: vi.fn() },
+}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useParams: () => ({ storeId: 'store-1' }) };
+});
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), push: vi.fn() };
+vi.mock('@/context/ToastContext', () => ({ useToast: () => toast }));
+
+const getMock = vi.mocked(platformStores.get);
+const entitlementsMock = vi.mocked(platformStores.updateEntitlements);
+const updateMock = vi.mocked(platformStores.update);
+const domainsListMock = vi.mocked(platformDomains.list);
+const domainAddMock = vi.mocked(platformDomains.add);
+const domainRemoveMock = vi.mocked(platformDomains.remove);
+
+function store(overrides: Partial<StoreAdminSummaryResponse> = {}): StoreAdminSummaryResponse {
+  return {
+    id: 'store-1',
+    slug: 'nova',
+    name: 'Nova Sports',
+    status: 'ACTIVE',
+    currency: 'INR',
+    codEnabled: true,
+    onlinePaymentConfigured: false,
+    whatsappConfigured: false,
+    onlinePaymentsAllowed: true,
+    whatsappNotificationsAllowed: true,
+    whatsappCommerceAllowed: false,
+    emailNotificationsAllowed: true,
+    marketingEmailAllowed: false,
+    customDomainAllowed: true,
+    imageUploadAllowed: false,
+    aiImageGenerationAllowed: false,
+    maxStaffSeats: 5,
+    maxImageUploads: null,
+    maxAiImageGenerations: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function domain(overrides: Partial<StoreDomainResponse> = {}): StoreDomainResponse {
+  return { id: 'd1', hostname: 'novasports.in', primary: true, createdAt: '2026-01-01T00:00:00Z', ...overrides };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getMock.mockResolvedValue(store());
+  domainsListMock.mockResolvedValue([domain()]);
+  entitlementsMock.mockResolvedValue(store());
+  updateMock.mockResolvedValue(store());
+});
+
+describe('Platform store detail — entitlements', () => {
+  it('submits EVERY field, not just the one that changed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Entitlements');
+
+    await user.click(screen.getByRole('checkbox', { name: /marketing email/i }));
+    await user.click(screen.getByRole('button', { name: /save entitlements/i }));
+
+    await waitFor(() => expect(entitlementsMock).toHaveBeenCalled());
+    // A partial patch here silently switches off whatever it omits.
+    expect(entitlementsMock).toHaveBeenCalledWith('store-1', {
+      onlinePaymentsAllowed: true,
+      whatsappNotificationsAllowed: true,
+      whatsappCommerceAllowed: false,
+      emailNotificationsAllowed: true,
+      marketingEmailAllowed: true,
+      customDomainAllowed: true,
+      imageUploadAllowed: false,
+      aiImageGenerationAllowed: false,
+      maxStaffSeats: 5,
+      maxImageUploads: null,
+      maxAiImageGenerations: null,
+    });
+  });
+
+  it('turning WhatsApp commerce on turns notifications on with it', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Entitlements');
+
+    await user.click(screen.getByRole('checkbox', { name: /whatsapp notifications/i })); // off
+    expect(screen.getByRole('checkbox', { name: /whatsapp commerce/i })).not.toBeChecked();
+
+    await user.click(screen.getByRole('checkbox', { name: /whatsapp commerce/i })); // on
+    expect(screen.getByRole('checkbox', { name: /whatsapp notifications/i })).toBeChecked();
+  });
+
+  it('warns and names the hostnames before the one destructive withdrawal', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Entitlements');
+
+    await user.click(screen.getByRole('checkbox', { name: /custom domain/i }));
+    await user.click(screen.getByRole('button', { name: /save entitlements/i }));
+
+    // Nothing is sent until the operator confirms.
+    expect(entitlementsMock).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/novasports\.in/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /detach and save/i }));
+    await waitFor(() => expect(entitlementsMock).toHaveBeenCalled());
+    expect(entitlementsMock.mock.calls[0][1].customDomainAllowed).toBe(false);
+  });
+
+  it('does not nag when the store holds no domains to detach', async () => {
+    domainsListMock.mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Entitlements');
+
+    await user.click(screen.getByRole('checkbox', { name: /custom domain/i }));
+    await user.click(screen.getByRole('button', { name: /save entitlements/i }));
+
+    await waitFor(() => expect(entitlementsMock).toHaveBeenCalled());
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('sends null for empty staff seats (unlimited), never 0', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Entitlements');
+
+    await user.clear(screen.getByLabelText(/staff seats/i));
+    await user.click(screen.getByRole('button', { name: /save entitlements/i }));
+
+    await waitFor(() => expect(entitlementsMock).toHaveBeenCalled());
+    expect(entitlementsMock.mock.calls[0][1].maxStaffSeats).toBeNull();
+  });
+});
+
+describe('Platform store detail — domains', () => {
+  it('points a CUSTOM_DOMAIN_NOT_ALLOWED rejection at the entitlement', async () => {
+    domainAddMock.mockRejectedValue(new ApiError(409, 'CUSTOM_DOMAIN_NOT_ALLOWED', 'Not allowed'));
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Domains');
+
+    await user.type(screen.getByLabelText('Hostname'), 'second.example');
+    await user.click(screen.getByRole('button', { name: /attach/i }));
+
+    expect(await screen.findByText(/not entitled to custom domains/i)).toBeInTheDocument();
+  });
+
+  it('reports the hostname the server actually stored, not what was typed', async () => {
+    domainsListMock.mockResolvedValue([]);
+    domainAddMock.mockResolvedValue(domain({ id: 'd2', hostname: 'novasports.in', primary: true }));
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Domains');
+
+    await user.type(screen.getByLabelText('Hostname'), 'HTTPS://NovaSports.in/shop ');
+    await user.click(screen.getByRole('button', { name: /attach/i }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('novasports.in attached', expect.any(String)));
+  });
+
+  it('explains that the primary must be replaced, not just removed', async () => {
+    domainsListMock.mockResolvedValue([domain(), domain({ id: 'd2', hostname: 'www.novasports.in', primary: false })]);
+    domainRemoveMock.mockRejectedValue(new ApiError(409, 'CANNOT_REMOVE_PRIMARY_DOMAIN', 'nope'));
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    // Wait for the domain list itself, not just the heading, or the row is not
+    // mounted yet.
+    await screen.findByRole('button', { name: 'Remove novasports.in' });
+
+    await user.click(screen.getByRole('button', { name: 'Remove novasports.in' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Promote another domain first', expect.any(String)));
+  });
+});
+
+describe('Platform store detail — trading status', () => {
+  it('warns before taking a live shop off the air', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Status');
+
+    await user.selectOptions(screen.getByLabelText(/trading status/i), 'SUSPENDED');
+    // The field hint also mentions maintenance pages, so match the warning's own
+    // "this is about to happen" clause rather than the shared phrase.
+    expect(screen.getByText(/as soon as this is saved/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updateMock).toHaveBeenCalledWith('store-1', { name: 'Nova Sports', status: 'SUSPENDED' }));
+  });
+
+  it('keeps Save inert until something actually changed', async () => {
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Status');
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+  });
+});

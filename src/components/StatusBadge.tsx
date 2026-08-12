@@ -17,6 +17,9 @@ const PAYMENT_TONE: Record<OrderPaymentStatus, Parameters<typeof Badge>[0]['tone
   PENDING: 'amber',
   PAID: 'green',
   FAILED: 'red',
+  // A partial refund still leaves money with the merchant, so it reads as a
+  // caution rather than a settled state like REFUNDED.
+  PARTIALLY_REFUNDED: 'amber',
   REFUNDED: 'gray',
 };
 export function PaymentStatusBadge({ status }: { status: OrderPaymentStatus }) {

@@ -11,6 +11,7 @@ import { BRAND_DESCRIPTION, BRAND_NAME } from '@/lib/brand';
 import { cn, EmptyState, LinkButton, Skeleton } from '@/components/ui';
 import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import ProductCard from '@/components/ProductCard';
+import { BannerSlot } from '@/components/BannerSlot';
 
 /** How many products to pull per rail. */
 const RAIL_SIZE = 12;
@@ -99,9 +100,15 @@ export default function Home() {
 
   return (
     <div>
+      {/* Both slots render nothing at all when the merchant has booked nothing,
+          so the page below is byte-for-byte what it was before banners existed. */}
+      <BannerSlot placement="HOME_STRIP" className="rc-bleed -mt-8" />
+
       <Hero />
 
       <div className="space-y-24 sm:space-y-32">
+        <BannerSlot placement="HOME_HERO" className="pt-12 sm:pt-16" />
+
         <Reveal>
           <CategoryTiles categories={categories} loading={categoryQuery.isLoading} />
         </Reveal>
@@ -144,11 +151,20 @@ export default function Home() {
   );
 }
 
-/** Fades a section up the first time it reaches the viewport. */
-function Reveal({ children }: { children: ReactNode }) {
+/**
+ * Fades a section up the first time it reaches the viewport. `delay` staggers
+ * siblings that share a viewport — without it a grid arrives as one slab, which
+ * reads as a page-load rather than as a composition.
+ */
+function Reveal({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
   const [ref, state] = useInView<HTMLDivElement>();
   return (
-    <div ref={ref} className="rc-reveal" data-reveal={state}>
+    <div
+      ref={ref}
+      className="rc-reveal"
+      data-reveal={state}
+      style={delay ? ({ '--rc-delay': `${delay}ms` } as React.CSSProperties) : undefined}
+    >
       {children}
     </div>
   );
@@ -162,31 +178,59 @@ function Reveal({ children }: { children: ReactNode }) {
  */
 function Hero() {
   return (
-    <section className="rc-bleed -mt-8 border-b border-ink-700 bg-ink-850">
+    <section className="rc-bleed relative -mt-8 overflow-hidden border-b border-ink-700 bg-ink-850">
       {/* Art-direction slot: an <img> placed here behind the copy (with a scrim
-          over it) is the only change needed to make this a photographic hero. */}
-      <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center sm:py-32 lg:py-40">
-        <p className="text-overline uppercase text-slate-500">{HERO.eyebrow}</p>
+          over it) is the only change needed to make this a photographic hero.
+          Until then, two very faint gold washes give the band some depth so it
+          reads as a designed surface rather than an empty grey rectangle. */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          background:
+            'radial-gradient(60rem 30rem at 50% -20%, rgb(var(--brand) / 0.14), transparent 70%),' +
+            'radial-gradient(40rem 24rem at 90% 110%, rgb(var(--brand) / 0.08), transparent 70%)',
+        }}
+        aria-hidden
+      />
+
+      {/* The hero is on screen at load, so it animates on arrival rather than
+          waiting for an observer. Each line follows the one above it — the
+          delays are what make it feel composed instead of merely animated. */}
+      <div className="relative mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center sm:py-32 lg:py-40">
+        <p className="rc-enter text-overline uppercase text-slate-500">{HERO.eyebrow}</p>
 
         <h1 className="mt-6 font-display text-display text-slate-100">
-          {HERO.headline.map((line) => (
-            <span key={line} className="block">
+          {HERO.headline.map((line, i) => (
+            <span
+              key={line}
+              className="rc-enter block"
+              style={{ animationDelay: `${100 + i * 110}ms` }}
+            >
               {line}
             </span>
           ))}
         </h1>
 
-        <p className="mt-7 max-w-md text-body text-slate-400">{HERO.subcopy}</p>
+        <p className="rc-enter mt-7 max-w-md text-body text-slate-400" style={{ animationDelay: '340ms' }}>
+          {HERO.subcopy}
+        </p>
 
-        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
+        <div
+          className="rc-enter mt-10 flex flex-col items-center gap-5 sm:flex-row sm:gap-6"
+          style={{ animationDelay: '440ms' }}
+        >
           <LinkButton to={HERO.primaryCta.to} size="xl">
             {HERO.primaryCta.label}
           </LinkButton>
           <Link
             to={HERO.secondaryCta.to}
-            className="text-body-sm font-medium text-slate-100 underline decoration-brand decoration-2 underline-offset-[6px] transition-colors hover:text-slate-400"
+            className="group inline-flex items-center gap-2 text-body-sm font-medium text-slate-100 transition-colors hover:text-slate-400"
           >
-            {HERO.secondaryCta.label}
+            <span className="rc-link">{HERO.secondaryCta.label}</span>
+            <ArrowRight
+              className="h-4 w-4 transition-transform duration-300 ease-emphasized group-hover:translate-x-1"
+              aria-hidden
+            />
           </Link>
         </div>
       </div>
@@ -213,9 +257,13 @@ function SectionHeading({
       {viewAllTo && (
         <Link
           to={viewAllTo}
-          className="shrink-0 text-overline uppercase text-slate-500 transition-colors hover:text-slate-100"
+          className="group inline-flex shrink-0 items-center gap-1.5 text-overline uppercase text-slate-500 transition-colors hover:text-slate-100"
         >
-          View all
+          <span className="rc-link">View all</span>
+          <ArrowRight
+            className="h-3.5 w-3.5 transition-transform duration-300 ease-emphasized group-hover:translate-x-0.5"
+            aria-hidden
+          />
         </Link>
       )}
     </div>
@@ -247,17 +295,41 @@ function CategoryTiles({ categories, loading }: { categories: CategoryTreeRespon
         />
       ) : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          {categories.slice(0, 6).map((c) => (
-            <Link
-              key={c.id}
-              to={`/products?categoryId=${c.id}`}
-              className="group relative flex aspect-[4/5] flex-col justify-end overflow-hidden bg-ink-850 p-6 transition-colors hover:bg-ink-800"
-            >
-              <h3 className="font-display text-h2 text-slate-100">{c.name}</h3>
-              <span className="mt-2 inline-flex items-center gap-2 text-overline uppercase text-slate-500 transition-transform duration-300 group-hover:translate-x-1">
-                Shop <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-              </span>
-            </Link>
+          {categories.slice(0, 6).map((c, i) => (
+            <Reveal key={c.id} delay={i * 70}>
+              <Link
+                to={`/products?categoryId=${c.id}`}
+                className="rc-lift group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl bg-ink-850 p-6 transition-colors duration-500 hover:bg-ink-800"
+              >
+                {/* Real photography when the merchant has set it. Empty alt:
+                    the category name is right below as actual text, so
+                    describing the picture would say it twice. */}
+                {c.imageUrl && (
+                  <img
+                    src={c.imageUrl}
+                    alt=""
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                )}
+                {/* Over a photograph this is a scrim that keeps the name
+                    legible; on a bare tile it is the gold wash that gives the
+                    hover something to reveal. */}
+                <span
+                  className={cn(
+                    'pointer-events-none absolute inset-0 transition-opacity duration-500',
+                    c.imageUrl
+                      ? 'bg-gradient-to-t from-ink-950/85 via-ink-950/30 to-transparent opacity-100'
+                      : 'bg-gradient-to-t from-brand/20 via-transparent to-transparent opacity-0 group-hover:opacity-100',
+                  )}
+                  aria-hidden
+                />
+                <h3 className="relative font-display text-h2 text-slate-100">{c.name}</h3>
+                <span className="relative mt-2 inline-flex items-center gap-2 text-overline uppercase text-slate-500 transition-transform duration-300 ease-emphasized group-hover:translate-x-1">
+                  Shop <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              </Link>
+            </Reveal>
           ))}
         </div>
       )}
@@ -270,10 +342,18 @@ function CategoryTiles({ categories, loading }: { categories: CategoryTreeRespon
  *  CLS-safe, and a partially-visible next card signals that it scrolls. */
 function ProductRail({ products }: { products: ProductSummaryResponse[] }) {
   return (
-    <div className="rc-bleed overflow-x-auto px-4 pb-2 sm:px-6 lg:px-8">
+    // `rc-rail` hides the scrollbar only — the rail still scrolls by wheel,
+    // drag, and keyboard, and the tab order is untouched.
+    <div className="rc-bleed rc-rail overflow-x-auto px-4 pb-2 sm:px-6 lg:px-8">
       <ul className="mx-auto flex max-w-7xl snap-x snap-mandatory gap-4 sm:gap-6">
-        {products.map((p) => (
-          <li key={p.id} className="w-44 shrink-0 snap-start sm:w-56 lg:w-64">
+        {products.map((p, i) => (
+          <li
+            key={p.id}
+            className="rc-enter w-44 shrink-0 snap-start sm:w-56 lg:w-64"
+            // Capped so a twelve-item rail doesn't leave the last card waiting
+            // most of a second before it appears.
+            style={{ animationDelay: `${Math.min(i, 6) * 60}ms` }}
+          >
             <ProductCard product={p} />
           </li>
         ))}
@@ -338,11 +418,19 @@ function StoryBand() {
         </h2>
         <div className="mt-14 grid gap-10 sm:grid-cols-3 sm:gap-8">
           {STORY.map((s, i) => (
-            <div key={s.title} className="border-t border-ink-600 pt-5">
-              <span className="text-overline uppercase text-slate-500">0{i + 1}</span>
-              <h3 className="mt-3 text-h4 text-slate-100">{s.title}</h3>
-              <p className="mt-2.5 text-body-sm text-slate-400">{s.body}</p>
-            </div>
+            <Reveal key={s.title} delay={i * 110}>
+              {/* The top rule draws itself in gold across the column on hover —
+                  the one moving part in an otherwise still band. */}
+              <div className="group relative border-t border-ink-600 pt-5">
+                <span
+                  className="absolute -top-px left-0 h-px w-0 bg-brand transition-[width] duration-700 ease-emphasized group-hover:w-full"
+                  aria-hidden
+                />
+                <span className="text-overline uppercase text-slate-500">0{i + 1}</span>
+                <h3 className="mt-3 text-h4 text-slate-100">{s.title}</h3>
+                <p className="mt-2.5 text-body-sm text-slate-400">{s.body}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -358,8 +446,11 @@ function TrustStrip() {
     <section className="border-y border-ink-700 py-10">
       <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
         {TRUST.map((t) => (
-          <div key={t.title}>
-            <t.icon className="h-5 w-5 text-slate-400" aria-hidden />
+          <div key={t.title} className="group">
+            <t.icon
+              className="h-5 w-5 text-slate-400 transition-colors duration-300 group-hover:text-brand-ink"
+              aria-hidden
+            />
             <h3 className="mt-3 text-body-sm font-medium text-slate-100">{t.title}</h3>
             <p className="mt-1 text-caption text-slate-500">{t.desc}</p>
           </div>
@@ -376,16 +467,29 @@ function TrustStrip() {
  */
 function ClosingBand({ storeName }: { storeName: string }) {
   return (
-    <section className={cn('rc-bleed bg-primary px-6 py-24 text-center sm:py-28')}>
-      <h2 className="mx-auto max-w-2xl font-display text-h1 text-primary-fg">
+    // `band`, not `primary`: this is ~24rem of solid fill across the full
+    // viewport. Inverting it on the dark palette would put a near-white slab in
+    // the middle of the page — the single most tiring thing a dark theme can
+    // do. On light it is the same black it always was. See index.css.
+    <section className={cn('rc-bleed relative overflow-hidden bg-band px-6 py-24 text-center sm:py-28')}>
+      {/* A single hairline of brand gold across the top of the band — the mark
+          the brand sheet leads with, at architectural scale. */}
+      <span className="absolute inset-x-0 top-0 h-px bg-brand/60" aria-hidden />
+      <h2 className="mx-auto max-w-2xl font-display text-h1 text-band-fg">
         Everything {storeName} makes, in one place.
       </h2>
       <div className="mt-10 flex justify-center">
+        {/* Inverted against the band it sits on, so the CTA reads in both
+            palettes without a second set of tokens. */}
         <Link
           to="/products"
-          className="inline-flex h-14 items-center justify-center bg-ink-950 px-8 text-sm font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:bg-ink-850"
+          className="group inline-flex h-14 items-center justify-center gap-2.5 rounded-full bg-band-fg px-9 text-sm font-semibold uppercase tracking-[0.12em] text-band shadow-sm transition duration-200 ease-emphasized hover:shadow-md active:scale-[0.97]"
         >
           Shop all
+          <ArrowRight
+            className="h-4 w-4 transition-transform duration-300 ease-emphasized group-hover:translate-x-1"
+            aria-hidden
+          />
         </Link>
       </div>
     </section>

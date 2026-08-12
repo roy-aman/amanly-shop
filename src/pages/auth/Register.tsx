@@ -6,8 +6,7 @@ import { useToast } from '@/context/ToastContext';
 import { Button, Field, Input, PasswordInput } from '@/components/ui';
 import AuthLayout from '@/components/layout/AuthLayout';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
-
-const PASSWORD_HINT = 'At least 12 characters with uppercase, lowercase, a digit and a special character.';
+import { PASSWORD_HINT } from '@/lib/passwordRules';
 
 export default function Register() {
   const navigate = useNavigate();

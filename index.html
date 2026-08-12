@@ -7,15 +7,45 @@
     <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="Amanly — considered essentials for men. A tight edit of everyday pieces, chosen for fit, fabric, and how they wear over time."
+      content="Amanly — built for modern men. A tight edit of everyday essentials, chosen for fit, fabric, and how they wear over time."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <title>Amanly</title>
+
+    <!--
+      Resolve the palette before first paint.
+
+      This has to be inline and synchronous in <head>: React mounts long after
+      the browser has painted the background, so without it every cold load for
+      someone on dark starts with a full-screen white flash — the single most
+      uncomfortable thing a dark theme can do.
+
+      Kept deliberately tiny and dependency-free. `rc_theme` and the class names
+      are shared with src/context/ThemeContext.tsx — change them together.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('rc_theme');
+          var dark =
+            stored === 'dark' ||
+            ((stored === 'system' || stored === null) &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', '#111111');
+          }
+        } catch (e) {
+          /* Storage or matchMedia unavailable — light is a safe first paint. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

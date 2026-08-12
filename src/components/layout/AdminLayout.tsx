@@ -6,6 +6,7 @@ import {
   Boxes,
   ChevronDown,
   FolderTree,
+  GalleryHorizontalEnd,
   LayoutDashboard,
   Tags,
   LogOut,
@@ -14,6 +15,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Settings,
+  ShieldCheck,
   ShoppingBag,
   Store,
   TicketPercent,
@@ -59,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
       { to: '/admin/categories', label: 'Categories', icon: FolderTree },
       { to: '/admin/brands', label: 'Brands', icon: Tags },
+      { to: '/admin/banners', label: 'Banners', icon: GalleryHorizontalEnd },
       { to: '/admin/reviews', label: 'Reviews', icon: MessagesSquare },
     ],
   },
@@ -84,6 +87,7 @@ const CRUMB_LABELS: Record<string, string> = {
   inventory: 'Inventory',
   categories: 'Categories',
   brands: 'Brands',
+  banners: 'Banners',
   reviews: 'Reviews',
   reports: 'Reports',
   users: 'Users',
@@ -114,7 +118,7 @@ export default function AdminLayout() {
   // for why the scope has to sit on <html> rather than on this wrapper.
   useDarkTheme();
 
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, showsPlatformConsole, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -155,7 +159,9 @@ export default function AdminLayout() {
 
   async function handleLogout() {
     await logout();
-    navigate('/admin/login');
+    // The storefront sign-in, which is where staff and administrators of this store come back in.
+    // /admin/login is the platform operators' door and would leave them unable to sign in again.
+    navigate('/login');
   }
 
   function renderNav({ compact, onNavigate }: { compact: boolean; onNavigate?: () => void }) {
@@ -319,6 +325,16 @@ export default function AdminLayout() {
                   <Store className="h-4 w-4" /> View storefront
                 </Link>
               </DropdownMenuItem>
+              {/* The only way into the platform console. Shown solely to an
+                  operator: for everyone else the route redirects anyway, and an
+                  entry that always 403s is worse than no entry. */}
+              {showsPlatformConsole && (
+                <DropdownMenuItem asChild>
+                  <Link to="/platform">
+                    <ShieldCheck className="h-4 w-4" /> Platform console
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem destructive onSelect={handleLogout}>
                 <LogOut className="h-4 w-4" /> Log out

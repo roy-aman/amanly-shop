@@ -13,10 +13,14 @@ import { UserStatusBadge } from '@/components/StatusBadge';
 const ALL_ROLES: RoleName[] = ['CUSTOMER', 'STAFF', 'ADMIN'];
 const PAGE_SIZE = 15;
 
+// PLATFORM_ADMIN is never grantable here (see ALL_ROLES — the admin user API
+// refuses it by design, so a store owner can never reach another store). It is
+// still in the map because an operator's own account can appear in this list.
 const ROLE_TONE: Record<RoleName, Parameters<typeof Badge>[0]['tone']> = {
   CUSTOMER: 'gray',
   STAFF: 'blue',
   ADMIN: 'gold',
+  PLATFORM_ADMIN: 'purple',
 };
 
 export default function AdminUsers() {

@@ -8,12 +8,11 @@ const SIZES = {
 } as const;
 
 /**
- * The Amanly brand mark: type, no icon.
+ * The Amanly wordmark: the name set in the display face, letter-spaced.
  *
- * Deliberately icon-free. A pictorial mark beside the name is the default move
- * of template storefronts; the brands Amanly is positioned against (COS, Zara,
- * Uniqlo) all sign with a wordmark alone, and it is what makes the header read
- * as a label rather than as an app.
+ * Half of the lockup — pair it with {@link AmanlyMark} where the brand sheet
+ * shows the monogram (header, footer, auth chrome) and use it alone in tight or
+ * repeated contexts, where a second mark on the page becomes noise.
  *
  * `name` defaults to the brand but accepts the store name from settings, so an
  * operator renaming the store in the admin console still drives the header.

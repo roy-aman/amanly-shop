@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/utils';
 import Cart from './Cart';
 import { addToCart, removeCartItem, updateCartItem } from '@/api/cart';
 import { addToWishlist } from '@/api/wishlist';
@@ -17,6 +19,9 @@ vi.mock('@/api/cart', () => ({
 
 vi.mock('@/api/wishlist', () => ({ addToWishlist: vi.fn() }));
 vi.mock('@/api/coupons', () => ({ validateCoupon: vi.fn() }));
+// No commerce settings published in these tests, so the estimate stays absent
+// and the panel keeps saying "calculated at checkout".
+vi.mock('@/api/store', () => ({ getPublicStore: vi.fn().mockResolvedValue({ slug: 'royal', name: 'Royal', currency: 'USD', codEnabled: true, onlinePaymentEnabled: true }) }));
 
 const wishlistRefresh = vi.fn();
 vi.mock('@/context/WishlistContext', () => ({
@@ -87,10 +92,15 @@ function cart(items: CartItemResponse[]): CartResponse {
 }
 
 function renderCart() {
+  // The page reads the store's delivery/tax rules through TanStack Query for the
+  // pre-checkout estimate, so it needs a client as well as a router.
+  const client = createTestQueryClient();
   return render(
-    <MemoryRouter>
-      <Cart />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <Cart />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

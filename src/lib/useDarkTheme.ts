@@ -1,26 +1,35 @@
 import { useLayoutEffect } from 'react';
+import { useOptionalTheme } from '@/context/ThemeContext';
 
 /**
- * Applies the dark palette scope for the lifetime of the calling component.
+ * Holds the dark palette for the lifetime of the calling component, and marks
+ * the document as a console surface (`.theme-console`, which restores the
+ * console's gold primary — see index.css).
  *
- * Light is the document default (the storefront); the admin console and the
- * admin sign-in page opt into dark by calling this.
+ * The admin console, the platform console and the admin sign-in page call this.
+ * The storefront does not: there, dark is the shopper's own choice.
  *
- * The class MUST live on `<html>`, not on a layout wrapper: Radix portals
- * (Drawer, Modal, ConfirmDialog, DropdownMenu, Tooltip) and the toast stack
- * render into `document.body`, outside every layout subtree, so a wrapper-scoped
- * class would leave admin dropdowns and dialogs rendering on the light palette.
- *
- * `useLayoutEffect` (not `useEffect`) so the scope is applied before paint —
- * otherwise admin routes flash white on entry.
+ * This no longer touches the class itself. It registers a claim with
+ * `ThemeProvider`, which is the single writer of `dark` on <html>. That
+ * indirection is the fix for a real bug: when this hook removed the class on
+ * unmount, an operator who had chosen dark for the storefront was dumped back
+ * into light every time they came back from /admin.
  *
  * @param enabled pass `false` to opt out (lets a shared layout stay light).
  */
 export function useDarkTheme(enabled = true): void {
+  const theme = useOptionalTheme();
+  const acquire = theme?.acquireForcedDark;
+
   useLayoutEffect(() => {
     if (!enabled) return;
+    if (acquire) return acquire();
+
+    // No provider above us — a test rendering a console layout in isolation.
+    // Own the class directly, exactly as this hook used to. Safe precisely
+    // because without a provider there is no stored preference to clobber.
     const root = document.documentElement;
-    root.classList.add('dark');
-    return () => root.classList.remove('dark');
-  }, [enabled]);
+    root.classList.add('dark', 'theme-console');
+    return () => root.classList.remove('dark', 'theme-console');
+  }, [enabled, acquire]);
 }

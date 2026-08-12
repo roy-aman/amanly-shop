@@ -94,3 +94,45 @@ export function DropdownMenuCheckboxItem({
     </RadixMenu.CheckboxItem>
   );
 }
+
+/**
+ * Radio group for a mutually-exclusive choice (e.g. the appearance picker).
+ *
+ * Distinct from the checkbox item above, and not a cosmetic distinction: Radix
+ * renders `role="menuitemradio"` inside a group, so assistive tech announces
+ * "2 of 3" rather than three unrelated checkboxes that happen to look exclusive.
+ */
+export function DropdownMenuRadioGroup({
+  value,
+  onValueChange,
+  children,
+}: {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <RadixMenu.RadioGroup value={value} onValueChange={onValueChange}>
+      {children}
+    </RadixMenu.RadioGroup>
+  );
+}
+
+export function DropdownMenuRadioItem({
+  value,
+  children,
+  className,
+}: {
+  value: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <RadixMenu.RadioItem value={value} className={cn(ITEM_BASE, 'relative pl-8 text-slate-200', className)}>
+      <RadixMenu.ItemIndicator className="absolute left-2.5">
+        <Check className="h-4 w-4 text-gold-300" />
+      </RadixMenu.ItemIndicator>
+      {children}
+    </RadixMenu.RadioItem>
+  );
+}

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ImageOff } from 'lucide-react';
 import type { ProductSummaryResponse } from '@/lib/types';
-import { cn, PriceTag, RatingStars } from '@/components/ui';
+import { cn, PriceTag, RatingStars, revealOnLoad } from '@/components/ui';
 import WishlistButton from '@/components/WishlistButton';
 
 /** Layout variants: the default portrait grid tile, and a horizontal list row. */
@@ -47,11 +47,15 @@ export default function ProductCard({
       src={product.primaryImageUrl}
       alt={product.name}
       loading="lazy"
+      // `rc-img` holds the image at opacity 0 until it has decoded, then fades
+      // and settles it. Without this a grid of tiles pops in band by band as
+      // each request lands, which is the least composed a page ever looks.
+      {...revealOnLoad}
       className={cn(
-        'h-full w-full object-cover transition duration-700 ease-emphasized group-hover:scale-[1.04]',
-        // Sold-out reads as "drained", not as an alarm. A red badge on a grid of
-        // products shouts the one thing the shopper can't act on.
-        outOfStock && 'opacity-60 grayscale',
+        'rc-img h-full w-full object-cover',
+        // The zoom is slow and small on purpose: it should register as the tile
+        // responding, not as an effect.
+        'duration-[900ms] ease-emphasized group-hover:scale-[1.06]',
       )}
     />
   ) : (
@@ -82,23 +86,51 @@ export default function ProductCard({
     />
   );
 
+  /**
+   * The image tile. Sold-out is treated here rather than on the <img> itself:
+   * a Tailwind `opacity` utility on the image would outrank `.rc-img`'s
+   * `opacity: 0` (utilities cascade after components) and the tile would skip
+   * its fade-in entirely.
+   *
+   * Sold-out reads as "drained", not as an alarm — a red badge on a grid of
+   * products shouts the one thing the shopper cannot act on.
+   */
+  const tile = (className: string) => (
+    <div className={cn('relative overflow-hidden rounded-xl bg-ink-850', className)}>
+      <div className={cn('h-full w-full', outOfStock && 'opacity-60 grayscale')}>{image}</div>
+      {/* A whisper of ink at the bottom on hover, so the tile acknowledges the
+          pointer even where the photography is pale edge-to-edge. */}
+      <div
+        // Neutral black, not `slate-900` (#0f172a): that step is a static blue
+        // -black that never flips with the palette, and a cool cast under a
+        // warm gold is the exact thing the brand notes warn against.
+        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/15 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        aria-hidden
+      />
+      {outOfStock && (
+        <span className="absolute bottom-2 left-2 rounded-full bg-ink-950/90 px-2.5 py-1 text-caption text-slate-300 backdrop-blur-sm">
+          Sold out
+        </span>
+      )}
+      {wishlist}
+    </div>
+  );
+
   if (variant === 'list') {
     return (
       <Link
         to={`/products/${product.slug}`}
-        className="group flex gap-5 border-b border-ink-700 py-5 transition-colors last:border-b-0 hover:border-ink-600"
+        className="group flex gap-5 rounded-2xl border-b border-ink-700 px-2 py-5 transition-colors duration-300 last:border-b-0 hover:bg-ink-850/60"
       >
-        <div className="relative aspect-[4/5] w-24 shrink-0 overflow-hidden bg-ink-850 sm:w-32">
-          {image}
-          {wishlist}
-        </div>
+        {tile('aspect-[4/5] w-24 shrink-0 sm:w-32')}
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-1">
           {product.categoryName && (
             <p className="text-overline uppercase text-slate-500">{product.categoryName}</p>
           )}
-          <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100">{product.name}</h3>
+          <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100 transition-colors duration-300 group-hover:text-slate-400">
+            {product.name}
+          </h3>
           {rating}
-          {outOfStock && <p className="text-caption text-slate-500">Sold out</p>}
           <div className="mt-auto pt-2">{price}</div>
         </div>
       </Link>
@@ -107,19 +139,19 @@ export default function ProductCard({
 
   return (
     <Link to={`/products/${product.slug}`} className="group flex flex-col">
-      <div className="relative aspect-[4/5] overflow-hidden bg-ink-850">
-        {image}
-        {wishlist}
-      </div>
+      {tile('aspect-[4/5]')}
 
-      <div className="flex flex-1 flex-col gap-1.5 pt-3">
+      <div className="flex flex-1 flex-col gap-1.5 pt-3.5">
         {/* The category eyebrow is gone: on a category page it repeats the page
             title, and in a rail it is the least useful line in the card. */}
-        <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100 transition-colors group-hover:text-slate-400">
+        {/* A colour shift rather than the `.rc-link` underline: this title is
+            `line-clamp-2` and an absolutely-positioned rule sits under only the
+            first line fragment once the text wraps. The image zoom is already
+            carrying the hover. */}
+        <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100 transition-colors duration-300 group-hover:text-slate-400">
           {product.name}
         </h3>
         {rating}
-        {outOfStock && <p className="text-caption text-slate-500">Sold out</p>}
         <div className="mt-auto pt-1">{price}</div>
       </div>
     </Link>
