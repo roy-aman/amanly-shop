@@ -132,6 +132,8 @@ export interface UpdateBrandRequest {
 // Mirrors com.royalcommerce.application.product.dto.*. A product with ≥1 ACTIVE
 // variant is variant-based: a variantId is then required to add it to the cart.
 export interface ProductVariantResponse {
+  /** EAN-13 for the unit that crosses a counter. Assigned by the server when left blank. */
+  barcode: string | null;
   id: string;
   sku: string;
   /** Option axes, e.g. { size: 'M', color: 'Red' }. Keys are sorted by the backend. */
@@ -152,6 +154,8 @@ export interface ProductVariantResponse {
 export interface CreateVariantRequest {
   sku: string;
   options: Record<string, string>;
+  /** Leave undefined/blank and the server generates a unique EAN-13. */
+  barcode?: string | null;
   price?: number | null;
   stockQuantity?: number | null;
   imageId?: string | null;
@@ -160,6 +164,8 @@ export interface CreateVariantRequest {
 
 /** Edit a variant's mutable fields (SKU is immutable; stock via the stock endpoint). */
 export interface UpdateVariantRequest {
+  /** Blank KEEPS the current barcode — it does not clear or regenerate it. */
+  barcode?: string | null;
   options: Record<string, string>;
   price?: number | null;
   imageId?: string | null;

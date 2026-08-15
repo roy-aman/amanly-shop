@@ -505,6 +505,7 @@ interface OptionRow {
 
 interface VariantFormState {
   sku: string;
+  barcode: string;
   options: OptionRow[];
   price: string;
   stockQuantity: string;
@@ -514,6 +515,7 @@ interface VariantFormState {
 
 const EMPTY_VARIANT: VariantFormState = {
   sku: '',
+  barcode: '',
   options: [{ key: '', value: '' }],
   price: '',
   stockQuantity: '0',
@@ -577,6 +579,8 @@ function VariantsManager({ productId }: { productId: string }) {
       else if (e.code === 'VARIANT_OPTIONS_EXISTS') setErrors({ options: 'A variant with these options already exists.' });
       // Carries the established axis names, which is the one thing the merchant needs to see.
       else if (e.code === 'VARIANT_OPTIONS_MISMATCH') setErrors({ options: e.message });
+      else if (e.code === 'BARCODE_ALREADY_IN_USE' || e.code === 'INVALID_BARCODE')
+        setErrors({ barcode: e.message });
       toast.error(title, e.message);
     } else {
       toast.error(title, 'An unexpected error occurred.');
@@ -650,6 +654,7 @@ function VariantsManager({ productId }: { productId: string }) {
     setEditTarget(v);
     setForm({
       sku: v.sku,
+      barcode: v.barcode ?? '',
       options: optionsToRows(v.options),
       price: v.priceOverride != null ? String(v.priceOverride) : '',
       stockQuantity: String(v.stockQuantity),
@@ -697,11 +702,14 @@ function VariantsManager({ productId }: { productId: string }) {
     if (editTarget) {
       updateMutation.mutate({
         variantId: editTarget.id,
-        body: { options, price, imageId, active: form.active },
+        // Blank is deliberately sent as undefined, not '': the API reads blank as
+        // "keep the current barcode", and '' would be a value it must validate.
+        body: { barcode: form.barcode.trim() || undefined, options, price, imageId, active: form.active },
       });
     } else {
       createMutation.mutate({
         sku: form.sku.trim().toUpperCase(),
+        barcode: form.barcode.trim() || undefined,
         options,
         price,
         stockQuantity: Number(form.stockQuantity) || 0,
@@ -736,6 +744,7 @@ function VariantsManager({ productId }: { productId: string }) {
               <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wider text-slate-500">
                 <th className="px-2 py-2 font-medium">Options</th>
                 <th className="px-2 py-2 font-medium">SKU</th>
+                <th className="px-2 py-2 font-medium">Barcode</th>
                 <th className="px-2 py-2 font-medium text-right">Price</th>
                 <th className="px-2 py-2 font-medium text-right">Stock</th>
                 <th className="px-2 py-2 font-medium">Status</th>
@@ -747,6 +756,7 @@ function VariantsManager({ productId }: { productId: string }) {
                 <tr key={v.id}>
                   <td className="px-2 py-3 text-slate-200">{v.optionsLabel}</td>
                   <td className="px-2 py-3 font-mono text-xs text-slate-500">{v.sku}</td>
+                  <td className="px-2 py-3 font-mono text-xs text-slate-500">{v.barcode ?? '—'}</td>
                   <td className="px-2 py-3 text-right text-slate-300">
                     {money(v.effectivePrice, currency)}
                     {v.priceOverride == null && <span className="ml-1 text-xs text-slate-600">(base)</span>}
@@ -809,6 +819,24 @@ function VariantsManager({ productId }: { productId: string }) {
               invalid={!!errors.sku}
               readOnly={!!editTarget}
               disabled={!!editTarget}
+            />
+          </Field>
+
+          <Field
+            label="Barcode"
+            error={errors.barcode}
+            hint={
+              editTarget
+                ? 'Leave blank to keep the current barcode. Printed labels stay valid.'
+                : 'Leave blank and one is generated. Enter a real EAN-13 if the item already has one.'
+            }
+          >
+            <Input
+              value={form.barcode}
+              placeholder="2001234567893"
+              inputMode="numeric"
+              onChange={(e) => setField('barcode', e.target.value)}
+              invalid={!!errors.barcode}
             />
           </Field>
 

@@ -32,6 +32,7 @@ function variant(overrides: Partial<ProductVariantResponse> = {}): ProductVarian
   return {
     id: 'var-m',
     sku: 'RING-1-M',
+    barcode: null,
     options: { size: 'M' },
     optionsLabel: 'size: M',
     priceOverride: null,
