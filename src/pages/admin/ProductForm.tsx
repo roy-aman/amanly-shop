@@ -11,6 +11,7 @@ import { money } from '@/lib/format';
 import type {
   CreateProductRequest,
   CreateVariantRequest,
+  GeneratePromptsRequest,
   ProductImageRequest,
   ProductVariantResponse,
   UpdateProductRequest,
@@ -223,6 +224,23 @@ export default function ProductForm() {
     }
   }
 
+  // In edit mode the studio drafts prompts from the SAVED product. Here there is no
+  // saved product to read, so what the merchant has typed so far is passed through
+  // instead — and withheld entirely until they have named the thing, because a prompt
+  // drafted from an empty form describes nothing.
+  //
+  // Declared above the loading return: it is a hook, and a hook that runs only on
+  // some renders is a crash, not a subtlety.
+  const draftAiContext = useMemo<GeneratePromptsRequest | undefined>(() => {
+    const productName = form.name.trim();
+    if (!productName) return undefined;
+    return {
+      productName,
+      categoryName: categoriesQ.data?.find((c) => c.id === form.categoryId)?.name ?? null,
+      brandName: brandsQ.data?.find((b) => b.id === form.brandId)?.name ?? null,
+    };
+  }, [form.name, form.categoryId, form.brandId, categoriesQ.data, brandsQ.data]);
+
   if (isEdit && productQ.isLoading) return <FormSkeleton />;
 
   const categories = categoriesQ.data ?? [];
@@ -406,16 +424,16 @@ export default function ProductForm() {
                 {draftImages.map((im, idx) => (
                   <div key={idx} className="rounded-xl border border-ink-700 bg-ink-850 p-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Field label="Image URL" className="sm:col-span-2">
-                        <Input
-                          value={im.url}
-                          onChange={(e) =>
-                            setDraftImages((prev) =>
-                              prev.map((x, i) => (i === idx ? { ...x, url: e.target.value } : x)),
-                            )
-                          }
-                        />
-                      </Field>
+                      <ImageUploadField
+                        label="Image"
+                        className="sm:col-span-2"
+                        aspect="square"
+                        value={im.url}
+                        onChange={(url) =>
+                          setDraftImages((prev) => prev.map((x, i) => (i === idx ? { ...x, url } : x)))
+                        }
+                        aiContext={draftAiContext}
+                      />
                       <Field label="Alt text">
                         <Input
                           value={im.altText}
@@ -1174,9 +1192,17 @@ function ImagesManager({ productId }: { productId: string }) {
       <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Add image</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Image URL" className="sm:col-span-2">
-            <Input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} />
-          </Field>
+          {/* Upload, paste or generate — then "Add image" attaches it. AI lives on the
+              header button rather than in here, because that one adds several views in a
+              single pass and two Generate buttons doing different things would be a trap. */}
+          <ImageUploadField
+            label="Image"
+            className="sm:col-span-2"
+            aspect="square"
+            hint="Upload a file or paste a URL, then add it to the product."
+            value={form.url}
+            onChange={(url) => setForm((f) => ({ ...f, url }))}
+          />
           <Field label="Alt text">
             <Input value={form.altText} onChange={(e) => setForm((f) => ({ ...f, altText: e.target.value }))} />
           </Field>
