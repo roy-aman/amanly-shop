@@ -1022,6 +1022,36 @@ export interface UploadQuotaResponse {
   remaining: number | null;
 }
 
+// ── QR poster ─────────────────────────────────────────────────────────
+
+/**
+ * Every field is optional, and for the caption fields `undefined` and `''` mean
+ * different things: omitted takes the default, empty removes that line.
+ */
+export interface QrCodeParams {
+  /** Omit for the store's own home page, resolved server-side. */
+  url?: string;
+  /** Edge of the code itself, 128–2048. */
+  size?: number;
+  /** Omit for "Welcome to <store name>". */
+  title?: string;
+  /** Omit for "Scan to visit us online". */
+  subtitle?: string;
+}
+
+export interface QrCodeResponse {
+  /** What the code encodes. Echo it back before anyone prints it. */
+  url: string;
+  /** The PNG inline — usable directly as an <img> src and an <a download> href. */
+  dataUri: string;
+  /** Edge of the code. NOT the image size. */
+  sizePx: number;
+  widthPx: number;
+  /** Exceeds sizePx whenever a caption is drawn, so never assume a square. */
+  heightPx: number;
+  format: string;
+}
+
 // ── AI image generation ───────────────────────────────────────────────
 // Mirrors com.royalcommerce.application.media.dto.AiImageDtos.
 

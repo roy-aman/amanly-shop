@@ -59,6 +59,7 @@ const Reports = lazy(() => import('@/pages/admin/Reports'));
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
 const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'));
+const StoreQrCode = lazy(() => import('@/pages/admin/StoreQrCode'));
 
 // Platform console — only a PLATFORM_ADMIN ever loads these chunks.
 const PlatformStores = lazy(() => import('@/pages/platform/PlatformStores'));
@@ -155,6 +156,9 @@ export default function App() {
             <Route path="banners" element={<Page title="Banners" fallback={<ListSkeleton />}><Banners /></Page>} />
             <Route path="reviews" element={<Page title="Reviews" fallback={<ListSkeleton />}><AdminReviews /></Page>} />
             <Route path="reports" element={<Page title="Reports" fallback={<DashboardSkeleton />}><Reports /></Page>} />
+            {/* STAFF too, not ADMIN-only: the backend allows both, and printing
+                a poster for the shop window is counter work. */}
+            <Route path="qr-code" element={<Page title="Store QR code" fallback={<FormSkeleton />}><StoreQrCode /></Page>} />
 
             {/* ADMIN-only sections */}
             <Route element={<RequireAdmin />}>

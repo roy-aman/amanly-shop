@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   PanelLeft,
   PanelLeftClose,
+  QrCode,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -75,7 +76,15 @@ const NAV_GROUPS: NavGroup[] = [
   },
   { label: 'People', items: [{ to: '/admin/users', label: 'Users', icon: Users, adminOnly: true }] },
   { label: 'Insights', items: [{ to: '/admin/reports', label: 'Reports', icon: BarChart3 }] },
-  { label: 'System', items: [{ to: '/admin/settings', label: 'Settings', icon: Settings, adminOnly: true }] },
+  {
+    label: 'System',
+    items: [
+      // Not adminOnly: the backend allows STAFF, and printing a poster for the
+      // window is counter work rather than an owner's job.
+      { to: '/admin/qr-code', label: 'Store QR code', icon: QrCode },
+      { to: '/admin/settings', label: 'Settings', icon: Settings, adminOnly: true },
+    ],
+  },
 ];
 
 const COLLAPSE_KEY = 'rc-admin-sidebar-collapsed';
@@ -92,6 +101,7 @@ const CRUMB_LABELS: Record<string, string> = {
   reports: 'Reports',
   users: 'Users',
   settings: 'Settings',
+  'qr-code': 'Store QR code',
   new: 'New',
 };
 
