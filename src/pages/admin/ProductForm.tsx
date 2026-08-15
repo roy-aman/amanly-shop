@@ -6,6 +6,7 @@ import { adminCategories, adminProducts, adminProductVariants } from '@/api/admi
 import { listBrands } from '@/api/catalog';
 import { ApiError } from '@/lib/http';
 import { AiImageStudio, useAiQuota } from '@/components/admin/AiImageStudio';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { money } from '@/lib/format';
 import type {
   CreateProductRequest,
@@ -551,6 +552,10 @@ function VariantsManager({ productId }: { productId: string }) {
   const [stockTarget, setStockTarget] = useState<ProductVariantResponse | null>(null);
   const [stockValue, setStockValue] = useState('0');
   const [deleteTarget, setDeleteTarget] = useState<ProductVariantResponse | null>(null);
+  // The "+" tile: adds a photo to the product's gallery and pins it to this
+  // variant in one step, because the merchant is thinking about the variant in
+  // front of them, not about the product's image list further down the page.
+  const [addingImage, setAddingImage] = useState(false);
 
   const productQ = useQuery({
     queryKey: ['admin', 'product', productId],
@@ -637,6 +642,24 @@ function VariantsManager({ productId }: { productId: string }) {
    * but a form that cannot express the mistake beats an error explaining it.
    */
   const establishedAxes = Object.keys(variantsQ.data?.[0]?.options ?? {});
+
+  const addImageMutation = useMutation({
+    mutationFn: (url: string) =>
+      adminProducts.addImages(productId, [
+        { url, altText: null, sortOrder: images.length, isPrimary: images.length === 0 },
+      ]),
+    onSuccess: (product) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'product', productId] });
+      // Pin the one that was just added. Matching on URL rather than assuming the
+      // last element: the server owns ordering, and sortOrder is a request, not a
+      // guarantee.
+      const added = product.images.find((im) => !images.some((existing) => existing.id === im.id));
+      if (added) setField('imageId', added.id);
+      setAddingImage(false);
+      toast.success('Image added');
+    },
+    onError: (e) => onError(e, 'Could not add the image'),
+  });
 
   function openCreate() {
     setErrors({});
@@ -912,16 +935,55 @@ function VariantsManager({ productId }: { productId: string }) {
                 />
               </Field>
             )}
-            <Field label="Image" hint="Optional · pins a product image to this variant">
-              <Select value={form.imageId} onChange={(e) => setField('imageId', e.target.value)}>
-                <option value="">— None —</option>
-                {images.map((im, i) => (
-                  <option key={im.id} value={im.id}>
-                    {im.altText || `Image ${i + 1}`}
-                    {im.isPrimary ? ' (primary)' : ''}
-                  </option>
-                ))}
-              </Select>
+            <Field
+              label="Image"
+              hint={
+                images.length
+                  ? 'Optional · pick the photo that represents this variant'
+                  : 'Add a photo to the product below, then pin one here'
+              }
+              className="sm:col-span-2"
+            >
+              {/* Thumbnails rather than a dropdown: picking an image by its alt text
+                  means reading a label to guess at a picture, which is the one thing
+                  a picture makes unnecessary. */}
+              <div className="flex flex-wrap items-center gap-2">
+                {images.map((im, i) => {
+                  const selected = form.imageId === im.id;
+                  return (
+                    <button
+                      key={im.id}
+                      type="button"
+                      onClick={() => setField('imageId', selected ? '' : im.id)}
+                      aria-pressed={selected}
+                      aria-label={im.altText || `Image ${i + 1}`}
+                      title={im.altText || `Image ${i + 1}`}
+                      className={`relative h-20 w-20 overflow-hidden rounded-lg border-2 transition ${
+                        selected
+                          ? 'border-amber-400 ring-2 ring-amber-400/30'
+                          : 'border-ink-700 hover:border-ink-500'
+                      }`}
+                    >
+                      <img src={im.url} alt="" className="h-full w-full object-cover" />
+                      {im.isPrimary && (
+                        <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-[10px] text-white">
+                          Primary
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => setAddingImage(true)}
+                  aria-label="Add an image"
+                  title="Add an image"
+                  className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-ink-600 text-slate-500 transition hover:border-amber-400 hover:text-amber-400"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              </div>
             </Field>
           </div>
 
@@ -970,6 +1032,31 @@ function VariantsManager({ productId }: { productId: string }) {
             />
           </Field>
         )}
+      </Modal>
+
+      {/* The "+" tile. ImageUploadField already bundles upload, paste and AI
+          generation, so the tile reuses it rather than growing a second, subtly
+          different way to get a picture into the catalogue. */}
+      <Modal
+        open={addingImage}
+        onClose={() => setAddingImage(false)}
+        title="Add an image"
+      >
+        <ImageUploadField
+          label="Product image"
+          value=""
+          hint="Uploaded here, it joins the product's gallery and is pinned to this variant."
+          aspect="square"
+          aiContext={
+            productQ.data
+              ? { productName: productQ.data.name, categoryName: productQ.data.categoryName ?? undefined }
+              : undefined
+          }
+          onChange={(url) => {
+            if (!url) return;
+            addImageMutation.mutate(url);
+          }}
+        />
       </Modal>
 
       {/* Delete variant */}
