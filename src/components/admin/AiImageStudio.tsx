@@ -258,14 +258,20 @@ export function AiImageStudio({
             /*
              * The list scrolls inside itself rather than growing the dialog.
              *
-             * Six sides made the dialog taller than the viewport, and since the whole
-             * overlay is what scrolls, the side selector and "Redraft prompts" scrolled
-             * off the top and out of reach — so the one control for choosing sides became
-             * unusable exactly when several sides were in play. Bounding the list here
-             * keeps that header and the footer on screen, and leaves the shared Modal
-             * (which six other pages depend on) alone.
+             * Selecting more sides added more cards, the dialog grew, and because it is
+             * centred it grew UPWARDS too — carrying "Sides to generate" and "Redraft
+             * prompts" above the top of the window. The whole overlay is what scrolls, so
+             * the only control for choosing sides became unreachable exactly when there
+             * was most reason to use it.
+             *
+             * The bound is the viewport minus this dialog's own chrome — title bar, the
+             * two header rows, footer, padding — rather than a flat fraction of it. A
+             * fraction still overflows on a short window, which is the case that broke in
+             * the first place. The floor keeps the list usable if the window is shorter
+             * than the chrome. The shared Modal, which six other pages depend on, is left
+             * alone.
              */
-            <div className="-mr-2 max-h-[55vh] space-y-4 overflow-y-auto pr-2">
+            <div className="-mr-2 max-h-[max(14rem,calc(100vh-22rem))] space-y-4 overflow-y-auto pr-2">
               {drafts.map((d) => (
                 <DraftRow
                   key={d.key}
