@@ -98,7 +98,7 @@ describe('AI image studio', () => {
 
     await user.clear(box);
     await user.type(box, 'A red running shoe on marble');
-    await user.click(screen.getByRole('button', { name: /^generate image$/i }));
+    await user.click(screen.getByRole('button', { name: /^generate$/i }));
 
     await waitFor(() => expect(generateMock).toHaveBeenCalled());
     expect(generateMock.mock.calls[0][0].prompt).toBe('A red running shoe on marble');
@@ -110,7 +110,7 @@ describe('AI image studio', () => {
 
     await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
     await screen.findByDisplayValue(/Nike Air Zoom/);
-    await user.click(screen.getByRole('button', { name: /^generate image$/i }));
+    await user.click(screen.getByRole('button', { name: /^generate$/i }));
 
     await user.click(await screen.findByRole('button', { name: /use this/i }));
 
@@ -137,12 +137,70 @@ describe('AI image studio', () => {
 
     await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
     await screen.findByDisplayValue('front prompt');
-    await user.click(screen.getByRole('button', { name: /generate 2 images/i }));
+    await user.click(screen.getByRole('button', { name: /generate all 2/i }));
 
     expect(await screen.findByText('Could not generate')).toBeInTheDocument();
     expect(await screen.findByText('Failed')).toBeInTheDocument();
     // The other side still came through and is still usable.
     expect(await screen.findByRole('button', { name: /use this/i })).toBeInTheDocument();
+  });
+
+  // ── one button per meaning ───────────────────────────────────────────
+
+  /**
+   * With one side there is nothing a batch button can do that the side's own button does
+   * not, and two controls reading "Generate" side by side is a coin toss for the merchant.
+   * It appears only once it means something different.
+   */
+  it('offers no batch button when there is only one side to generate', async () => {
+    const user = userEvent.setup();
+    render();
+
+    await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
+    await screen.findByDisplayValue(/Nike Air Zoom/);
+
+    expect(screen.getAllByRole('button', { name: /^generate/i })).toHaveLength(1);
+  });
+
+  /**
+   * Each generation is metered and takes about ten seconds, so a batch button that redid
+   * the sides which already worked would spend six to gain one.
+   */
+  it('the batch button skips sides that already produced an image', async () => {
+    draftMock.mockResolvedValue([
+      { view: 'FRONT', prompt: 'front prompt' },
+      { view: 'BACK', prompt: 'back prompt' },
+    ]);
+    const user = userEvent.setup();
+    render();
+
+    await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
+    await screen.findByDisplayValue('front prompt');
+
+    // Generate the front on its own; the batch button should stop offering itself for it.
+    await user.click(screen.getAllByRole('button', { name: /^generate$/i })[0]);
+    await screen.findByRole('button', { name: /use this/i });
+
+    expect(screen.queryByRole('button', { name: /generate all/i })).not.toBeInTheDocument();
+    expect(generateMock).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * There is no bundle flow in this console, so no request should carry a bundle flag.
+   * It once had to be sent on every call — the API declared it a primitive, which made an
+   * omission a 400 rather than a default — and stating "this is not a bundle" on every
+   * product photograph was the wrong end to fix that at.
+   */
+  it('says nothing about bundles, because there is no bundle flow here', async () => {
+    const user = userEvent.setup();
+    render();
+
+    await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
+    await screen.findByDisplayValue(/Nike Air Zoom/);
+    await user.click(screen.getByRole('button', { name: /^generate$/i }));
+
+    await waitFor(() => expect(generateMock).toHaveBeenCalled());
+    expect(generateMock.mock.calls[0][0]).not.toHaveProperty('isBundle');
   });
 
   // ── the platform's gate ──────────────────────────────────────────────

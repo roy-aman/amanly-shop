@@ -23,6 +23,13 @@ interface Draft {
   view: ImageView | null;
   prompt: string;
   status: 'idle' | 'generating' | 'done' | 'failed';
+  /**
+   * Has this side ever been sent. Distinct from `status`, which goes back to
+   * `generating` on a retry — this is what decides whether the side belongs to the
+   * footer (never run) or to its own card (run at least once), and that must not
+   * flip back while a retry is in flight.
+   */
+  started?: boolean;
   url?: string;
   error?: string;
   /** Already kept. Shown so a merchant collecting six sides can see their progress. */
@@ -133,11 +140,13 @@ export function AiImageStudio({
    */
   async function generateAll(targets: Draft[]) {
     const runnable = targets.filter((d) => d.prompt.trim().length > 0);
-    runnable.forEach((d) => patch(d.key, { status: 'generating', error: undefined }));
+    runnable.forEach((d) => patch(d.key, { status: 'generating', started: true, error: undefined }));
 
     await Promise.allSettled(
       runnable.map(async (d) => {
         try {
+          // isBundle is deliberately absent: it belongs to the bundle flow, not to every
+          // product photograph. The API treats it as optional and defaults it to false.
           const result = await aiImages.generateImage({ prompt: d.prompt.trim(), view: d.view });
           patch(d.key, { status: 'done', url: result.url });
         } catch (e) {
@@ -154,6 +163,17 @@ export function AiImageStudio({
   const busy = drafts.some((d) => d.status === 'generating');
   const outOfQuota = remaining !== null && remaining <= 0;
 
+  /**
+   * What the footer button acts on: the sides that have never produced an image.
+   *
+   * It stops the batch button re-running sides that already succeeded — each is a metered
+   * ten-second call, so "generate" on a 5-of-6 set used to spend six generations to gain
+   * one — and it decides whether the footer button is worth showing at all. Below two, it
+   * would do exactly what the card's own button does, which is why "Generate" appeared
+   * twice for a single side.
+   */
+  const ungenerated = drafts.filter((d) => !d.started);
+
   return (
     <Modal
       open={open}
@@ -164,14 +184,16 @@ export function AiImageStudio({
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          {drafts.length > 0 && (
+          {/* Only where it does something the per-side buttons cannot: run the lot in
+              one go. For a single side it was a second button with the same effect. */}
+          {ungenerated.length > 1 && (
             <Button
               loading={busy}
               disabled={!allowed || outOfQuota}
-              onClick={() => generateAll(drafts)}
+              onClick={() => generateAll(ungenerated)}
             >
               <Sparkles className="h-4 w-4" />
-              Generate {drafts.length > 1 ? `${drafts.length} images` : 'image'}
+              Generate all {ungenerated.length}
             </Button>
           )}
         </>
@@ -233,7 +255,17 @@ export function AiImageStudio({
               generated.
             </p>
           ) : (
-            <div className="space-y-4">
+            /*
+             * The list scrolls inside itself rather than growing the dialog.
+             *
+             * Six sides made the dialog taller than the viewport, and since the whole
+             * overlay is what scrolls, the side selector and "Redraft prompts" scrolled
+             * off the top and out of reach — so the one control for choosing sides became
+             * unusable exactly when several sides were in play. Bounding the list here
+             * keeps that header and the footer on screen, and leaves the shared Modal
+             * (which six other pages depend on) alone.
+             */
+            <div className="-mr-2 max-h-[55vh] space-y-4 overflow-y-auto pr-2">
               {drafts.map((d) => (
                 <DraftRow
                   key={d.key}
@@ -315,6 +347,8 @@ function DraftRow({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {/* Always present: one side at a time is the careful way to spend a metered
+              generation, so this is the primary control and the footer is the shortcut. */}
           <Button
             size="sm"
             variant="outline"
@@ -322,7 +356,8 @@ function DraftRow({
             disabled={disabled || !draft.prompt.trim()}
             onClick={onRegenerate}
           >
-            <Sparkles className="h-4 w-4" /> {draft.status === 'done' ? 'Regenerate' : 'Generate'}
+            <Sparkles className="h-4 w-4" />
+            {draft.status === 'failed' ? 'Try again' : draft.status === 'done' ? 'Regenerate' : 'Generate'}
           </Button>
           {draft.status === 'done' && (
             <Button size="sm" variant={used ? 'ghost' : 'primary'} onClick={onUse}>
