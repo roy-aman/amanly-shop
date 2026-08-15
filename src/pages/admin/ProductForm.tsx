@@ -1131,6 +1131,19 @@ function ImagesManager({ productId }: { productId: string }) {
     onError: (e) => toast.error('Could not remove image', e instanceof ApiError ? e.message : undefined),
   });
 
+  // Which image is primary decides the listing thumbnail and what the product page
+  // opens on. It could previously only be chosen at the moment of adding, so getting
+  // it wrong meant deleting the image and adding it again.
+  const primaryMutation = useMutation({
+    mutationFn: (imageId: string) => adminProducts.setPrimaryImage(productId, imageId),
+    onSuccess: () => {
+      refetch();
+      toast.success('Primary image updated');
+    },
+    onError: (e) =>
+      toast.error('Could not change the primary image', e instanceof ApiError ? e.message : undefined),
+  });
+
   const images = productQ.data?.images ?? [];
 
   return (
@@ -1151,16 +1164,29 @@ function ImagesManager({ productId }: { productId: string }) {
           {images.map((im) => (
             <div key={im.id} className="group relative overflow-hidden rounded-xl border border-ink-700 bg-ink-850">
               <img src={im.url} alt={im.altText ?? ''} className="aspect-square w-full object-cover" />
-              {im.isPrimary && (
+              {im.isPrimary ? (
                 <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-gold-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-ink-950">
                   <Star className="h-2.5 w-2.5" /> Primary
                 </span>
+              ) : (
+                /* Shown outright rather than on hover: promoting an image is the ordinary
+                   way to work here, it is not destructive, and a hover-only control is
+                   invisible on a touchscreen and undiscoverable everywhere else. */
+                <button
+                  type="button"
+                  onClick={() => primaryMutation.mutate(im.id)}
+                  disabled={primaryMutation.isPending}
+                  className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-ink-950/75 py-1.5 text-[11px] font-medium text-slate-300 transition hover:bg-ink-950/90 hover:text-gold-300 disabled:opacity-60"
+                  aria-label={`Make ${im.altText || 'this image'} the primary image`}
+                >
+                  <Star className="h-3 w-3" /> Make primary
+                </button>
               )}
               <button
                 type="button"
                 onClick={() => deleteMutation.mutate(im.id)}
                 disabled={deleteMutation.isPending}
-                className="absolute right-1.5 top-1.5 rounded-md bg-ink-950/80 p-1 text-rose-400 opacity-0 transition group-hover:opacity-100"
+                className="absolute right-1.5 top-1.5 rounded-md bg-ink-950/80 p-1 text-rose-400 opacity-0 transition focus-visible:opacity-100 group-hover:opacity-100"
                 aria-label="Delete image"
               >
                 <Trash2 className="h-4 w-4" />

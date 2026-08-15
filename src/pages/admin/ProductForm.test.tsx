@@ -10,7 +10,14 @@ import { listBrands } from '@/api/catalog';
 import type { ProductResponse, ProductVariantResponse } from '@/lib/types';
 
 vi.mock('@/api/admin', () => ({
-  adminProducts: { get: vi.fn(), create: vi.fn(), update: vi.fn() },
+  adminProducts: {
+    get: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    addImages: vi.fn(),
+    deleteImage: vi.fn(),
+    setPrimaryImage: vi.fn(),
+  },
   adminCategories: { list: vi.fn() },
   adminProductVariants: { list: vi.fn(), create: vi.fn(), update: vi.fn(), setStock: vi.fn(), remove: vi.fn() },
 }));
@@ -24,6 +31,12 @@ const categoriesMock = vi.mocked(adminCategories.list);
 const brandsMock = vi.mocked(listBrands);
 const variantsListMock = vi.mocked(adminProductVariants.list);
 const variantCreateMock = vi.mocked(adminProductVariants.create);
+const setPrimaryImageMock = vi.mocked(adminProducts.setPrimaryImage);
+
+const IMAGES: ProductResponse['images'] = [
+  { id: 'img-1', url: 'https://cdn.example.com/a.jpg', altText: 'Front', sortOrder: 0, isPrimary: true },
+  { id: 'img-2', url: 'https://cdn.example.com/b.jpg', altText: 'Side', sortOrder: 1, isPrimary: false },
+];
 
 function product(overrides: Partial<ProductResponse> = {}): ProductResponse {
   return {
@@ -129,5 +142,32 @@ describe('Admin ProductForm — variants (WP-3.5)', () => {
 
     expect(await screen.findByText('Size: M')).toBeInTheDocument();
     expect(screen.getByText('RING-1-M')).toBeInTheDocument();
+  });
+});
+
+describe('Admin ProductForm — the primary image', () => {
+  /**
+   * Which image is primary decides the listing thumbnail and what the product page opens
+   * on. It could only be chosen while adding an image, so correcting it meant deleting the
+   * photo and uploading it again.
+   */
+  it('promotes any image to primary', async () => {
+    getMock.mockResolvedValue(product({ images: IMAGES }));
+    setPrimaryImageMock.mockResolvedValue(product({ images: IMAGES }));
+    const user = userEvent.setup();
+    renderEditForm();
+
+    await user.click(await screen.findByRole('button', { name: /make Side the primary image/i }));
+
+    await waitFor(() => expect(setPrimaryImageMock).toHaveBeenCalledWith('p1', 'img-2'));
+  });
+
+  /** The one that already holds it is labelled, not offered — promoting it does nothing. */
+  it('offers promotion only on the images that are not already primary', async () => {
+    getMock.mockResolvedValue(product({ images: IMAGES }));
+    renderEditForm();
+
+    expect(await screen.findByText('Primary')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /the primary image/i })).toHaveLength(1);
   });
 });

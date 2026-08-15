@@ -60,6 +60,10 @@ export const adminProducts = {
   addImages(id: string, images: ProductImageRequest[]): Promise<ProductResponse> {
     return request('POST', `${A}/products/${id}/images`, { body: images, auth: true });
   },
+  /** Promotes an existing image to the listing thumbnail; the incumbent is demoted for you. */
+  setPrimaryImage(id: string, imageId: string): Promise<ProductResponse> {
+    return request('PATCH', `${A}/products/${id}/images/${imageId}/primary`, { auth: true });
+  },
   deleteImage(id: string, imageId: string): Promise<ProductResponse> {
     return request('DELETE', `${A}/products/${id}/images/${imageId}`, { auth: true });
   },
