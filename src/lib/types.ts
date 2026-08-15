@@ -840,6 +840,7 @@ export interface StoreAdminSummaryResponse {
   customDomainAllowed: boolean;
   imageUploadAllowed: boolean;
   aiImageGenerationAllowed: boolean;
+  bookingsAllowed: boolean;
   /** Max STAFF/ADMIN members. null = unlimited. Never send 0. */
   maxStaffSeats: number | null;
   maxImageUploads: number | null;
@@ -869,6 +870,12 @@ export interface UpdateStoreRequest {
 /**
  * A PUT in PATCH's clothing: every field is applied as given, so send the whole
  * object or you silently switch capabilities off.
+ *
+ * Every boolean below is REQUIRED, and the API means it: omitting one is a 400,
+ * not a defaulted `false`. That is deliberate on their side — a console that
+ * predates a capability must not be able to withdraw it by never having heard of
+ * it — but it does mean this interface has to gain each new flag in step with the
+ * backend, or saving entitlements stops working altogether.
  */
 export interface UpdateStoreEntitlementsRequest {
   onlinePaymentsAllowed: boolean;
@@ -879,6 +886,7 @@ export interface UpdateStoreEntitlementsRequest {
   customDomainAllowed: boolean;
   imageUploadAllowed: boolean;
   aiImageGenerationAllowed: boolean;
+  bookingsAllowed: boolean;
   maxStaffSeats?: number | null;
   maxImageUploads?: number | null;
   maxAiImageGenerations?: number | null;

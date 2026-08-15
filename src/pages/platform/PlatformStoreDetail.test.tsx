@@ -43,6 +43,7 @@ function store(overrides: Partial<StoreAdminSummaryResponse> = {}): StoreAdminSu
     customDomainAllowed: true,
     imageUploadAllowed: false,
     aiImageGenerationAllowed: false,
+    bookingsAllowed: false,
     maxStaffSeats: 5,
     maxImageUploads: null,
     maxAiImageGenerations: null,
@@ -83,10 +84,29 @@ describe('Platform store detail — entitlements', () => {
       customDomainAllowed: true,
       imageUploadAllowed: false,
       aiImageGenerationAllowed: false,
+      bookingsAllowed: false,
       maxStaffSeats: 5,
       maxImageUploads: null,
       maxAiImageGenerations: null,
     });
+  });
+
+  /**
+   * Bookings had no switch here at all, which was worse than it sounds: the API requires every
+   * boolean and rejects an omission outright, so a console missing one flag cannot save *any*
+   * entitlement change. Saving returned a 400 that named no field, and the beauty-parlour vertical
+   * could not be granted to anyone.
+   */
+  it('can grant bookings, and sends it with everything else', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Entitlements');
+
+    await user.click(screen.getByRole('checkbox', { name: /bookings/i }));
+    await user.click(screen.getByRole('button', { name: /save entitlements/i }));
+
+    await waitFor(() => expect(entitlementsMock).toHaveBeenCalled());
+    expect(entitlementsMock.mock.calls[0][1]).toMatchObject({ bookingsAllowed: true });
   });
 
   it('turning WhatsApp commerce on turns notifications on with it', async () => {

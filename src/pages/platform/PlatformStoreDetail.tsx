@@ -65,6 +65,11 @@ const ENTITLEMENTS = [
     label: 'AI image generation',
     help: 'Whether staff may generate product imagery from a prompt. Metered apart from uploading: each image is roughly ten seconds of inference rather than a few kilobytes of storage.',
   },
+  {
+    key: 'bookingsAllowed',
+    label: 'Bookings',
+    help: 'Whether the store may sell bookable services as well as goods. Withdrawing it hides the booking surface at once; their hours, services and staff survive so re-granting restores them.',
+  },
 ] as const;
 
 const domainsKey = (storeId: string) => ['platform-domains', storeId];
@@ -215,6 +220,7 @@ function EntitlementsCard({ store, onSaved }: { store: StoreAdminSummaryResponse
     customDomainAllowed: store.customDomainAllowed,
     imageUploadAllowed: store.imageUploadAllowed,
     aiImageGenerationAllowed: store.aiImageGenerationAllowed,
+    bookingsAllowed: store.bookingsAllowed,
     maxStaffSeats: store.maxStaffSeats,
     maxImageUploads: store.maxImageUploads,
     maxAiImageGenerations: store.maxAiImageGenerations,

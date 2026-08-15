@@ -34,6 +34,7 @@ function store(overrides: Partial<StoreAdminSummaryResponse> = {}): StoreAdminSu
     customDomainAllowed: true,
     imageUploadAllowed: false,
     aiImageGenerationAllowed: false,
+    bookingsAllowed: false,
     maxStaffSeats: 5,
     maxImageUploads: null,
     maxAiImageGenerations: null,
