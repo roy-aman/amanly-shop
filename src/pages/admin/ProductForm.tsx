@@ -575,6 +575,8 @@ function VariantsManager({ productId }: { productId: string }) {
       if (e.hasFieldErrors()) setErrors(e.fieldErrorMap());
       else if (e.code === 'VARIANT_SKU_EXISTS') setErrors({ sku: 'This SKU is already in use.' });
       else if (e.code === 'VARIANT_OPTIONS_EXISTS') setErrors({ options: 'A variant with these options already exists.' });
+      // Carries the established axis names, which is the one thing the merchant needs to see.
+      else if (e.code === 'VARIANT_OPTIONS_MISMATCH') setErrors({ options: e.message });
       toast.error(title, e.message);
     } else {
       toast.error(title, 'An unexpected error occurred.');
@@ -620,10 +622,27 @@ function VariantsManager({ productId }: { productId: string }) {
     onError: (e) => onError(e, 'Could not delete variant'),
   });
 
+  /**
+   * Every variant of a product must sit on the same option axes — one `Size` carrying S, M and L,
+   * not an option per size. Get it wrong and the storefront derives one selector per axis name,
+   * finds no variant that satisfies all of them at once, and the product silently becomes
+   * unbuyable: the price stays a range and "Add to cart" never enables.
+   *
+   * So the axes are seeded from the variants that already exist and their names are then fixed;
+   * after the first variant there is only a value left to type. The backend enforces the same rule,
+   * but a form that cannot express the mistake beats an error explaining it.
+   */
+  const establishedAxes = Object.keys(variantsQ.data?.[0]?.options ?? {});
+
   function openCreate() {
     setErrors({});
     setEditTarget(null);
-    setForm({ ...EMPTY_VARIANT, options: [{ key: '', value: '' }] });
+    setForm({
+      ...EMPTY_VARIANT,
+      options: establishedAxes.length
+        ? establishedAxes.map((key) => ({ key, value: '' }))
+        : [{ key: '', value: '' }],
+    });
     setFormOpen(true);
   }
   function openEdit(v: ProductVariantResponse) {
@@ -812,6 +831,12 @@ function VariantsManager({ productId }: { productId: string }) {
                     aria-label={`Option ${idx + 1} name`}
                     placeholder="Size"
                     value={row.key}
+                    // Locked once the product's first variant has set the axes: renaming one here
+                    // would split the storefront selector in two and make the product unbuyable.
+                    readOnly={establishedAxes.length > 0}
+                    title={establishedAxes.length > 0
+                      ? 'Fixed by this product’s first variant — every variant shares the same options'
+                      : undefined}
                     onChange={(e) => setOptionRow(idx, { key: e.target.value })}
                   />
                   <span className="text-slate-500">=</span>
