@@ -170,7 +170,8 @@ endpoints where two success codes mean different things — `POST /auth/login` a
 ### `@/api/platform` — platform surface (PLATFORM_ADMIN)
 `platformStores`.{list():StoreAdminSummaryResponse[] (NOT paginated), get(storeId), create(CreateStoreRequest),
 update(storeId,UpdateStoreRequest), updateEntitlements(storeId,UpdateStoreEntitlementsRequest)};
-`platformDomains`.{list(storeId), add(storeId,AddStoreDomainRequest), makePrimary(storeId,domainId), remove(storeId,domainId)};
+`platformDomains`.{list(storeId), add(storeId,AddStoreDomainRequest), rename(storeId,domainId,UpdateStoreDomainRequest),
+makePrimary(storeId,domainId), remove(storeId,domainId)};
 `platformAdmins`.{list(), grant(GrantPlatformAdminRequest), revoke(userId)}.
   - **Entitlements are applied as sent** — load current values and submit the whole object, or omitted
     fields are switched off. Turning off `customDomainAllowed` DETACHES every domain (the only
@@ -178,6 +179,29 @@ update(storeId,UpdateStoreRequest), updateEntitlements(storeId,UpdateStoreEntitl
     `CUSTOM_DOMAIN_NOT_ALLOWED`, `CANNOT_REMOVE_PRIMARY_DOMAIN`, `USER_NOT_FOUND`,
     `CANNOT_REVOKE_OWN_PLATFORM_ADMIN`, `ADMIN_PASSWORD_REQUIRED`, `INVALID_OTP`.
   - Domains are trusted, not DNS-verified, and no certificate is issued — never imply otherwise in UI.
+  - **`CreateStoreRequest.customDomain` is REQUIRED (2026-08-16)** — omitting it is a 400. A request is
+    routed to a store by the address it carries, so a store created without one is unreachable and
+    everything meant for it is answered by the fallback store. It is attached as the primary and grants
+    the custom-domain entitlement, so the follow-up attach form cannot then hit
+    `CUSTOM_DOMAIN_NOT_ALLOWED`. `DOMAIN_TAKEN` on create means NO store was made.
+  - **Addresses may carry a port and may be single-label** — `http://localhost:5180/` stores as
+    `localhost:5180`, which is how a store is pointed at a UI with no domain yet. Addresses are matched
+    WHOLE: `amanly.in` and `tech.amanly.in` are unrelated and may belong to different stores; there is no
+    subdomain or slug-based resolution any more. `rename` re-points a mapping keeping its id and primary
+    flag — prefer it to remove-then-add, which is refused for the primary while others remain.
+
+### `@/api/productBulk` — bulk catalogue upload/download (WP-4.1a)
+`productBulk`.{import(file,dryRun):202+jobId, status(jobId), history(params), exportCsv(filters)}.
+  - Rows key on **SKU**: existing → update, new → create as DRAFT. On an update a **blank cell leaves
+    that field unchanged** — importing can never clear a field. Say so in any UI.
+  - Import is **ADMIN only**; export is STAFF+. Applied in the background, so poll `status` until
+    `COMPLETED` or `FAILED`. **`COMPLETED` ≠ every row worked** — it means the file was read to the end;
+    read `failedCount`. `FAILED` means the file itself was unusable (`failureMessage`).
+  - `issue.line` is the SPREADSHEET row (header = 1), not an array index. Codes: `IMPORT_ALREADY_RUNNING`
+    (one import per store at a time — disable the control), `IMPORT_FILE_TOO_LARGE`, `IMPORT_FILE_NOT_UTF8`.
+  - `exportCsv` bypasses `request`: the response is CSV, and a bare `<a href>` cannot carry the bearer
+    token, so it fetches and hands the browser an object URL. Export writes the columns the importer
+    reads — that round trip is the whole feature.
 
 ### `@/lib/totals` — money breakdown (WP-P.6)
 `orderTotals(order):MoneyBreakdown` (reads a PLACED order; `totalAmount` passes through untouched,

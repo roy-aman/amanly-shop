@@ -99,6 +99,7 @@ describe('Platform stores list', () => {
     await user.click(screen.getByRole('button', { name: /new store/i }));
     await screen.findByRole('heading', { name: 'New store' });
     await user.type(screen.getByLabelText('Store name'), 'Acme Co');
+    await user.type(screen.getByLabelText('Address'), 'acme.example');
     await user.click(screen.getByRole('button', { name: /create store/i }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalled());
@@ -113,9 +114,46 @@ describe('Platform stores list', () => {
     await user.click(screen.getByRole('button', { name: /new store/i }));
     await screen.findByRole('heading', { name: 'New store' });
     await user.type(screen.getByLabelText('Store name'), 'Acme Co');
+    await user.type(screen.getByLabelText('Address'), 'acme.example');
     await user.click(screen.getByRole('button', { name: /create store/i }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalled());
     expect(createMock.mock.calls[0][0]).toMatchObject({ name: 'Acme Co', slug: 'acme-co' });
+  });
+
+  /**
+   * The API rejects a create with no address (400). Catching it here saves a round
+   * trip, but the reason to assert it is what happens if the field is ever made
+   * optional again: a store with no address is unreachable, and every request
+   * meant for it is answered by the fallback store instead — with a 200 and the
+   * wrong catalogue, which looks like working software.
+   */
+  it('will not create a store without an address', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStores />);
+    await screen.findByText('Nova Sports');
+
+    await user.click(screen.getByRole('button', { name: /new store/i }));
+    await screen.findByRole('heading', { name: 'New store' });
+    await user.type(screen.getByLabelText('Store name'), 'Acme Co');
+    await user.click(screen.getByRole('button', { name: /create store/i }));
+
+    expect(createMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/address is required/i)).toBeInTheDocument();
+  });
+
+  it('sends a development address through as typed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStores />);
+    await screen.findByText('Nova Sports');
+
+    await user.click(screen.getByRole('button', { name: /new store/i }));
+    await screen.findByRole('heading', { name: 'New store' });
+    await user.type(screen.getByLabelText('Store name'), 'Acme Co');
+    await user.type(screen.getByLabelText('Address'), 'http://localhost:5180');
+    await user.click(screen.getByRole('button', { name: /create store/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0]).toMatchObject({ customDomain: 'http://localhost:5180' });
   });
 });

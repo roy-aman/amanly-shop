@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Globe, Plus, Star, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Globe, Pencil, Plus, Star, Trash2, Users } from 'lucide-react';
 import { platformDomains, platformStoreUsers, platformStores } from '@/api/platform';
 import { ApiError } from '@/lib/http';
 import { useToast } from '@/context/ToastContext';
@@ -392,6 +392,9 @@ function DomainsCard({ store }: { store: StoreAdminSummaryResponse }) {
   const [hostname, setHostname] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<StoreDomainResponse | null>(null);
+  const [editing, setEditing] = useState<StoreDomainResponse | null>(null);
+  const [editHostname, setEditHostname] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   const domainsQuery = useQuery({ queryKey: domainsKey(store.id), queryFn: () => platformDomains.list(store.id) });
   const domains = domainsQuery.data ?? [];
@@ -416,10 +419,33 @@ function DomainsCard({ store }: { store: StoreAdminSummaryResponse }) {
         return;
       }
       if (e instanceof ApiError && (e.code === 'DOMAIN_TAKEN' || e.code === 'STORE_DOMAIN_TAKEN')) {
-        setError('That hostname already belongs to a store.');
+        setError('That address already belongs to a store.');
         return;
       }
-      setError(e instanceof Error ? e.message : 'Could not attach that hostname.');
+      setError(e instanceof Error ? e.message : 'Could not attach that address.');
+    },
+  });
+
+  /**
+   * Re-pointing rather than remove-then-add. A shop moves from a dev address to a
+   * preview deployment to its real domain, and removing the primary is refused
+   * while other addresses remain — so detach-and-reattach cannot express the one
+   * change an operator most often wants.
+   */
+  const renameMutation = useMutation({
+    mutationFn: () => platformDomains.rename(store.id, editing!.id, { hostname: editHostname.trim() }),
+    onSuccess: async (updated) => {
+      await refresh();
+      setEditing(null);
+      setEditError(null);
+      toast.success(`Now answering on ${updated.hostname}`);
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && (e.code === 'DOMAIN_TAKEN' || e.code === 'STORE_DOMAIN_TAKEN')) {
+        setEditError('That address already belongs to a store.');
+        return;
+      }
+      setEditError(e instanceof Error ? e.message : 'Could not change that address.');
     },
   });
 
@@ -451,10 +477,18 @@ function DomainsCard({ store }: { store: StoreAdminSummaryResponse }) {
 
   return (
     <Card className="p-5">
-      <h2 className="text-h4 text-slate-100">Domains</h2>
+      <h2 className="text-h4 text-slate-100">Addresses</h2>
       <p className="mt-1 text-body-sm text-slate-400">
-        The hostnames this store answers on. The primary is its canonical address — order email, invoices and reset
-        links point there. Nothing here checks DNS or issues a certificate.
+        Where this store answers. A request is routed to a store by the address it arrives on, so these are what make
+        the shop reachable at all. The primary is its canonical address — order email, invoices and reset links point
+        there. Nothing here checks DNS or issues a certificate.
+      </p>
+      <p className="mt-2 text-caption text-slate-500">
+        A domain (<code className="text-slate-400">novasports.in</code>), or a development address while the shop&apos;s
+        UI has no domain yet (<code className="text-slate-400">http://localhost:5180</code>). Paste a URL and it is
+        reduced to what the backend matches on. Addresses are matched whole:{' '}
+        <code className="text-slate-400">amanly.in</code> and <code className="text-slate-400">tech.amanly.in</code> are
+        unrelated and may belong to different stores.
       </p>
 
       {!store.customDomainAllowed ? (
@@ -466,29 +500,89 @@ function DomainsCard({ store }: { store: StoreAdminSummaryResponse }) {
       <ul className="mt-4 divide-y divide-ink-800">
         {domains.length === 0 ? (
           <li className="py-6 text-center text-body-sm text-slate-500">
-            No hostnames yet — the store is reachable at its slug only.
+            No addresses yet — nothing reaches this store. Requests meant for it are answered by the fallback store
+            instead, so attach one below.
           </li>
         ) : (
-          domains.map((d) => (
-            <li key={d.id} className="flex items-center gap-3 py-3">
-              <Globe className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-body-sm text-slate-200">{d.hostname}</span>
-              {d.primary ? <Badge tone="gold">Primary</Badge> : null}
-              {!d.primary ? (
+          domains.map((d) =>
+            editing?.id === d.id ? (
+              <li key={d.id} className="py-3">
+                <form
+                  className="flex flex-wrap items-start gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editHostname.trim()) renameMutation.mutate();
+                  }}
+                >
+                  <Globe className="mt-2 h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+                  <Field error={editError} className="min-w-[14rem] flex-1">
+                    <Input
+                      value={editHostname}
+                      invalid={!!editError}
+                      autoFocus
+                      aria-label={`New address for ${d.hostname}`}
+                      onChange={(e) => {
+                        setEditHostname(e.target.value);
+                        setEditError(null);
+                      }}
+                    />
+                  </Field>
+                  <Button type="submit" size="sm" loading={renameMutation.isPending} disabled={!editHostname.trim()}>
+                    Save
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(null);
+                      setEditError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </form>
+              </li>
+            ) : (
+              <li key={d.id} className="flex items-center gap-3 py-3">
+                <Globe className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-body-sm text-slate-200">{d.hostname}</span>
+                {d.primary ? <Badge tone="gold">Primary</Badge> : null}
+                {!d.primary ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={primaryMutation.isPending}
+                    onClick={() => primaryMutation.mutate(d.id)}
+                  >
+                    <Star className="h-4 w-4" /> Make primary
+                  </Button>
+                ) : null}
+                {/* Editing keeps the mapping's id and primary flag — the shop moves
+                    address without briefly having none. */}
                 <Button
                   variant="ghost"
                   size="sm"
-                  loading={primaryMutation.isPending}
-                  onClick={() => primaryMutation.mutate(d.id)}
+                  aria-label={`Change ${d.hostname}`}
+                  onClick={() => {
+                    setEditing(d);
+                    setEditHostname(d.hostname);
+                    setEditError(null);
+                  }}
                 >
-                  <Star className="h-4 w-4" /> Make primary
+                  <Pencil className="h-4 w-4" />
                 </Button>
-              ) : null}
-              <Button variant="ghost" size="sm" aria-label={`Remove ${d.hostname}`} onClick={() => setPendingRemoval(d)}>
-                <Trash2 className="h-4 w-4 text-danger-300" />
-              </Button>
-            </li>
-          ))
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove ${d.hostname}`}
+                  onClick={() => setPendingRemoval(d)}
+                >
+                  <Trash2 className="h-4 w-4 text-danger-300" />
+                </Button>
+              </li>
+            ),
+          )
         )}
       </ul>
 
@@ -503,8 +597,8 @@ function DomainsCard({ store }: { store: StoreAdminSummaryResponse }) {
           <Input
             value={hostname}
             invalid={!!error}
-            placeholder="novasports.in"
-            aria-label="Hostname"
+            placeholder="novasports.in or http://localhost:5180"
+            aria-label="Address"
             onChange={(e) => {
               setHostname(e.target.value);
               setError(null);

@@ -75,7 +75,7 @@ export default function PlatformStores() {
       setForm({ ...EMPTY_FORM });
       setSlugTouched(false);
       setErrors({});
-      toast.success(`${created.name} created`, `Reachable at the slug "${created.slug}".`);
+      toast.success(`${created.name} created`, `Answering on ${form.customDomain.trim()}.`);
     },
     onError: (e) => {
       if (e instanceof ApiError && e.hasFieldErrors()) {
@@ -87,7 +87,7 @@ export default function PlatformStores() {
         return;
       }
       if (e instanceof ApiError && (e.code === 'STORE_DOMAIN_TAKEN' || e.code === 'DOMAIN_TAKEN')) {
-        setErrors({ customDomain: 'That hostname already belongs to a store.' });
+        setErrors({ customDomain: 'That address already belongs to a store. No store was created.' });
         return;
       }
       toast.error('Could not create the store', e instanceof Error ? e.message : 'Please try again.');
@@ -104,6 +104,10 @@ export default function PlatformStores() {
     if (!form.name.trim()) next.name = 'Name is required';
     if (!form.slug.trim()) next.slug = 'Slug is required';
     else if (!/^[a-z0-9-]+$/.test(form.slug.trim())) next.slug = 'Lowercase letters, digits and hyphens only';
+    // Required by the API since 2026-08-16, and for a reason worth catching here:
+    // a store with no address is unreachable, and every request meant for it is
+    // answered by the fallback store instead.
+    if (!form.customDomain.trim()) next.customDomain = 'An address is required — without one the store is unreachable';
     // The API rejects an admin email without a password (ADMIN_PASSWORD_REQUIRED);
     // catching it here keeps the operator out of a round trip.
     if (form.adminEmail.trim() && !form.adminPassword) next.adminPassword = 'Required when an admin email is given';
@@ -114,7 +118,7 @@ export default function PlatformStores() {
       slug: form.slug.trim(),
       name: form.name.trim(),
       currency: form.currency.trim() || undefined,
-      customDomain: form.customDomain.trim() || null,
+      customDomain: form.customDomain.trim(),
       adminEmail: form.adminEmail.trim() || null,
       adminFullName: form.adminFullName.trim() || null,
       adminPassword: form.adminPassword || null,
@@ -213,15 +217,16 @@ export default function PlatformStores() {
               <Input aria-label="Currency" value={form.currency} onChange={(e) => set('currency', e.target.value.toUpperCase())} maxLength={3} />
             </Field>
             <Field
-              label="Custom domain"
+              label="Address"
+              required
               error={errors.customDomain}
-              hint="Optional. Supplying one also grants the custom-domain entitlement."
+              hint="Where this store answers. A domain, or a development address while its UI has no domain yet. Also grants the custom-domain entitlement."
             >
               <Input
-                aria-label="Custom domain"
+                aria-label="Address"
                 value={form.customDomain}
                 invalid={!!errors.customDomain}
-                placeholder="novasports.in"
+                placeholder="novasports.in or http://localhost:5180"
                 onChange={(e) => set('customDomain', e.target.value)}
               />
             </Field>

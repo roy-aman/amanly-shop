@@ -246,6 +246,52 @@ export interface ProductImageRequest {
   isPrimary: boolean;
 }
 
+/** Where a bulk upload has got to. PENDING and RUNNING mean keep polling. */
+export type ProductImportStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
+/**
+ * One problem with one row of an uploaded file.
+ *
+ * `line` counts CSV records, which is what a spreadsheet shows in its gutter —
+ * the header is line 1, so the first product is line 2. A description containing
+ * a line break still occupies one row, so this is the number to show the merchant.
+ */
+export interface ProductImportIssue {
+  line: number;
+  sku: string | null;
+  /** ERROR: the row was not written. WARNING: it was, but not exactly as typed. */
+  severity: 'ERROR' | 'WARNING';
+  code: string;
+  message: string;
+}
+
+/**
+ * A bulk upload, from acceptance to report.
+ *
+ * COMPLETED does NOT mean every row worked — it means the file was read to the
+ * end. A file where all 400 rows were rejected still COMPLETED; read
+ * `failedCount`. FAILED means the file itself was unusable and no row was
+ * applied; `failureMessage` says why.
+ */
+export interface ProductImportJobResponse {
+  id: string;
+  status: ProductImportStatus;
+  dryRun: boolean;
+  originalFilename: string;
+  /** Product rows found, excluding the header and any blank rows. */
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  failedCount: number;
+  issues: ProductImportIssue[];
+  /** More issues occurred than are kept. The counts are still complete. */
+  issuesTruncated: boolean;
+  failureMessage: string | null;
+  submittedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export interface CreateProductRequest {
   name: string;
   slug: string;
@@ -881,8 +927,20 @@ export interface CreateStoreRequest {
   slug: string;
   name: string;
   currency?: string;
-  /** Supplying a domain also grants the custom-domain entitlement. */
-  customDomain?: string | null;
+  /**
+   * REQUIRED since 2026-08-16 — omitting it is a 400.
+   *
+   * A request is routed to a store by the address it carries, so a store created
+   * without one is unreachable: everything meant for it is answered by the
+   * fallback store instead, with a 200 and the wrong catalogue. It is attached as
+   * the store's primary address and grants the custom-domain entitlement in the
+   * same call.
+   *
+   * A domain (`novasports.in`) or, while the shop's UI has no domain of its own,
+   * a development address (`http://localhost:5180`). 409 DOMAIN_TAKEN if another
+   * store already holds it — and then no store is created at all.
+   */
+  customDomain: string;
   adminEmail?: string | null;
   adminFullName?: string | null;
   adminPassword?: string | null;
@@ -928,11 +986,34 @@ export interface StoreDomainResponse {
   createdAt: string;
 }
 
-/** Hostnames are normalised server-side ("HTTPS://NovaSports.in/shop " →
- *  "novasports.in"), so a pasted URL is accepted — show what was stored. */
+/**
+ * Addresses are normalised server-side ("HTTPS://NovaSports.in/shop " →
+ * "novasports.in"), so a pasted URL is accepted — show what was stored.
+ *
+ * Since 2026-08-16 a **port is kept** and a single-label host is allowed, so
+ * "http://localhost:5180/" stores as "localhost:5180". That is what lets a store
+ * be pointed at a UI with no domain yet, and — because the address index is
+ * unique platform-wide — what lets two shops run side by side on one machine.
+ * A default port for its scheme (`:443` on https) is dropped, since a browser
+ * never sends one.
+ *
+ * Addresses are matched WHOLE: `amanly.in` and `tech.amanly.in` are unrelated and
+ * may belong to different stores. Nothing walks up the domain tree.
+ */
 export interface AddStoreDomainRequest {
   hostname: string;
   makePrimary?: boolean;
+}
+
+/**
+ * Re-points an existing mapping, keeping its id and primary flag — a shop moves
+ * from a dev address to a preview deployment to its real domain.
+ *
+ * Preferred over remove-then-add, which is refused for the primary while other
+ * domains remain (`409 CANNOT_REMOVE_PRIMARY_DOMAIN`).
+ */
+export interface UpdateStoreDomainRequest {
+  hostname: string;
 }
 
 export interface PlatformAdminResponse {

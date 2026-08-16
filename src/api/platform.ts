@@ -10,6 +10,7 @@ import type {
   PlatformAdminResponse,
   StoreAdminSummaryResponse,
   StoreDomainResponse,
+  UpdateStoreDomainRequest,
   UpdateStoreEntitlementsRequest,
   UpdateStoreRequest,
   UserResponse,
@@ -64,6 +65,14 @@ export const platformDomains = {
    *  some other store — the error will not say which, on purpose). */
   add(storeId: string, body: AddStoreDomainRequest): Promise<StoreDomainResponse> {
     return request('POST', `${P}/stores/${storeId}/domains`, { body, auth: true });
+  },
+
+  /** Re-points a mapping, keeping its id and primary flag — the ordinary
+   *  lifecycle as a shop moves from a dev address to its real domain. 409
+   *  DOMAIN_TAKEN if another store holds the new one. Preferred to
+   *  remove-then-add, which is refused for the primary while others remain. */
+  rename(storeId: string, domainId: string, body: UpdateStoreDomainRequest): Promise<StoreDomainResponse> {
+    return request('PUT', `${P}/stores/${storeId}/domains/${domainId}`, { body, auth: true });
   },
 
   makePrimary(storeId: string, domainId: string): Promise<StoreDomainResponse> {

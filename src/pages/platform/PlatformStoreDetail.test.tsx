@@ -9,7 +9,7 @@ import type { StoreAdminSummaryResponse, StoreDomainResponse } from '@/lib/types
 
 vi.mock('@/api/platform', () => ({
   platformStores: { get: vi.fn(), update: vi.fn(), updateEntitlements: vi.fn(), list: vi.fn(), create: vi.fn() },
-  platformDomains: { list: vi.fn(), add: vi.fn(), makePrimary: vi.fn(), remove: vi.fn() },
+  platformDomains: { list: vi.fn(), add: vi.fn(), rename: vi.fn(), makePrimary: vi.fn(), remove: vi.fn() },
 }));
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -24,6 +24,7 @@ const updateMock = vi.mocked(platformStores.update);
 const domainsListMock = vi.mocked(platformDomains.list);
 const domainAddMock = vi.mocked(platformDomains.add);
 const domainRemoveMock = vi.mocked(platformDomains.remove);
+const domainRenameMock = vi.mocked(platformDomains.rename);
 
 function store(overrides: Partial<StoreAdminSummaryResponse> = {}): StoreAdminSummaryResponse {
   return {
@@ -170,9 +171,9 @@ describe('Platform store detail — domains', () => {
     domainAddMock.mockRejectedValue(new ApiError(409, 'CUSTOM_DOMAIN_NOT_ALLOWED', 'Not allowed'));
     const user = userEvent.setup();
     renderWithProviders(<PlatformStoreDetail />);
-    await screen.findByText('Domains');
+    await screen.findByText('Addresses');
 
-    await user.type(screen.getByLabelText('Hostname'), 'second.example');
+    await user.type(screen.getByLabelText('Address'), 'second.example');
     await user.click(screen.getByRole('button', { name: /attach/i }));
 
     expect(await screen.findByText(/not entitled to custom domains/i)).toBeInTheDocument();
@@ -183,12 +184,52 @@ describe('Platform store detail — domains', () => {
     domainAddMock.mockResolvedValue(domain({ id: 'd2', hostname: 'novasports.in', primary: true }));
     const user = userEvent.setup();
     renderWithProviders(<PlatformStoreDetail />);
-    await screen.findByText('Domains');
+    await screen.findByText('Addresses');
 
-    await user.type(screen.getByLabelText('Hostname'), 'HTTPS://NovaSports.in/shop ');
+    await user.type(screen.getByLabelText('Address'), 'HTTPS://NovaSports.in/shop ');
     await user.click(screen.getByRole('button', { name: /attach/i }));
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('novasports.in attached', expect.any(String)));
+  });
+
+  /**
+   * The move an operator actually makes: a shop built against a dev address goes
+   * live on its real domain. Remove-then-add cannot express it — removing the
+   * primary is refused while other addresses remain, and where it is the only one
+   * the store is unreachable in between.
+   */
+  it('re-points an address in place rather than detaching it', async () => {
+    domainsListMock.mockResolvedValue([domain({ id: 'd1', hostname: 'localhost:5180', primary: true })]);
+    domainRenameMock.mockResolvedValue(domain({ id: 'd1', hostname: 'novasports.in', primary: true }));
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('localhost:5180');
+
+    await user.click(screen.getByRole('button', { name: /change localhost:5180/i }));
+    const input = await screen.findByLabelText(/new address for localhost:5180/i);
+    await user.clear(input);
+    await user.type(input, 'novasports.in');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(domainRenameMock).toHaveBeenCalled());
+    expect(domainRenameMock.mock.calls[0][2]).toEqual({ hostname: 'novasports.in' });
+    expect(domainRemoveMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a re-point rejected as already taken on the field', async () => {
+    domainsListMock.mockResolvedValue([domain({ id: 'd1', hostname: 'localhost:5180', primary: true })]);
+    domainRenameMock.mockRejectedValue(new ApiError(409, 'DOMAIN_TAKEN', 'taken'));
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('localhost:5180');
+
+    await user.click(screen.getByRole('button', { name: /change localhost:5180/i }));
+    const input = await screen.findByLabelText(/new address for localhost:5180/i);
+    await user.clear(input);
+    await user.type(input, 'taken.example');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(await screen.findByText(/already belongs to a store/i)).toBeInTheDocument();
   });
 
   it('explains that the primary must be replaced, not just removed', async () => {

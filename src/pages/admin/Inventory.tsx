@@ -22,6 +22,7 @@ import {
   SkeletonTable,
 } from '@/components/ui';
 import { ProductStatusBadge } from '@/components/StatusBadge';
+import { BulkProductUpload } from '@/components/admin/BulkProductUpload';
 
 const STATUSES: ProductStatus[] = ['DRAFT', 'ACTIVE', 'ARCHIVED'];
 const PAGE_SIZE = 15;
@@ -111,6 +112,12 @@ export default function Inventory() {
           </LinkButton>
         }
       />
+
+      <div className="mb-4">
+        {/* Exports respect the status filter below, so "export what I am looking
+            at" behaves the way it reads. */}
+        <BulkProductUpload statusFilter={status === 'ALL' ? undefined : status} />
+      </div>
 
       <Card className="p-4">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
