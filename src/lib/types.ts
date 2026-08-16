@@ -941,6 +941,13 @@ export interface CreateStoreRequest {
    * store already holds it — and then no store is created at all.
    */
   customDomain: string;
+  /**
+   * Further addresses the same shop answers on — a development server and a
+   * production domain are one store, so both belong to it from the start.
+   * Attached as non-primary; `customDomain` stays canonical. Each must be free,
+   * or the whole creation is refused and no store is made.
+   */
+  additionalDomains?: string[] | null;
   adminEmail?: string | null;
   adminFullName?: string | null;
   adminPassword?: string | null;

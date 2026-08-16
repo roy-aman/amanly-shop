@@ -8,7 +8,9 @@ import { ApiError } from '@/lib/http';
 import type { StoreAdminSummaryResponse, StoreDomainResponse } from '@/lib/types';
 
 vi.mock('@/api/platform', () => ({
-  platformStores: { get: vi.fn(), update: vi.fn(), updateEntitlements: vi.fn(), list: vi.fn(), create: vi.fn() },
+  platformStores: {
+    get: vi.fn(), update: vi.fn(), updateEntitlements: vi.fn(), list: vi.fn(), create: vi.fn(), remove: vi.fn(),
+  },
   platformDomains: { list: vi.fn(), add: vi.fn(), rename: vi.fn(), makePrimary: vi.fn(), remove: vi.fn() },
 }));
 vi.mock('react-router-dom', async () => {
@@ -268,5 +270,67 @@ describe('Platform store detail — trading status', () => {
     renderWithProviders(<PlatformStoreDetail />);
     await screen.findByText('Status');
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+  });
+});
+
+describe('Platform store detail — erasing a store', () => {
+  const removeMock = vi.mocked(platformStores.remove);
+
+  /**
+   * The friction that stands in front of an irreversible act. An id is copied from a list and a
+   * mistake looks like any other UUID; typing the store's own slug is a deliberate one.
+   */
+  it('will not erase until the store slug has been typed back', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Danger zone');
+
+    await user.click(screen.getByRole('button', { name: /erase this store/i }));
+    const confirm = await screen.findByRole('button', { name: /erase permanently/i });
+    expect(confirm).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/confirm the store slug/i), 'wrong-slug');
+    expect(confirm).toBeDisabled();
+    expect(removeMock).not.toHaveBeenCalled();
+  });
+
+  it('erases once the slug matches', async () => {
+    removeMock.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Danger zone');
+
+    await user.click(screen.getByRole('button', { name: /erase this store/i }));
+    await user.type(screen.getByLabelText(/confirm the store slug/i), 'nova');
+    await user.click(screen.getByRole('button', { name: /erase permanently/i }));
+
+    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('store-1', 'nova'));
+  });
+
+  /** Erasing the fallback takes down every request that resolves to nothing. */
+  it('explains a refusal to erase the fallback store', async () => {
+    removeMock.mockRejectedValue(new ApiError(409, 'CANNOT_DELETE_FALLBACK_STORE', 'nope'));
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Danger zone');
+
+    await user.click(screen.getByRole('button', { name: /erase this store/i }));
+    await user.type(screen.getByLabelText(/confirm the store slug/i), 'nova');
+    await user.click(screen.getByRole('button', { name: /erase permanently/i }));
+
+    expect(await screen.findByText(/fallback store/i)).toBeInTheDocument();
+  });
+
+  /** "All data" is easy to skim past; "orders" and "memberships" are what make somebody stop. */
+  it('spells out what is destroyed rather than summarising it', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStoreDetail />);
+    await screen.findByText('Danger zone');
+
+    await user.click(screen.getByRole('button', { name: /erase this store/i }));
+
+    expect(await screen.findByText(/every order and its history/i)).toBeInTheDocument();
+    expect(screen.getByText(/everyone's membership of this store/i)).toBeInTheDocument();
+    expect(screen.getByText(/People are not deleted/i)).toBeInTheDocument();
   });
 });

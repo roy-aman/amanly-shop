@@ -142,6 +142,44 @@ describe('Platform stores list', () => {
     expect(await screen.findByText(/address is required/i)).toBeInTheDocument();
   });
 
+  /**
+   * A shop reached from a developer's machine and from its live domain is one store, so both
+   * addresses can be given at creation rather than needing a second visit to the store's page.
+   */
+  it('sends every extra address given at creation', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStores />);
+    await screen.findByText('Nova Sports');
+
+    await user.click(screen.getByRole('button', { name: /new store/i }));
+    await screen.findByRole('heading', { name: 'New store' });
+    await user.type(screen.getByLabelText('Store name'), 'Acme Co');
+    await user.type(screen.getByLabelText('Address'), 'acme.example');
+    await user.type(screen.getByLabelText('Other addresses'), 'http://localhost:5180\nwww.acme.example');
+    await user.click(screen.getByRole('button', { name: /create store/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0]).toMatchObject({
+      customDomain: 'acme.example',
+      additionalDomains: ['http://localhost:5180', 'www.acme.example'],
+    });
+  });
+
+  it('omits the extra addresses entirely when none are given', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlatformStores />);
+    await screen.findByText('Nova Sports');
+
+    await user.click(screen.getByRole('button', { name: /new store/i }));
+    await screen.findByRole('heading', { name: 'New store' });
+    await user.type(screen.getByLabelText('Store name'), 'Acme Co');
+    await user.type(screen.getByLabelText('Address'), 'acme.example');
+    await user.click(screen.getByRole('button', { name: /create store/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0].additionalDomains).toBeNull();
+  });
+
   it('sends a development address through as typed', async () => {
     const user = userEvent.setup();
     renderWithProviders(<PlatformStores />);

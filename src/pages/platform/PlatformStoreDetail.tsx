@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Globe, Pencil, Plus, Star, Trash2, Users } from 'lucide-react';
 import { platformDomains, platformStoreUsers, platformStores } from '@/api/platform';
@@ -15,6 +15,7 @@ import {
   EmptyState,
   Field,
   Input,
+  Modal,
   PageHeader,
   PageLoader,
   Select,
@@ -129,9 +130,125 @@ export default function PlatformStoreDetail() {
         </div>
         <div className="space-y-6">
           <StatusCard key={`status-${store.id}`} store={store} onSaved={invalidateStore} />
+          <DangerZoneCard key={`danger-${store.id}`} store={store} />
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Erasing a store, and the friction that should stand in front of it.
+ *
+ * <p>The confirm button stays disabled until the operator has typed the store's own slug, which is
+ * how GitHub guards deleting a repository. An id is copied from a list and a mistake looks like any
+ * other UUID; typing the name of the thing is a deliberate act. The list of what goes is spelled
+ * out rather than summarised as "all data", because "orders" and "customers' memberships" are the
+ * words that make somebody stop.
+ *
+ * <p>Closing is offered first on purpose — it is reversible and is the right answer for a real shop
+ * that has stopped trading. This is for the ones made by mistake or made while building.
+ */
+function DangerZoneCard({ store }: { store: StoreAdminSummaryResponse }) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const qc = useQueryClient();
+
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const matches = typed.trim().toLowerCase() === store.slug.toLowerCase();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => platformStores.remove(store.id, typed.trim()),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['platform-stores'] });
+      toast.success(`${store.name} erased`, 'The store and everything belonging to it are gone.');
+      navigate('/platform');
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'CANNOT_DELETE_FALLBACK_STORE') {
+        setError(
+          'This is the fallback store — every request matching no other address is answered by it. Point the fallback elsewhere first.',
+        );
+        return;
+      }
+      if (e instanceof ApiError && e.code === 'STORE_CONFIRMATION_MISMATCH') {
+        setError('That is not this store’s slug.');
+        return;
+      }
+      setError(e instanceof Error ? e.message : 'The store could not be erased.');
+    },
+  });
+
+  return (
+    <Card className="border-danger-700/40 p-5">
+      <h2 className="text-h4 text-danger-200">Danger zone</h2>
+      <p className="mt-1 text-body-sm text-slate-400">
+        Erasing a store cannot be undone. If the shop has simply stopped trading, close it instead — that is reversible
+        and keeps its records.
+      </p>
+
+      <Button variant="secondary" className="mt-4 w-full" onClick={() => setOpen(true)}>
+        <Trash2 className="h-4 w-4 text-danger-300" /> Erase this store
+      </Button>
+
+      <Modal
+        open={open}
+        title={`Erase ${store.name}?`}
+        onClose={() => {
+          setOpen(false);
+          setTyped('');
+          setError(null);
+        }}
+      >
+        <p className="text-body-sm text-slate-300">This permanently removes:</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-body-sm text-slate-400">
+          <li>every product, category, brand and image</li>
+          <li>every order and its history, and every cart</li>
+          <li>coupons, reviews and bookings</li>
+          <li>the store&apos;s settings and all of its addresses</li>
+          <li>everyone&apos;s membership of this store</li>
+        </ul>
+        <p className="mt-3 text-caption text-slate-500">
+          People are not deleted — an account is global, so anyone who also shops elsewhere keeps it and loses only
+          their membership here.
+        </p>
+
+        <Field
+          label={`Type ${store.slug} to confirm`}
+          error={error}
+          className="mt-4"
+        >
+          <Input
+            value={typed}
+            invalid={!!error}
+            autoFocus
+            aria-label="Confirm the store slug"
+            placeholder={store.slug}
+            onChange={(e) => {
+              setTyped(e.target.value);
+              setError(null);
+            }}
+          />
+        </Field>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!matches}
+            loading={deleteMutation.isPending}
+            onClick={() => deleteMutation.mutate()}
+          >
+            Erase permanently
+          </Button>
+        </div>
+      </Modal>
+    </Card>
   );
 }
 

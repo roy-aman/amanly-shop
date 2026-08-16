@@ -44,10 +44,26 @@ export const platformStores = {
     return request('POST', `${P}/stores`, { body, auth: true });
   },
 
-  /** Rename, suspend or close. There is deliberately no delete: CLOSED stops a
-   *  store trading and is reversible, erasing its orders is not. */
+  /** Rename, suspend or close. CLOSED stops a store trading and is reversible —
+   *  prefer it to {@link remove} for a real business that has stopped. */
   update(storeId: string, body: UpdateStoreRequest): Promise<StoreAdminSummaryResponse> {
     return request('PATCH', `${P}/stores/${storeId}`, { body, auth: true });
+  },
+
+  /**
+   * Erases a store and everything belonging to it. **There is no undo.**
+   *
+   * Removes the catalogue, orders and their history, carts, coupons, reviews,
+   * bookings, settings, addresses and every membership. People are NOT deleted:
+   * an account is global and simply loses this membership.
+   *
+   * `confirmSlug` must equal the store's own slug (400
+   * STORE_CONFIRMATION_MISMATCH) — an id is copied from a list and a mistake
+   * looks like any other UUID. 409 CANNOT_DELETE_FALLBACK_STORE for the store
+   * that answers every unmatched address.
+   */
+  remove(storeId: string, confirmSlug: string): Promise<void> {
+    return request('DELETE', `${P}/stores/${storeId}${buildQuery({ confirmSlug })}`, { auth: true });
   },
 
   /** Applied as sent — send every field, not just what changed. */

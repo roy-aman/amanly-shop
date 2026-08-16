@@ -33,10 +33,23 @@ const EMPTY_FORM = {
   name: '',
   currency: 'INR',
   customDomain: '',
+  /** Newline-separated. A shop reached from a developer's machine and from its
+   *  live domain is one store, so both addresses can be given at creation. */
+  additionalDomains: '',
   adminEmail: '',
   adminFullName: '',
   adminPassword: '',
 };
+
+/** One address per line, blanks dropped. Null rather than [] when empty, so the
+ *  request carries nothing at all rather than an empty list. */
+function extraAddresses(raw: string): string[] | null {
+  const lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines : null;
+}
 
 /** Slug rules mirror the backend's: lowercase, digits and hyphens. Derived from
  *  the name only until the operator edits it — a slug cannot be changed later. */
@@ -119,6 +132,7 @@ export default function PlatformStores() {
       name: form.name.trim(),
       currency: form.currency.trim() || undefined,
       customDomain: form.customDomain.trim(),
+      additionalDomains: extraAddresses(form.additionalDomains),
       adminEmail: form.adminEmail.trim() || null,
       adminFullName: form.adminFullName.trim() || null,
       adminPassword: form.adminPassword || null,
@@ -231,6 +245,21 @@ export default function PlatformStores() {
               />
             </Field>
           </div>
+
+          <Field
+            label="Other addresses"
+            error={errors.additionalDomains}
+            hint="Optional, one per line. A shop reached from a developer's machine and from its live domain is one store — give both here and either will find it."
+          >
+            <textarea
+              aria-label="Other addresses"
+              rows={2}
+              value={form.additionalDomains}
+              placeholder={'http://localhost:5180\nwww.novasports.in'}
+              onChange={(e) => set('additionalDomains', e.target.value)}
+              className="block w-full rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-body-sm text-slate-100 placeholder:text-slate-600 focus:border-primary focus:outline-none"
+            />
+          </Field>
 
           <div className="rounded-lg border border-ink-700 bg-ink-850 p-4">
             <p className="text-body-sm font-medium text-slate-100">First administrator</p>
