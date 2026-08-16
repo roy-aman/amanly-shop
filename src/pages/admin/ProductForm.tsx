@@ -38,6 +38,7 @@ interface FormState {
   name: string;
   slug: string;
   sku: string;
+  barcode: string;
   price: string;
   compareAtPrice: string;
   currency: string;
@@ -55,6 +56,7 @@ const EMPTY: FormState = {
   name: '',
   slug: '',
   sku: '',
+  barcode: '',
   price: '',
   compareAtPrice: '',
   currency: 'USD',
@@ -110,6 +112,28 @@ export default function ProductForm() {
     enabled: isEdit,
   });
 
+  /**
+   * Warns when a product of this name already exists — the one duplicate the API cannot catch.
+   *
+   * SKU, slug and barcode are unique per store and rejected outright with a 409, so the only way to
+   * create the same product twice is to give it a fresh SKU and not notice. Whether that is a
+   * mistake is not something the server can decide: two products may legitimately share a name. So
+   * this warns and lets the merchant carry on, rather than blocking a create that may be correct.
+   *
+   * Create only — on an edit the product's own name matches itself.
+   */
+  const nameToCheck = form.name.trim();
+  const duplicatesQ = useQuery({
+    queryKey: ['admin', 'product-name-check', nameToCheck],
+    queryFn: () => adminProducts.list({ search: nameToCheck, size: 5 }),
+    enabled: !isEdit && nameToCheck.length >= 3,
+    staleTime: 30_000,
+  });
+  // The search matches names AND SKUs by substring, so it is narrowed to an exact name match here.
+  const sameName = (duplicatesQ.data?.content ?? []).filter(
+    (p) => p.name.trim().toLowerCase() === nameToCheck.toLowerCase(),
+  );
+
   // Populate the form once the product loads (edit mode).
   useEffect(() => {
     const p = productQ.data;
@@ -118,6 +142,7 @@ export default function ProductForm() {
       name: p.name,
       slug: p.slug,
       sku: p.sku,
+      barcode: p.barcode ?? '',
       price: String(p.price),
       compareAtPrice: p.compareAtPrice != null ? String(p.compareAtPrice) : '',
       currency: p.currency,
@@ -182,6 +207,8 @@ export default function ProductForm() {
     if (isEdit) {
       const body: UpdateProductRequest = {
         name: form.name.trim(),
+        // Blank means keep: the API does not clear or regenerate a barcode on edit.
+        barcode: form.barcode.trim() || undefined,
         description: form.description.trim() || null,
         shortDescription: form.shortDescription.trim() || null,
         price,
@@ -200,6 +227,7 @@ export default function ProductForm() {
         name: form.name.trim(),
         slug: form.slug.trim(),
         sku: form.sku.trim().toUpperCase(),
+        barcode: form.barcode.trim() || undefined,
         price,
         compareAtPrice: compareAt,
         currency: form.currency.trim().toUpperCase(),
@@ -258,8 +286,36 @@ export default function ProductForm() {
         <Card className="space-y-4 p-5">
           <h2 className="text-sm font-semibold text-slate-200">Basics</h2>
           <Field label="Name" required error={errors.name}>
-            <Input value={form.name} onChange={(e) => set('name', e.target.value)} invalid={!!errors.name} />
+            <Input
+              aria-label="Product name"
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              invalid={!!errors.name}
+            />
           </Field>
+
+          {sameName.length > 0 ? (
+            <div className="-mt-2 rounded-lg border border-warning-700/40 bg-warning-900/15 p-3">
+              <p className="text-body-sm text-warning-200">
+                {sameName.length === 1 ? 'A product' : `${sameName.length} products`} called &ldquo;{form.name.trim()}
+                &rdquo; already {sameName.length === 1 ? 'exists' : 'exist'} in this store.
+              </p>
+              <ul className="mt-2 space-y-1">
+                {sameName.map((p) => (
+                  <li key={p.id} className="text-caption text-slate-300">
+                    <Link to={`/admin/inventory/${p.id}`} className="underline hover:text-slate-100">
+                      {p.sku}
+                    </Link>{' '}
+                    · {money(p.price, p.currency)} · {p.status.toLowerCase()}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-caption text-slate-400">
+                Edit that one instead if this is the same product. Carry on if it is genuinely different — names do not
+                have to be unique, only SKUs do.
+              </p>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
@@ -294,6 +350,27 @@ export default function ProductForm() {
               />
             </Field>
           </div>
+
+          {/* The product's own barcode. Only meaningful while it has no variants:
+              once it does, each variant scans separately and carries its own. */}
+          <Field
+            label="Barcode"
+            error={errors.barcode}
+            hint={
+              isEdit
+                ? 'EAN-13. Leave blank to keep the current one — it is printed on shelf labels, so an edit here does not regenerate it.'
+                : 'EAN-13. Leave blank and one is generated. Must be free across every product and variant in this store.'
+            }
+          >
+            <Input
+              aria-label="Barcode"
+              value={form.barcode}
+              onChange={(e) => set('barcode', e.target.value)}
+              invalid={!!errors.barcode}
+              placeholder="8901234567890"
+              inputMode="numeric"
+            />
+          </Field>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Category" error={errors.categoryId}>

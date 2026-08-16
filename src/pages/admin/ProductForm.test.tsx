@@ -12,6 +12,7 @@ import type { ProductResponse, ProductVariantResponse } from '@/lib/types';
 vi.mock('@/api/admin', () => ({
   adminProducts: {
     get: vi.fn(),
+    list: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     addImages: vi.fn(),
@@ -27,6 +28,8 @@ vi.mock('@/context/ToastContext', () => ({
 }));
 
 const getMock = vi.mocked(adminProducts.get);
+const listMock = vi.mocked(adminProducts.list);
+const createMock = vi.mocked(adminProducts.create);
 const categoriesMock = vi.mocked(adminCategories.list);
 const brandsMock = vi.mocked(listBrands);
 const variantsListMock = vi.mocked(adminProductVariants.list);
@@ -101,6 +104,25 @@ function renderEditForm() {
   return render(<ProductForm />, { wrapper: Wrapper });
 }
 
+function emptyPage() {
+  return pageOf([]);
+}
+
+/** Matches Spring's Page envelope; the extra flags are required by the shared type. */
+function pageOf(content: never[]) {
+  return {
+    content,
+    totalElements: content.length,
+    totalPages: content.length > 0 ? 1 : 0,
+    size: 5,
+    number: 0,
+    first: true,
+    last: true,
+    numberOfElements: content.length,
+    empty: content.length === 0,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   getMock.mockResolvedValue(product());
@@ -108,6 +130,84 @@ beforeEach(() => {
   brandsMock.mockResolvedValue([]);
   variantsListMock.mockResolvedValue([]);
   variantCreateMock.mockResolvedValue(variant());
+  listMock.mockResolvedValue(emptyPage());
+});
+
+/** Create mode: no :id in the route, so the form provisions a new product. */
+function renderNewForm() {
+  function Wrapper({ children }: { children: ReactNode }) {
+    const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }));
+    return (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/admin/inventory/new']}>
+          <Routes>
+            <Route path="/admin/inventory/new" element={children} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+  return render(<ProductForm />, { wrapper: Wrapper });
+}
+
+describe('Admin ProductForm — barcode', () => {
+  /**
+   * products.barcode existed in the schema from V39 but no DTO carried it, so a variantless product
+   * - the only kind that has one - could never be seen or set from here.
+   */
+  it('shows the product barcode when editing', async () => {
+    getMock.mockResolvedValue(product({ barcode: '8901234567890' }));
+    renderEditForm();
+
+    await waitFor(() => expect(screen.getByLabelText("Barcode")).toHaveValue('8901234567890'));
+  });
+
+  it('says that leaving it blank keeps the existing code rather than minting a new one', async () => {
+    getMock.mockResolvedValue(product({ barcode: '8901234567890' }));
+    renderEditForm();
+
+    expect(await screen.findByText(/leave blank to keep the current one/i)).toBeInTheDocument();
+  });
+});
+
+describe('Admin ProductForm — duplicate products', () => {
+  /**
+   * SKU, slug and barcode are unique per store and rejected with a 409, so the only way to create
+   * the same product twice is a fresh SKU and no one noticing. Two products may legitimately share
+   * a name, so this warns rather than blocks.
+   */
+  it('warns when a product of the same name already exists', async () => {
+    listMock.mockResolvedValue(pageOf([{ ...product(), id: 'p9', name: 'Signet Ring', sku: 'RING-9' } as never]));
+    const user = userEvent.setup();
+    renderNewForm();
+
+    await user.type(screen.getByLabelText("Product name"), 'Signet Ring');
+
+    expect(await screen.findByText(/already exists in this store/i)).toBeInTheDocument();
+    expect(screen.getByText(/names do not have to be unique/i)).toBeInTheDocument();
+  });
+
+  it('does not warn when the name is free', async () => {
+    const user = userEvent.setup();
+    renderNewForm();
+
+    await user.type(screen.getByLabelText("Product name"), 'Something Entirely New');
+
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    expect(screen.queryByText(/already exists in this store/i)).not.toBeInTheDocument();
+  });
+
+  /** A near-match is not a duplicate; the search matches substrings, so it is narrowed to exact. */
+  it('ignores a product whose name merely contains what was typed', async () => {
+    listMock.mockResolvedValue(pageOf([{ ...product(), id: 'p9', name: 'Signet Ring Deluxe', sku: 'RING-9' } as never]));
+    const user = userEvent.setup();
+    renderNewForm();
+
+    await user.type(screen.getByLabelText("Product name"), 'Signet Ring');
+
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    expect(screen.queryByText(/already exists in this store/i)).not.toBeInTheDocument();
+  });
 });
 
 describe('Admin ProductForm — variants (WP-3.5)', () => {

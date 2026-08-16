@@ -188,6 +188,12 @@ export interface ProductResponse {
   description: string | null;
   shortDescription: string | null;
   sku: string;
+  /**
+   * EAN-13 for the product itself — the unit that crosses a counter while it has
+   * no variants. Products WITH variants carry a barcode per variant instead, so
+   * this is null for them, and null for catalogue rows that pre-date barcodes.
+   */
+  barcode?: string | null;
   price: number;
   compareAtPrice: number | null;
   currency: string;
@@ -296,6 +302,9 @@ export interface CreateProductRequest {
   name: string;
   slug: string;
   sku: string;
+  /** Blank or omitted generates one under GS1's restricted-circulation prefix.
+   *  Must be free across every product AND variant in the store (409). */
+  barcode?: string | null;
   price: number;
   compareAtPrice?: number | null;
   currency: string;
@@ -313,6 +322,10 @@ export interface CreateProductRequest {
 
 export interface UpdateProductRequest {
   name: string;
+  /** Blank KEEPS the current barcode — it does not clear or regenerate it. A
+   *  barcode is printed on shelf labels, so rotating it on an unrelated edit
+   *  would strand every label already in the shop. */
+  barcode?: string | null;
   description?: string | null;
   shortDescription?: string | null;
   price: number;

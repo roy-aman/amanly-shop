@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Download, FileUp, Info, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileUp, History, Info, Upload } from 'lucide-react';
 import { productBulk } from '@/api/productBulk';
 import { ApiError } from '@/lib/http';
 import type { ProductImportIssue, ProductImportJobResponse, ProductStatus } from '@/lib/types';
@@ -12,9 +13,23 @@ import { Badge, Button, Card, Field } from '@/components/ui';
  *  that a ten-thousand-row import is not thousands of requests. */
 const POLL_MS = 2000;
 
-function isActive(job: ProductImportJobResponse | null): boolean {
+/** PENDING and RUNNING both mean "keep polling". Shared with the history page. */
+export function isImportActive(job: ProductImportJobResponse | null): boolean {
   return job?.status === 'PENDING' || job?.status === 'RUNNING';
 }
+
+/**
+ * COMPLETED is not the same as "went well" — it means the file was read to the end. A file whose
+ * every row was rejected still COMPLETED, so a plain green badge would be a lie; that case is
+ * coloured as the warning it is.
+ */
+export function importStatusTone(job: ProductImportJobResponse): 'green' | 'amber' | 'red' | 'blue' {
+  if (job.status === 'FAILED') return 'red';
+  if (isImportActive(job)) return 'blue';
+  return job.failedCount > 0 ? 'amber' : 'green';
+}
+
+const isActive = isImportActive;
 
 /**
  * Bulk catalogue upload and download.
@@ -110,9 +125,19 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
             an existing SKU is updated, a new one is added as a draft.
           </p>
         </div>
-        <Button variant="secondary" onClick={onExport} loading={exporting}>
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          {/* A job outlives the page that started it, so there has to be somewhere
+              to look up what this morning's file actually did. */}
+          <Link
+            to="/admin/inventory/imports"
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-body-sm text-slate-300 transition hover:bg-ink-800 hover:text-slate-100"
+          >
+            <History className="h-4 w-4" /> Past uploads
+          </Link>
+          <Button variant="secondary" onClick={onExport} loading={exporting}>
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+        </div>
       </div>
 
       <ul className="mt-4 space-y-1.5 text-caption text-slate-500">
@@ -239,28 +264,7 @@ function ImportReport({ job, onDismiss }: { job: ProductImportJobResponse; onDis
 
       {job.issues.length > 0 ? (
         <div className="mt-4">
-          <p className="text-caption uppercase tracking-wider text-slate-500">
-            Rows to look at{job.issuesTruncated ? ' (first 1000)' : ''}
-          </p>
-          <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-ink-800">
-            <table className="w-full text-caption">
-              <thead className="sticky top-0 bg-ink-850">
-                <tr className="text-left text-slate-500">
-                  <th className="px-3 py-2 font-medium">Row</th>
-                  <th className="px-3 py-2 font-medium">SKU</th>
-                  <th className="px-3 py-2 font-medium">What happened</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-800">
-                {job.issues.map((issue, i) => (
-                  <IssueRow key={`${issue.line}-${issue.code}-${i}`} issue={issue} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-2 text-caption text-slate-500">
-            Row numbers match your spreadsheet — the header is row 1.
-          </p>
+          <ImportIssueTable job={job} />
         </div>
       ) : null}
 
@@ -268,6 +272,40 @@ function ImportReport({ job, onDismiss }: { job: ProductImportJobResponse; onDis
         {job.dryRun ? 'Upload for real' : 'Done'}
       </Button>
     </div>
+  );
+}
+
+/**
+ * The per-row report, shared by the upload card and the history page.
+ *
+ * <p>The footnote about row numbers is not decoration: `line` counts CSV records so it matches the
+ * spreadsheet's own gutter, and a merchant who assumes it is a zero-based index goes and edits the
+ * wrong product.
+ */
+export function ImportIssueTable({ job }: { job: ProductImportJobResponse }) {
+  return (
+    <>
+      <p className="text-caption uppercase tracking-wider text-slate-500">
+        Rows to look at{job.issuesTruncated ? ' (first 1000)' : ''}
+      </p>
+      <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-ink-800">
+        <table className="w-full text-caption">
+          <thead className="sticky top-0 bg-ink-850">
+            <tr className="text-left text-slate-500">
+              <th className="px-3 py-2 font-medium">Row</th>
+              <th className="px-3 py-2 font-medium">SKU</th>
+              <th className="px-3 py-2 font-medium">What happened</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-800">
+            {job.issues.map((issue, i) => (
+              <IssueRow key={`${issue.line}-${issue.code}-${i}`} issue={issue} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-caption text-slate-500">Row numbers match your spreadsheet — the header is row 1.</p>
+    </>
   );
 }
 
