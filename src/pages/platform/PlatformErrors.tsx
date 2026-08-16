@@ -25,6 +25,9 @@ const SOURCE_TONE: Record<ErrorSource, Parameters<typeof Badge>[0]['tone']> = {
   SCHEDULED: 'amber',
   ASYNC: 'amber',
   EMAIL: 'amber',
+  // Green because nothing is broken: a store asking for more than its plan allows is a
+  // sales lead sitting in the failures table, not an incident.
+  PLAN_LIMIT: 'green',
 };
 
 const SOURCE_HELP: Record<ErrorSource, string> = {
@@ -32,6 +35,8 @@ const SOURCE_HELP: Record<ErrorSource, string> = {
   SCHEDULED: 'A scheduled sweep threw. Nobody is waiting on these, so they fail silently.',
   ASYNC: 'Background work threw after the request had already returned.',
   EMAIL: 'Outbound email could not be delivered — someone is waiting for a link that never arrived.',
+  PLAN_LIMIT:
+    'Not a fault: a store was refused because of its plan — a capability it has not been granted, or a quota it has spent. Grouped per store, so the count is how often that store has been blocked.',
 };
 
 export default function PlatformErrors() {
