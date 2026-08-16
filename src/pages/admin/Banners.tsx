@@ -254,12 +254,18 @@ export default function Banners() {
         </p>
       </Field>
 
+      {/* Drafted under the BANNER subject, not the product one: campaign artwork
+          wants a scene and clear space beside the subject for the headline, and
+          the product prompt bans people, props and anything but a centred
+          subject on white. The headline steers it where one has been written. */}
       <ImageUploadField
         label="Image"
         required
         value={form.imageUrl}
         onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
         error={errors.imageUrl}
+        aiContext={{ subject: 'BANNER', categoryName: form.headline || null }}
+        aiSingleImage
       />
 
       <ImageUploadField
@@ -268,6 +274,8 @@ export default function Banners() {
         onChange={(url) => setForm((f) => ({ ...f, mobileImageUrl: url }))}
         hint="Optional narrow crop. A wide hero cropped to a phone usually cuts the subject out."
         error={errors.mobileImageUrl}
+        aiContext={{ subject: 'BANNER', categoryName: form.headline || null }}
+        aiSingleImage
       />
 
       <Field

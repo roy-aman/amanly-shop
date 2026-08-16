@@ -1113,9 +1113,17 @@ export interface GeneratePromptsRequest {
   brandName?: string | null;
   variantLabel?: string | null;
   views?: ImageView[];
-  /** Draft for a category tile instead. Views are ignored. */
+  /** Draft for a category tile instead. Views are ignored.
+   *  Superseded by `subject`; kept because the API still honours it. */
   forCategory?: boolean;
+  /** What is being drawn. Decides the whole style of the prompt, not just its
+   *  subject — a brand mark and a campaign banner need the opposite of the
+   *  product-photography rules, which ban logos, people and props. Only
+   *  `PRODUCT` has sides worth drafting separately. */
+  subject?: PromptSubject;
 }
+
+export type PromptSubject = 'PRODUCT' | 'CATEGORY' | 'BRAND_LOGO' | 'BANNER';
 
 export interface PromptSuggestion {
   view: ImageView | null;

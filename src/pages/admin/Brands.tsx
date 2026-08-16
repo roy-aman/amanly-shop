@@ -5,6 +5,7 @@ import { adminBrands } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import { formatDate } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import type { BrandResponse, CreateBrandRequest, UpdateBrandRequest } from '@/lib/types';
 import {
   Badge,
@@ -307,9 +308,22 @@ export default function Brands() {
               placeholder="royal-textiles"
             />
           </Field>
-          <Field label="Logo URL" error={errors.logoUrl} hint="Optional" className="sm:col-span-2">
-            <Input value={form.logoUrl} onChange={(e) => set('logoUrl', e.target.value)} />
-          </Field>
+          {/* Was a bare URL box, so the only way to set a logo was to host it
+              somewhere else first. Generation is offered under its own subject:
+              a mark drafted with the product-photography prompt comes back as a
+              photograph of whatever the brand sells, because that prompt bans
+              logos outright. */}
+          <ImageUploadField
+            label="Logo"
+            aspect="square"
+            hint="Optional. Shown beside the brand wherever it appears."
+            className="sm:col-span-2"
+            value={form.logoUrl}
+            onChange={(url) => set('logoUrl', url)}
+            error={errors.logoUrl}
+            aiContext={{ brandName: form.name, subject: 'BRAND_LOGO' }}
+            aiSingleImage
+          />
           <Field label="Description" error={errors.description} hint="Optional" className="sm:col-span-2">
             <Textarea rows={3} value={form.description} onChange={(e) => set('description', e.target.value)} />
           </Field>
