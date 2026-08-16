@@ -1,16 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, MessageCircle, Truck } from 'lucide-react';
+import { CreditCard, MessageCircle, Truck, Type } from 'lucide-react';
 import { adminStore } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type {
   StoreSettingsResponse,
   UpdateCommerceSettingsRequest,
   UpdatePaymentSettingsRequest,
+  UpdateStorefrontContentRequest,
   UpdateWhatsappSettingsRequest,
 } from '@/lib/types';
 import { useToast } from '@/context/ToastContext';
-import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, PageLoader } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, PageLoader, Textarea } from '@/components/ui';
 
 export default function AdminSettings() {
   const { data, isLoading, isError, error } = useQuery({
@@ -27,11 +28,110 @@ export default function AdminSettings() {
     <div className="max-w-3xl">
       <PageHeader title="Settings" subtitle="Delivery, tax, payment and messaging for your store." />
       <div className="space-y-6">
+        <StorefrontCard store={data} />
         <CommerceCard store={data} />
         <PaymentsCard store={data} />
         <WhatsappCard store={data} />
       </div>
     </div>
+  );
+}
+
+// ── Storefront opening screen ─────────────────────────────────────────
+/**
+ * The three lines on the shop's first screen.
+ *
+ * Empty is not the same as blank here: an empty field means "use the default",
+ * and the default is shown as placeholder text so a merchant can see what they
+ * are replacing — and get it back by clearing the box. Pre-filling the inputs
+ * with the default would make that impossible to express.
+ */
+const HERO_DEFAULTS = {
+  eyebrow: 'Considered essentials for men.',
+  headline: 'Fewer things.\nBetter made.',
+  subtext: 'A tight edit of everyday pieces — chosen for fit, fabric, and how they wear over time.',
+};
+
+function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const [eyebrow, setEyebrow] = useState(store.heroEyebrow ?? '');
+  const [headline, setHeadline] = useState(store.heroHeadline ?? '');
+  const [subtext, setSubtext] = useState(store.heroSubtext ?? '');
+
+  useEffect(() => {
+    setEyebrow(store.heroEyebrow ?? '');
+    setHeadline(store.heroHeadline ?? '');
+    setSubtext(store.heroSubtext ?? '');
+  }, [store]);
+
+  const mutation = useMutation({
+    mutationFn: (body: UpdateStorefrontContentRequest) => adminStore.updateStorefrontContent(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'store'] });
+      // The storefront reads these from the public bootstrap, which is cached for
+      // minutes — without this the merchant reloads the shop and sees the old words.
+      qc.invalidateQueries({ queryKey: ['public-store'] });
+      toast.success('Storefront copy saved');
+    },
+    onError: (e) => toast.error('Could not save', e instanceof Error ? e.message : 'Please try again.'),
+  });
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    mutation.mutate({ heroEyebrow: eyebrow, heroHeadline: headline, heroSubtext: subtext });
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+        <Type className="h-4 w-4 text-gold-400" /> Storefront opening screen
+      </h2>
+      <p className="mt-1 text-caption text-slate-400">
+        The words shoppers see first. Leave a box empty to use the wording shown in grey. These
+        appear only while no home-page banner is running — a live banner takes the first screen
+        instead.
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-4 space-y-4">
+        <Field label="Small line above" hint="A short line of context.">
+          <Input
+            aria-label="Small line above"
+            maxLength={120}
+            placeholder={HERO_DEFAULTS.eyebrow}
+            value={eyebrow}
+            onChange={(e) => setEyebrow(e.target.value)}
+          />
+        </Field>
+
+        <Field label="Headline" hint="Each new line becomes its own line on the page.">
+          <Textarea
+            aria-label="Headline"
+            rows={2}
+            maxLength={200}
+            placeholder={HERO_DEFAULTS.headline}
+            value={headline}
+            onChange={(e) => setHeadline(e.target.value)}
+          />
+        </Field>
+
+        <Field label="Sentence underneath">
+          <Textarea
+            aria-label="Sentence underneath"
+            rows={2}
+            maxLength={400}
+            placeholder={HERO_DEFAULTS.subtext}
+            value={subtext}
+            onChange={(e) => setSubtext(e.target.value)}
+          />
+        </Field>
+
+        <Button type="submit" loading={mutation.isPending}>
+          Save copy
+        </Button>
+      </form>
+    </Card>
   );
 }
 

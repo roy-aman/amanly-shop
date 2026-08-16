@@ -138,18 +138,58 @@ describe('Home', () => {
     expect(screen.queryByRole('region', { name: /promotions/i })).not.toBeInTheDocument();
   });
 
-  /** Said once. Shown at the top AND repeated below, it would read as filler. */
-  it('shows the brand statement exactly once either way', async () => {
+  /** One first screen. A booked campaign takes it and the statement is not shown at all. */
+  it('drops the brand statement entirely once a campaign is booked', async () => {
     banners.mockResolvedValue([banner('b1')]);
-    const { unmount } = renderWithProviders(<Home />);
-    await screen.findByRole('img', { name: /campaign b1/i });
-    expect(screen.getAllByRole('heading', { level: 1, name: /fewer things/i })).toHaveLength(1);
-    unmount();
-
-    banners.mockResolvedValue([]);
     renderWithProviders(<Home />);
-    await screen.findByRole('heading', { level: 1, name: /fewer things/i });
-    expect(screen.getAllByRole('heading', { level: 1, name: /fewer things/i })).toHaveLength(1);
+
+    await screen.findByRole('img', { name: /campaign b1/i });
+    expect(screen.queryByRole('heading', { level: 1, name: /fewer things/i })).not.toBeInTheDocument();
+  });
+
+  // ── Merchant-written copy ─────────────────────────────────────────────
+
+  it('uses the store’s own opening copy when it has been written', async () => {
+    store.mockResolvedValue({
+      slug: 'royal',
+      name: 'Royal Test',
+      currency: 'USD',
+      codEnabled: true,
+      onlinePaymentEnabled: true,
+      heroEyebrow: 'Handmade in Kerala.',
+      heroHeadline: 'Slow cloth.\nReal hands.',
+      heroSubtext: 'Woven to order.',
+    });
+    renderWithProviders(<Home />);
+
+    expect(await screen.findByText('Handmade in Kerala.')).toBeInTheDocument();
+    // Newlines are line breaks, so each line is its own element within the heading.
+    const heading = screen.getByRole('heading', { level: 1, name: /slow cloth/i });
+    expect(within(heading).getByText('Slow cloth.')).toBeInTheDocument();
+    expect(within(heading).getByText('Real hands.')).toBeInTheDocument();
+    expect(screen.getByText('Woven to order.')).toBeInTheDocument();
+  });
+
+  /**
+   * Null means "use the default", so each line falls back on its own — a merchant who rewrites
+   * only the headline must not blank the two lines they left alone.
+   */
+  it('falls back per line, not all or nothing', async () => {
+    store.mockResolvedValue({
+      slug: 'royal',
+      name: 'Royal Test',
+      currency: 'USD',
+      codEnabled: true,
+      onlinePaymentEnabled: true,
+      heroHeadline: 'Slow cloth.',
+      heroEyebrow: null,
+      heroSubtext: null,
+    });
+    renderWithProviders(<Home />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: /slow cloth/i })).toBeInTheDocument();
+    expect(screen.getByText(/considered essentials/i)).toBeInTheDocument();
+    expect(screen.getByText(/a tight edit of everyday pieces/i)).toBeInTheDocument();
   });
 
   /** A slide that points somewhere has to be clickable, or the campaign is a poster. */

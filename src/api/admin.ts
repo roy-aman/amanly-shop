@@ -31,6 +31,7 @@ import type {
   UpdateProductRequest,
   UpdateVariantRequest,
   UpdateCommerceSettingsRequest,
+  UpdateStorefrontContentRequest,
   UpdateWhatsappSettingsRequest,
   UserResponse,
 } from '@/lib/types';
@@ -241,5 +242,11 @@ export const adminStore = {
    *  as sent, so submit the loaded values, not a partial patch. */
   updateCommerce(body: UpdateCommerceSettingsRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/commerce-settings`, { body, auth: true });
+  },
+  /** The words on the storefront's opening screen. A blank field restores the
+   *  default for that line rather than rendering an empty one. Shown only when
+   *  no home-page banner is booked — a live campaign takes that screen. */
+  updateStorefrontContent(body: UpdateStorefrontContentRequest): Promise<StoreSettingsResponse> {
+    return request('PUT', `${A}/store/storefront-content`, { body, auth: true });
   },
 };

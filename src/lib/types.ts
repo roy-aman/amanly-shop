@@ -468,6 +468,13 @@ export interface PublicStoreResponse {
   taxRatePercent?: number;
   /** true → shelf prices already include tax; false → tax is added at checkout. */
   pricesIncludeTax?: boolean;
+  /** Storefront opening copy. `null` means the merchant has written none and the
+   *  storefront's own default text should be used — the server deliberately does
+   *  not pre-fill it, so the default can be improved without a migration. */
+  heroEyebrow?: string | null;
+  /** Newlines are line breaks. */
+  heroHeadline?: string | null;
+  heroSubtext?: string | null;
 }
 
 export interface StoreSettingsResponse {
@@ -486,6 +493,26 @@ export interface StoreSettingsResponse {
   freeShippingThreshold?: number | null;
   taxRatePercent?: number;
   pricesIncludeTax?: boolean;
+  /** Storefront opening copy. `null` = the merchant has written none, so show the
+   *  field empty with the default as placeholder rather than as a value. */
+  heroEyebrow?: string | null;
+  heroHeadline?: string | null;
+  heroSubtext?: string | null;
+}
+
+/**
+ * `PUT /api/v1/admin/store/storefront-content` (ADMIN).
+ *
+ * A blank field restores the storefront's default for that line rather than
+ * rendering an empty one — which is the only way a merchant can undo an edit.
+ * Only shown when no home-page banner is booked; a live campaign takes the
+ * first screen instead.
+ */
+export interface UpdateStorefrontContentRequest {
+  heroEyebrow?: string | null;
+  /** Newlines are line breaks. */
+  heroHeadline?: string | null;
+  heroSubtext?: string | null;
 }
 
 /**

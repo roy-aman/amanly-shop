@@ -5,7 +5,7 @@ import { ArrowRight, Headset, RotateCcw, ShieldCheck, Truck } from 'lucide-react
 import { getPublicStore } from '@/api/store';
 import { listBanners } from '@/api/banners';
 import { getCategoryTree, getTopProducts, listProducts } from '@/api/catalog';
-import type { CategoryTreeResponse, Page, ProductSummaryResponse } from '@/lib/types';
+import type { CategoryTreeResponse, Page, ProductSummaryResponse, PublicStoreResponse } from '@/lib/types';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useInView } from '@/lib/useInView';
 import { BRAND_DESCRIPTION, BRAND_NAME } from '@/lib/brand';
@@ -18,11 +18,16 @@ import { BannerSlot } from '@/components/BannerSlot';
 const RAIL_SIZE = 12;
 
 /**
- * Hero copy. Typography-led on purpose: the repository ships no brand imagery
- * and the backend has no hero-image field, so a layout that depends on a photo
- * would render as a broken promise. This composition is complete as type — and
- * when art direction exists, drop an <img> into the slot marked below rather
- * than inventing an endpoint here.
+ * Fallback hero copy, used until a merchant writes their own.
+ *
+ * The three lines are editable per store (`heroEyebrow` / `heroHeadline` /
+ * `heroSubtext` on the public store response). The server sends null rather than
+ * pre-filling these, which is what lets this default be improved later — a
+ * default written into every row at migration time could never be changed again.
+ *
+ * Typography-led on purpose: a store with no campaign booked has no brand
+ * imagery to lay this over, and a composition that depends on a photo would
+ * render as a broken promise.
  */
 const HERO = {
   eyebrow: BRAND_DESCRIPTION,
@@ -117,15 +122,17 @@ export default function Home() {
           so the page below is byte-for-byte what it was before banners existed. */}
       <BannerSlot placement="HOME_STRIP" className="rc-bleed -mt-8" />
 
-      {/* The first screen belongs to whatever the merchant is actually selling
-          this week. A booked campaign takes it — full bleed, sliding, each slide
-          linking wherever it points. With nothing booked the brand statement
-          keeps the slot, because a storefront that opens on a category grid has
-          no first screen at all. */}
+      {/* One first screen, and the campaign wins it. A booked banner takes the
+          slot outright — full bleed, sliding, each slide linking wherever it
+          points — and the brand statement is not shown at all rather than being
+          repeated further down, where it would read as filler after the reader
+          has already been sold to. With nothing booked the statement keeps the
+          slot, because a storefront opening on a category grid has no first
+          screen at all. */}
       {hasHeroBanner ? (
         <BannerSlot placement="HOME_HERO" variant="hero" className="rc-bleed -mt-8" />
       ) : (
-        <Hero />
+        <Hero store={storeQuery.data} />
       )}
 
       <div className="space-y-24 sm:space-y-32">
@@ -158,16 +165,6 @@ export default function Home() {
             query={featured}
           />
         </Reveal>
-
-        {/* Only when a campaign took the top of the page — otherwise this is the
-            hero, already shown, and saying it twice makes it worth less. Down
-            here it is a signature after the goods rather than an opening claim
-            before them, so it is set small to match. */}
-        {hasHeroBanner && (
-          <Reveal>
-            <Hero compact />
-          </Reveal>
-        )}
 
         <Reveal>
           <TrustStrip />
@@ -206,14 +203,20 @@ function Reveal({ children, delay = 0 }: { children: ReactNode; delay?: number }
  * `rounded-3xl` panel — which reads as a dashboard card, not a brand statement.
  * A storefront's first screen has one job: say who this is.
  */
-function Hero({ compact = false }: { compact?: boolean }) {
+function Hero({ store }: { store?: PublicStoreResponse }) {
+  // Per store where the merchant has written it, the shipped copy otherwise. Each
+  // line falls back on its own, so editing only the headline leaves the other two
+  // as they were rather than blanking them.
+  const eyebrow = store?.heroEyebrow?.trim() || HERO.eyebrow;
+  const subcopy = store?.heroSubtext?.trim() || HERO.subcopy;
+  // Newlines are the line breaks. A merchant writing one line gets one line; the
+  // default is two, and the composition holds either.
+  const headline = store?.heroHeadline?.trim()
+    ? store.heroHeadline.split('\n').map((l) => l.trim()).filter(Boolean)
+    : HERO.headline;
+
   return (
-    <section
-      className={cn(
-        'rc-bleed relative overflow-hidden bg-ink-850',
-        compact ? 'border-y border-ink-700' : '-mt-8 border-b border-ink-700',
-      )}
-    >
+    <section className="rc-bleed relative -mt-8 overflow-hidden border-b border-ink-700 bg-ink-850">
       {/* Art-direction slot: an <img> placed here behind the copy (with a scrim
           over it) is the only change needed to make this a photographic hero.
           Until then, two very faint gold washes give the band some depth so it
@@ -231,53 +234,30 @@ function Hero({ compact = false }: { compact?: boolean }) {
       {/* The hero is on screen at load, so it animates on arrival rather than
           waiting for an observer. Each line follows the one above it — the
           delays are what make it feel composed instead of merely animated. */}
-      <div
-        className={cn(
-          'relative mx-auto flex max-w-3xl flex-col items-center px-6 text-center',
-          compact ? 'py-14 sm:py-16' : 'py-24 sm:py-32 lg:py-40',
-        )}
-      >
-        <p className="rc-enter text-overline uppercase text-slate-500">{HERO.eyebrow}</p>
+      <div className="relative mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center sm:py-32 lg:py-40">
+        <p className="rc-enter text-overline uppercase text-slate-500">{eyebrow}</p>
 
-        {/* Compact drops to h1 and sets the two lines as one wrapped sentence:
-            at display size this far down the page it would out-shout the banner
-            that now opens the page, and the reader has already been sold to. */}
-        <h1
-          className={cn(
-            'font-display text-slate-100',
-            compact ? 'mt-3 text-h1' : 'mt-6 text-display',
-          )}
-        >
-          {HERO.headline.map((line, i) => (
+        <h1 className="mt-6 font-display text-display text-slate-100">
+          {headline.map((line, i) => (
             <span
               key={line}
-              className={cn('rc-enter', compact ? 'inline' : 'block')}
+              className="rc-enter block"
               style={{ animationDelay: `${100 + i * 110}ms` }}
             >
               {line}
-              {compact && i === 0 ? ' ' : ''}
             </span>
           ))}
         </h1>
 
-        <p
-          className={cn(
-            'rc-enter max-w-md text-slate-400',
-            compact ? 'mt-3 text-body-sm' : 'mt-7 text-body',
-          )}
-          style={{ animationDelay: '340ms' }}
-        >
-          {HERO.subcopy}
+        <p className="rc-enter mt-7 max-w-md text-body text-slate-400" style={{ animationDelay: '340ms' }}>
+          {subcopy}
         </p>
 
         <div
-          className={cn(
-            'rc-enter flex flex-col items-center gap-5 sm:flex-row sm:gap-6',
-            compact ? 'mt-6' : 'mt-10',
-          )}
+          className="rc-enter mt-10 flex flex-col items-center gap-5 sm:flex-row sm:gap-6"
           style={{ animationDelay: '440ms' }}
         >
-          <LinkButton to={HERO.primaryCta.to} size={compact ? 'lg' : 'xl'}>
+          <LinkButton to={HERO.primaryCta.to} size="xl">
             {HERO.primaryCta.label}
           </LinkButton>
           <Link
