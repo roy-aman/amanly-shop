@@ -17,7 +17,21 @@ import { Carousel, cn } from '@/components/ui';
  * sorted the result, so there is no client-side date arithmetic here — which
  * also means a banner cannot appear early because a shopper's clock is wrong.
  */
-export function BannerSlot({ placement, className }: { placement: BannerPlacement; className?: string }) {
+export function BannerSlot({
+  placement,
+  className,
+  variant = 'inline',
+}: {
+  placement: BannerPlacement;
+  className?: string;
+  /**
+   * `hero` is the top-of-page treatment: edge to edge, square corners, taller,
+   * and advancing on its own. `inline` is the boxed card that sits between
+   * sections. Only the presentation differs — the same booked banners render
+   * either way, so moving the slot never changes what a merchant has to set up.
+   */
+  variant?: 'inline' | 'hero';
+}) {
   const { data } = useQuery({
     queryKey: ['banners', placement],
     queryFn: () => listBanners(placement),
@@ -43,16 +57,24 @@ export function BannerSlot({ placement, className }: { placement: BannerPlacemen
   if (banners.length === 1) {
     return (
       <div className={className}>
-        <BannerImage banner={banners[0]} placement={placement} />
+        <BannerImage banner={banners[0]} placement={placement} variant={variant} />
       </div>
     );
   }
 
   return (
     <div className={className}>
-      <Carousel loop ariaLabel="Promotions">
+      <Carousel
+        loop
+        ariaLabel="Promotions"
+        rounded={variant !== 'hero'}
+        // Long enough to read a headline and decide, which is what the slide is
+        // for. Faster reads as a slideshow demo; slower and the second banner a
+        // merchant paid for is never seen above the fold.
+        autoPlayMs={variant === 'hero' ? 6000 : undefined}
+      >
         {banners.map((banner) => (
-          <BannerImage key={banner.id} banner={banner} placement={placement} />
+          <BannerImage key={banner.id} banner={banner} placement={placement} variant={variant} />
         ))}
       </Carousel>
     </div>
@@ -84,14 +106,28 @@ function AnnouncementStrip({ banner }: { banner: BannerResponse }) {
   );
 }
 
-function BannerImage({ banner, placement }: { banner: BannerResponse; placement: BannerPlacement }) {
+function BannerImage({
+  banner,
+  placement,
+  variant,
+}: {
+  banner: BannerResponse;
+  placement: BannerPlacement;
+  variant: 'inline' | 'hero';
+}) {
   const hasText = !!(banner.headline || banner.subtext || banner.ctaLabel);
+  const isHero = variant === 'hero';
 
   const inner = (
     <div
       className={cn(
-        'relative overflow-hidden rounded-2xl bg-ink-850',
-        placement === 'HOME_HERO' ? 'aspect-[16/9] sm:aspect-[21/9]' : 'aspect-[21/6]',
+        'relative overflow-hidden bg-ink-850',
+        !isHero && 'rounded-2xl',
+        isHero
+          ? 'aspect-[4/5] sm:aspect-[16/9] lg:aspect-[21/9]'
+          : placement === 'HOME_HERO'
+            ? 'aspect-[16/9] sm:aspect-[21/9]'
+            : 'aspect-[21/6]',
       )}
     >
       {/* <picture> rather than two <img>s: the browser picks the phone crop
@@ -106,7 +142,10 @@ function BannerImage({ banner, placement }: { banner: BannerResponse; placement:
           // as an image description says everything twice.
           alt={hasText ? '' : (banner.altText ?? '')}
           className="h-full w-full object-cover"
-          loading="lazy"
+          // The top banner is the largest thing above the fold and the one image
+          // the page is measured on, so it is fetched immediately rather than
+          // lazily — lazy-loading your own LCP element delays it by a round trip.
+          loading={isHero ? 'eager' : 'lazy'}
         />
       </picture>
 
@@ -116,9 +155,23 @@ function BannerImage({ banner, placement }: { banner: BannerResponse; placement:
             className="pointer-events-none absolute inset-0 bg-gradient-to-r from-ink-950/80 via-ink-950/40 to-transparent"
             aria-hidden
           />
-          <div className="absolute inset-0 flex flex-col justify-center gap-2 p-6 sm:p-10 md:max-w-lg">
+          <div
+            className={cn(
+              'absolute inset-0 flex flex-col justify-center gap-2 p-6 sm:p-10',
+              // Full-bleed, so the copy is held to the same column as the rest of
+              // the page instead of running to the edge of a wide monitor.
+              isHero ? 'mx-auto max-w-7xl md:pl-8 lg:pl-12' : 'md:max-w-lg',
+            )}
+          >
             {banner.headline && (
-              <h2 className="font-display text-h2 text-slate-50 sm:text-h1">{banner.headline}</h2>
+              <h2
+                className={cn(
+                  'font-display text-slate-50',
+                  isHero ? 'max-w-xl text-h1 sm:text-display' : 'text-h2 sm:text-h1',
+                )}
+              >
+                {banner.headline}
+              </h2>
             )}
             {banner.subtext && <p className="text-sm text-slate-300 sm:text-base">{banner.subtext}</p>}
             {banner.ctaLabel && (
