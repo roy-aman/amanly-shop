@@ -147,7 +147,16 @@ export function AiImageStudio({
         try {
           // isBundle is deliberately absent: it belongs to the bundle flow, not to every
           // product photograph. The API treats it as optional and defaults it to false.
-          const result = await aiImages.generateImage({ prompt: d.prompt.trim(), view: d.view });
+          //
+          // productType is sent because the generation service asks what kind of thing it
+          // is drawing. The category is the better answer where there is one; the product
+          // name stands in otherwise. Omitting it is safe — the API substitutes a generic
+          // value rather than failing — so this buys a better picture, not a working call.
+          const result = await aiImages.generateImage({
+            prompt: d.prompt.trim(),
+            view: d.view,
+            productType: context.categoryName || context.productName || undefined,
+          });
           patch(d.key, { status: 'done', url: result.url });
         } catch (e) {
           patch(d.key, {

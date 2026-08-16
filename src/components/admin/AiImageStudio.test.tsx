@@ -191,6 +191,36 @@ describe('AI image studio', () => {
    * omission a 400 rather than a default — and stating "this is not a bundle" on every
    * product photograph was the wrong end to fix that at.
    */
+  /**
+   * The generation service asks what kind of thing it is drawing and refuses the request without
+   * one — which is how every generation in production came back "could not be generated". The API
+   * substitutes a generic value now, so this is about the picture being good rather than the call
+   * working: the category is a far better answer than "product".
+   */
+  it('tells the service what kind of thing it is drawing', async () => {
+    const user = userEvent.setup();
+    render();
+
+    await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
+    await screen.findByDisplayValue(/Nike Air Zoom/);
+    await user.click(screen.getByRole('button', { name: /^generate$/i }));
+
+    await waitFor(() => expect(generateMock).toHaveBeenCalled());
+    expect(generateMock.mock.calls[0][0]).toMatchObject({ productType: 'Running Shoes' });
+  });
+
+  it('falls back to the product name when there is no category', async () => {
+    const user = userEvent.setup();
+    render({ context: { productName: 'Air Zoom' } });
+
+    await user.click(await screen.findByRole('button', { name: /draft prompts/i }));
+    await screen.findByDisplayValue(/Nike Air Zoom/);
+    await user.click(screen.getByRole('button', { name: /^generate$/i }));
+
+    await waitFor(() => expect(generateMock).toHaveBeenCalled());
+    expect(generateMock.mock.calls[0][0]).toMatchObject({ productType: 'Air Zoom' });
+  });
+
   it('says nothing about bundles, because there is no bundle flow here', async () => {
     const user = userEvent.setup();
     render();

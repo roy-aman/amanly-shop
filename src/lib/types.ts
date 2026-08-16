@@ -1098,6 +1098,11 @@ export interface PromptSuggestion {
 export interface GenerateImageRequest {
   prompt: string;
   view?: ImageView | null;
+  /** What kind of thing this is ("T-shirt", "Ethnic Wear"). The generation
+   *  service requires one and the API substitutes a generic value when it is
+   *  absent, so naming the real category buys a better picture, not a
+   *  successful request. */
+  productType?: string | null;
   barcode?: string | null;
   isBundle?: boolean;
   bundleItemNames?: string | null;
