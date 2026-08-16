@@ -180,13 +180,19 @@ export default function StoreLayout() {
             <Menu className="h-5 w-5" />
           </button>
 
+          {/* The name is the merchant's and can be any length, so this yields
+              rather than holding its width. It was `shrink-0`, which on a phone
+              pushed the account and bag buttons past the right edge of the
+              screen for any store called more than about two words — they were
+              half-drawn and unreachable, on the one layout where they are the
+              only navigation there is. */}
           <Link
             to="/"
-            className="group flex shrink-0 items-center gap-2.5 md:pr-6"
+            className="group flex min-w-0 items-center gap-2.5 md:pr-6"
             aria-label={`${storeName} home`}
           >
-            <AmanlyMark className="h-7 w-7 text-slate-100 transition-transform duration-500 ease-emphasized group-hover:rotate-[-6deg] group-hover:scale-110" />
-            <Wordmark name={storeName} size="lg" />
+            <AmanlyMark className="h-7 w-7 shrink-0 text-slate-100 transition-transform duration-500 ease-emphasized group-hover:rotate-[-6deg] group-hover:scale-110" />
+            <Wordmark name={storeName} size="lg" className="truncate" />
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
@@ -227,7 +233,11 @@ export default function StoreLayout() {
             )}
           </nav>
 
-          <div className="ml-auto flex items-center gap-0.5">
+          {/* shrink-0 so these survive whatever the store is called. On a phone
+              they are the entire navigation — search, bag and account — and a
+              layout that lets the shop's own name squeeze them off the screen
+              has no way back. */}
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
             <button onClick={() => setSearchOpen(true)} className={iconButton} aria-label="Search">
               <Search className="h-5 w-5" />
             </button>

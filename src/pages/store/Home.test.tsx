@@ -138,13 +138,26 @@ describe('Home', () => {
     expect(screen.queryByRole('region', { name: /promotions/i })).not.toBeInTheDocument();
   });
 
-  /** One first screen. A booked campaign takes it and the statement is not shown at all. */
-  it('drops the brand statement entirely once a campaign is booked', async () => {
+  /**
+   * The displaced statement closes the page instead of being dropped — and it replaces the
+   * closing band rather than joining it. Two closing statements in a row would each make the
+   * other weaker, and it is said exactly once either way.
+   */
+  it('moves the brand statement to the foot of the page when a campaign takes the top', async () => {
     banners.mockResolvedValue([banner('b1')]);
     renderWithProviders(<Home />);
 
     await screen.findByRole('img', { name: /campaign b1/i });
-    expect(screen.queryByRole('heading', { level: 1, name: /fewer things/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1, name: /fewer things/i })).toHaveLength(1);
+    expect(screen.queryByText(/in one place/i)).not.toBeInTheDocument();
+  });
+
+  it('closes on the standard band when the statement is already opening the page', async () => {
+    banners.mockResolvedValue([]);
+    renderWithProviders(<Home />);
+
+    expect(await screen.findByText(/in one place/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1, name: /fewer things/i })).toHaveLength(1);
   });
 
   // ── Merchant-written copy ─────────────────────────────────────────────

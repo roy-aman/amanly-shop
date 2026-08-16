@@ -122,17 +122,16 @@ export default function Home() {
           so the page below is byte-for-byte what it was before banners existed. */}
       <BannerSlot placement="HOME_STRIP" className="rc-bleed -mt-8" />
 
-      {/* One first screen, and the campaign wins it. A booked banner takes the
-          slot outright — full bleed, sliding, each slide linking wherever it
-          points — and the brand statement is not shown at all rather than being
-          repeated further down, where it would read as filler after the reader
-          has already been sold to. With nothing booked the statement keeps the
-          slot, because a storefront opening on a category grid has no first
-          screen at all. */}
+      {/* The first screen goes to whatever the merchant is actually selling this
+          week: a booked campaign takes it outright — full bleed, sliding, each
+          slide linking wherever it points. With nothing booked the brand
+          statement keeps the slot, because a storefront opening on a category
+          grid has no first screen at all. The displaced statement is not lost;
+          it closes the page instead (see the foot of this component). */}
       {hasHeroBanner ? (
         <BannerSlot placement="HOME_HERO" variant="hero" className="rc-bleed -mt-8" />
       ) : (
-        <Hero store={storeQuery.data} />
+        <Hero store={storeQuery.data} atTop />
       )}
 
       <div className="space-y-24 sm:space-y-32">
@@ -170,8 +169,17 @@ export default function Home() {
           <TrustStrip />
         </Reveal>
 
+        {/* The page closes on the brand either way — the question is whose words.
+            When a campaign has taken the first screen the merchant's own statement
+            closes instead, which is the one place it can go without competing with
+            the campaign or being repeated. Only one of the two ever renders: two
+            closing statements in a row would each make the other weaker. */}
         <Reveal>
-          <ClosingBand storeName={storeName} />
+          {hasHeroBanner ? (
+            <Hero store={storeQuery.data} />
+          ) : (
+            <ClosingBand storeName={storeName} />
+          )}
         </Reveal>
       </div>
     </div>
@@ -203,7 +211,7 @@ function Reveal({ children, delay = 0 }: { children: ReactNode; delay?: number }
  * `rounded-3xl` panel — which reads as a dashboard card, not a brand statement.
  * A storefront's first screen has one job: say who this is.
  */
-function Hero({ store }: { store?: PublicStoreResponse }) {
+function Hero({ store, atTop = false }: { store?: PublicStoreResponse; atTop?: boolean }) {
   // Per store where the merchant has written it, the shipped copy otherwise. Each
   // line falls back on its own, so editing only the headline leaves the other two
   // as they were rather than blanking them.
@@ -216,7 +224,14 @@ function Hero({ store }: { store?: PublicStoreResponse }) {
     : HERO.headline;
 
   return (
-    <section className="rc-bleed relative -mt-8 overflow-hidden border-b border-ink-700 bg-ink-850">
+    <section
+      className={cn(
+        'rc-bleed relative overflow-hidden bg-ink-850',
+        // The negative margin only makes sense against the header. Closing the
+        // page, it would haul the band up over the section above it.
+        atTop ? '-mt-8 border-b border-ink-700' : 'border-y border-ink-700',
+      )}
+    >
       {/* Art-direction slot: an <img> placed here behind the copy (with a scrim
           over it) is the only change needed to make this a photographic hero.
           Until then, two very faint gold washes give the band some depth so it
