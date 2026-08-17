@@ -307,9 +307,13 @@ describe('Platform store detail — erasing a store', () => {
     await waitFor(() => expect(removeMock).toHaveBeenCalledWith('store-1', 'nova'));
   });
 
-  /** Erasing the fallback takes down every request that resolves to nothing. */
-  it('explains a refusal to erase the fallback store', async () => {
-    removeMock.mockRejectedValue(new ApiError(409, 'CANNOT_DELETE_FALLBACK_STORE', 'nope'));
+  /**
+   * The backend's refusal message is shown as-is rather than translated per code. There used to be
+   * a branch for CANNOT_DELETE_FALLBACK_STORE; that error no longer exists, and a branch matching a
+   * code the server never sends is a test that passes while describing nothing.
+   */
+  it('surfaces a refusal from the server rather than swallowing it', async () => {
+    removeMock.mockRejectedValue(new ApiError(409, 'STORE_HAS_OPEN_ORDERS', 'Settle open orders first.'));
     const user = userEvent.setup();
     renderWithProviders(<PlatformStoreDetail />);
     await screen.findByText('Danger zone');
@@ -318,7 +322,7 @@ describe('Platform store detail — erasing a store', () => {
     await user.type(screen.getByLabelText(/confirm the store slug/i), 'nova');
     await user.click(screen.getByRole('button', { name: /erase permanently/i }));
 
-    expect(await screen.findByText(/fallback store/i)).toBeInTheDocument();
+    expect(await screen.findByText(/settle open orders first/i)).toBeInTheDocument();
   });
 
   /** "All data" is easy to skim past; "orders" and "memberships" are what make somebody stop. */

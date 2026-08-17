@@ -59,8 +59,9 @@ export const platformStores = {
    *
    * `confirmSlug` must equal the store's own slug (400
    * STORE_CONFIRMATION_MISMATCH) — an id is copied from a list and a mistake
-   * looks like any other UUID. 409 CANNOT_DELETE_FALLBACK_STORE for the store
-   * that answers every unmatched address.
+   * looks like any other UUID. No store is protected any more: there is no
+   * fallback answering unmatched addresses, so erasing one takes down exactly
+   * its own addresses and nobody else's.
    */
   remove(storeId: string, confirmSlug: string): Promise<void> {
     return request('DELETE', `${P}/stores/${storeId}${buildQuery({ confirmSlug })}`, { auth: true });

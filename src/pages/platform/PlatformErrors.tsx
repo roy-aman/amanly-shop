@@ -28,6 +28,9 @@ const SOURCE_TONE: Record<ErrorSource, Parameters<typeof Badge>[0]['tone']> = {
   // Green because nothing is broken: a store asking for more than its plan allows is a
   // sales lead sitting in the failures table, not an incident.
   PLAN_LIMIT: 'green',
+  // Amber, not red: the API answered correctly. Something is still misconfigured and only the
+  // operator can fix it, which is more than PLAN_LIMIT's "no action needed" green implies.
+  STORE_NOT_MAPPED: 'amber',
 };
 
 const SOURCE_HELP: Record<ErrorSource, string> = {
@@ -37,6 +40,8 @@ const SOURCE_HELP: Record<ErrorSource, string> = {
   EMAIL: 'Outbound email could not be delivered — someone is waiting for a link that never arrived.',
   PLAN_LIMIT:
     'Not a fault: a store was refused because of its plan — a capability it has not been granted, or a quota it has spent. Grouped per store, so the count is how often that store has been blocked.',
+  STORE_NOT_MAPPED:
+    'A request arrived for an address no store has registered, and was refused. Attach the address shown to its store to fix it. Grouped per address rather than per URL, and recorded at most once a minute, so the count is minutes in which it happened — not requests.',
 };
 
 export default function PlatformErrors() {

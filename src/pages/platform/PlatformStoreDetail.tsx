@@ -168,12 +168,6 @@ function DangerZoneCard({ store }: { store: StoreAdminSummaryResponse }) {
       navigate('/platform');
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.code === 'CANNOT_DELETE_FALLBACK_STORE') {
-        setError(
-          'This is the fallback store — every request matching no other address is answered by it. Point the fallback elsewhere first.',
-        );
-        return;
-      }
       if (e instanceof ApiError && e.code === 'STORE_CONFIRMATION_MISMATCH') {
         setError('That is not this store’s slug.');
         return;

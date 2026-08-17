@@ -1054,7 +1054,7 @@ export interface GrantPlatformAdminRequest {
  *  fields below are null for them. `PLAN_LIMIT` is not a failure at all — a store
  *  refused for want of an entitlement or quota, kept because it is a sales signal
  *  and grouped per store rather than platform-wide. */
-export type ErrorSource = 'HTTP' | 'SCHEDULED' | 'ASYNC' | 'EMAIL' | 'PLAN_LIMIT';
+export type ErrorSource = 'HTTP' | 'SCHEDULED' | 'ASYNC' | 'EMAIL' | 'PLAN_LIMIT' | 'STORE_NOT_MAPPED';
 
 /** One distinct failure, not one occurrence — `occurrences` counts how many times
  *  it has happened. Rejected requests (bad password, forbidden, validation) are
