@@ -5,6 +5,7 @@ import type {
   CreateStoreRequest,
   ErrorEventDetailResponse,
   ErrorEventResponse,
+  ErrorSource,
   GrantPlatformAdminRequest,
   Page,
   PlatformAdminResponse,
@@ -142,11 +143,28 @@ export const platformStoreUsers = {
  * worth looking at.
  */
 export const platformErrors = {
-  /** `openOnly` hides both resolved and muted — turn it off to find a muted issue again. */
+  /**
+   * `openOnly` hides both resolved and muted — turn it off to find a muted issue again.
+   *
+   * `sources` narrows to a group. Joined with commas rather than repeated as `source=A&source=B`
+   * because `buildQuery` stringifies a value once per key; Spring binds either form to the same
+   * `List<ErrorSource>`, and doing it here keeps the shared helper unchanged. An empty array is sent
+   * as nothing at all — the server treats an empty list as "no filter", but a bare `source=` would
+   * be a parse error rather than a no-op.
+   */
   list(
-    params: { storeId?: string; since?: string; openOnly?: boolean; page?: number; size?: number } = {},
+    params: {
+      storeId?: string;
+      since?: string;
+      openOnly?: boolean;
+      sources?: ErrorSource[];
+      page?: number;
+      size?: number;
+    } = {},
   ): Promise<Page<ErrorEventResponse>> {
-    return request('GET', `${P}/errors${buildQuery(params)}`, { auth: true });
+    const { sources, ...rest } = params;
+    const query = buildQuery({ ...rest, source: sources?.length ? sources.join(',') : undefined });
+    return request('GET', `${P}/errors${query}`, { auth: true });
   },
 
   get(id: string): Promise<ErrorEventDetailResponse> {

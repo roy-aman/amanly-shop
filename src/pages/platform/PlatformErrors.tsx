@@ -33,6 +33,21 @@ const SOURCE_TONE: Record<ErrorSource, Parameters<typeof Badge>[0]['tone']> = {
   STORE_NOT_MAPPED: 'amber',
 };
 
+/**
+ * What an operator is actually asking when they filter.
+ *
+ * Not one option per source: nobody triages "show me only EMAIL". The real question is faults
+ * against the two sources that are not faults, which would otherwise crowd the list — PLAN_LIMIT is
+ * a sales signal and STORE_NOT_MAPPED is a misconfiguration, and both can out-number real breakage
+ * without anything being wrong.
+ */
+const SOURCE_GROUPS: { key: string; label: string; sources: ErrorSource[] }[] = [
+  { key: 'all', label: 'All sources', sources: [] },
+  { key: 'faults', label: 'Faults only', sources: ['HTTP', 'SCHEDULED', 'ASYNC', 'EMAIL'] },
+  { key: 'plan', label: 'Plan limits', sources: ['PLAN_LIMIT'] },
+  { key: 'unmapped', label: 'Unmapped addresses', sources: ['STORE_NOT_MAPPED'] },
+];
+
 const SOURCE_HELP: Record<ErrorSource, string> = {
   HTTP: 'A request that ended in a 500.',
   SCHEDULED: 'A scheduled sweep threw. Nobody is waiting on these, so they fail silently.',
@@ -50,6 +65,7 @@ export default function PlatformErrors() {
   const toast = useToast();
 
   const [storeId, setStoreId] = useState('');
+  const [sourceGroup, setSourceGroup] = useState('all');
   const [openOnly, setOpenOnly] = useState(true);
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -58,8 +74,15 @@ export default function PlatformErrors() {
   const storesQuery = useQuery({ queryKey: ['platform-stores'], queryFn: () => platformStores.list() });
 
   const errorsQuery = useQuery({
-    queryKey: ['platform-errors', storeId, openOnly, page],
-    queryFn: () => platformErrors.list({ storeId: storeId || undefined, openOnly, page, size: 20 }),
+    queryKey: ['platform-errors', storeId, sourceGroup, openOnly, page],
+    queryFn: () =>
+      platformErrors.list({
+        storeId: storeId || undefined,
+        sources: SOURCE_GROUPS.find((g) => g.key === sourceGroup)?.sources,
+        openOnly,
+        page,
+        size: 20,
+      }),
   });
 
   const events = errorsQuery.data?.content ?? [];
@@ -108,7 +131,7 @@ export default function PlatformErrors() {
     <>
       <PageHeader
         title="Errors"
-        subtitle="Things that broke — 500s, background jobs that threw, and email that failed to send"
+        subtitle="500s, background jobs that threw, email that failed to send — and two kinds that are not breakage: stores hitting a plan limit, and addresses mapped to no store"
       />
 
       <Card className="mb-6 flex flex-wrap items-end gap-4 p-4">
@@ -125,6 +148,22 @@ export default function PlatformErrors() {
             {(storesQuery.data ?? []).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Kind" className="min-w-[12rem]">
+          <Select
+            aria-label="Filter by kind"
+            value={sourceGroup}
+            onChange={(e) => {
+              setSourceGroup(e.target.value);
+              setPage(0);
+            }}
+          >
+            {SOURCE_GROUPS.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.label}
               </option>
             ))}
           </Select>
