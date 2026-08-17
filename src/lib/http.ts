@@ -33,6 +33,30 @@ const REFRESH_KEY = 'rc_refresh_token';
 const USER_KEY = 'rc_user';
 const EXPIRES_KEY = 'rc_token_expires_at';
 const ENTRY_KEY = 'rc_entry_point';
+const STORE_SLUG_KEY = 'rc_store_slug';
+
+/**
+ * Which store this browser has learned it is talking to.
+ *
+ * One bundle serves every shop, and which shop is decided by the address it was loaded from — so
+ * the slug is something the app is *told* on boot (`GET /api/v1/store`), not something it knows.
+ * It is kept because it namespaces anything persisted per store, and because sending it back lets
+ * the server catch the case where it has gone stale: a domain re-pointed at a different store
+ * would otherwise leave a tab rendering one shop's name while reading and writing another's data.
+ *
+ * It is a claim, never an instruction. The server resolves the tenant from the request's origin
+ * regardless of what this says, and answers 409 STORE_CONTEXT_STALE when the two disagree. Writing
+ * a different slug in here therefore gains an attacker nothing.
+ */
+export const StoreScope = {
+  get: () => localStorage.getItem(STORE_SLUG_KEY),
+  set(slug: string) {
+    localStorage.setItem(STORE_SLUG_KEY, slug);
+  },
+  clear() {
+    localStorage.removeItem(STORE_SLUG_KEY);
+  },
+};
 
 /**
  * Which door this session was opened through.
@@ -132,6 +156,29 @@ interface RequestOptions {
   auth?: boolean;
   retry?: boolean;
   signal?: AbortSignal;
+  /**
+   * Whether to send the stored slug as `X-Store-Slug`. Defaults to true for anything
+   * authenticated or non-GET; see {@link shouldClaimStore}.
+   *
+   * Set false for the bootstrap call that *learns* the slug — claiming a stale one on the very
+   * request meant to correct it would 409 the only call that can recover.
+   */
+  claimStore?: boolean;
+}
+
+/**
+ * Whether this request carries the store claim.
+ *
+ * Not every request: a custom header makes a request non-simple, and a preflight is cached per
+ * path, so putting it on public catalogue GETs would add an OPTIONS round-trip for every distinct
+ * product URL a shopper opens. Authenticated requests and non-GETs already preflight — an
+ * `Authorization` header or a JSON body is enough on its own — so restricting the claim to those
+ * costs nothing and still covers every request that can *change* data. What it gives up is
+ * catching a stale slug during anonymous browsing, where the consequence is the wrong shop's
+ * catalogue on screen rather than a write into the wrong shop.
+ */
+function shouldClaimStore(method: string, auth: boolean): boolean {
+  return auth || method.toUpperCase() !== 'GET';
 }
 
 let refreshPromise: Promise<boolean> | null = null;
@@ -140,6 +187,14 @@ let refreshPromise: Promise<boolean> | null = null;
 let onSessionExpired: (() => void) | null = null;
 export function setSessionExpiredHandler(fn: () => void) {
   onSessionExpired = fn;
+}
+
+// Called when the server reports the stored slug is not the store this address serves, so the app
+// can go and re-learn it. The failed request itself is retried without the claim, so this is about
+// bringing the cached store back in step rather than rescuing the call.
+let onStoreContextStale: (() => void) | null = null;
+export function setStoreContextStaleHandler(fn: () => void) {
+  onStoreContextStale = fn;
 }
 
 async function silentRefresh(): Promise<boolean> {
@@ -184,7 +239,7 @@ export interface ApiResult<T> {
 export async function requestWithStatus<T>(
   method: string,
   url: string,
-  { body = null, auth = false, retry = true, signal }: RequestOptions = {},
+  { body = null, auth = false, retry = true, signal, claimStore }: RequestOptions = {},
 ): Promise<ApiResult<T>> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   // FormData goes up untouched and WITHOUT a Content-Type: the browser writes its own multipart
@@ -192,6 +247,11 @@ export async function requestWithStatus<T>(
   // value the server cannot parse. Everything else is JSON exactly as before.
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   if (body != null && !isFormData) headers['Content-Type'] = 'application/json';
+
+  if (claimStore ?? shouldClaimStore(method, auth)) {
+    const slug = StoreScope.get();
+    if (slug) headers['X-Store-Slug'] = slug;
+  }
 
   if (auth) {
     if (retry && TokenStore.isExpired() && TokenStore.getRefreshToken()) {
@@ -210,11 +270,23 @@ export async function requestWithStatus<T>(
 
   if (res.status === 401 && auth && retry && TokenStore.getRefreshToken()) {
     if (await silentRefresh()) {
-      return requestWithStatus<T>(method, url, { body, auth, retry: false, signal });
+      return requestWithStatus<T>(method, url, { body, auth, retry: false, signal, claimStore });
     }
   }
 
-  if (!res.ok) throw await parseError(res);
+  if (!res.ok) {
+    const error = await parseError(res);
+    // A stale claim is recoverable and must not surface to the user: drop it, let the server
+    // resolve the tenant from the origin as it would have anyway, and separately go and re-learn
+    // which store this address serves. Retried with the claim explicitly off, so a server that
+    // somehow 409s again cannot put us in a loop.
+    if (error.status === 409 && error.code === 'STORE_CONTEXT_STALE' && retry) {
+      StoreScope.clear();
+      onStoreContextStale?.();
+      return requestWithStatus<T>(method, url, { body, auth, retry: false, signal, claimStore: false });
+    }
+    throw error;
+  }
   if (res.status === 204) return { status: res.status, data: undefined as T };
   return { status: res.status, data: (await res.json()) as T };
 }

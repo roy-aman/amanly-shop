@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, request, buildQuery, TokenStore } from './http';
+import {
+  ApiError,
+  request,
+  buildQuery,
+  setStoreContextStaleHandler,
+  StoreScope,
+  TokenStore,
+} from './http';
 import type { AuthResponse } from './types';
 
 // ── ApiError ──────────────────────────────────────────────────────────
@@ -168,5 +175,109 @@ describe('request', () => {
       code: 'UNAUTHORIZED',
     });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+// ── the store claim ───────────────────────────────────────────────────
+/**
+ * The slug goes up as a statement of which store this tab believes it is in. The server resolves
+ * the tenant itself and rejects the claim when it disagrees, so these tests are about the claim
+ * being sent where it matters, withheld where it would cost a preflight, and recovered from when
+ * it turns out to be stale.
+ */
+describe('store claim', () => {
+  function claimOn(callIndex = 0): string | undefined {
+    const init = fetchMock.mock.calls[callIndex][1] as RequestInit;
+    return (init.headers as Record<string, string>)['X-Store-Slug'];
+  }
+
+  it('claims the stored store on an authenticated GET', async () => {
+    StoreScope.set('acme');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await request('GET', '/api/v1/cart', { auth: true });
+    expect(claimOn()).toBe('acme');
+  });
+
+  it('claims the stored store on every write, signed in or not', async () => {
+    StoreScope.set('acme');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await request('POST', '/api/v1/reviews', { body: { rating: 5 } });
+    expect(claimOn()).toBe('acme');
+  });
+
+  /** A custom header on a public GET buys a preflight per product URL and guards no write. */
+  it('withholds the claim on an anonymous catalogue GET', async () => {
+    StoreScope.set('acme');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await request('GET', '/api/v1/products/abc');
+    expect(claimOn()).toBeUndefined();
+  });
+
+  it('withholds the claim when nothing has been learned yet', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await request('POST', '/api/v1/things', { body: {} });
+    expect(claimOn()).toBeUndefined();
+  });
+
+  it('withholds the claim when the caller opts out', async () => {
+    StoreScope.set('acme');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await request('GET', '/api/v1/store', { claimStore: false });
+    expect(claimOn()).toBeUndefined();
+  });
+
+  /**
+   * The recovery path. A domain re-pointed at another store leaves this tab claiming the old one;
+   * the user must not see an error for it, so the claim is dropped and the call goes again without
+   * it — the server then resolves the tenant from the origin as it would have anyway.
+   */
+  it('drops a stale claim, retries once without it, and reports the staleness', async () => {
+    StoreScope.set('stale-store');
+    const onStale = vi.fn();
+    setStoreContextStaleHandler(onStale);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { status: 409, code: 'STORE_CONTEXT_STALE', message: 'Different store' },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await expect(request('GET', '/api/v1/cart', { auth: true })).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(claimOn(1)).toBeUndefined();
+    expect(StoreScope.get()).toBeNull();
+    expect(onStale).toHaveBeenCalledOnce();
+  });
+
+  it('does not loop when the retry is refused again', async () => {
+    StoreScope.set('stale-store');
+    setStoreContextStaleHandler(() => {});
+    const conflict = () =>
+      jsonResponse({ status: 409, code: 'STORE_CONTEXT_STALE', message: 'Different store' }, 409);
+
+    fetchMock.mockResolvedValueOnce(conflict()).mockResolvedValueOnce(conflict());
+
+    await expect(request('GET', '/api/v1/cart', { auth: true })).rejects.toMatchObject({
+      status: 409,
+      code: 'STORE_CONTEXT_STALE',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  /** Only this code is recoverable; any other 409 is the caller's problem to surface. */
+  it('leaves an unrelated 409 alone', async () => {
+    StoreScope.set('acme');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ status: 409, code: 'DOMAIN_TAKEN', message: 'Taken' }, 409),
+    );
+    await expect(request('POST', '/api/v1/things', { body: {} })).rejects.toMatchObject({
+      code: 'DOMAIN_TAKEN',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(StoreScope.get()).toBe('acme');
   });
 });
