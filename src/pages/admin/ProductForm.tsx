@@ -17,12 +17,33 @@ import type {
   UpdateProductRequest,
   UpdateVariantRequest,
 } from '@/lib/types';
+import { useStore } from '@/context/StoreContext';
 import { useToast } from '@/context/ToastContext';
 import { Badge, Button, Card, ConfirmDialog, Field, Input, Modal, PageHeader, Select, Textarea } from '@/components/ui';
 import { FormSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Currencies offered on the product form.
+ *
+ * A free-text box accepted "inr ", "Rs" and typos that only surfaced as a 400 on save, and a
+ * product whose currency does not match the store's cannot be added to a cart at all — the cart
+ * refuses to mix them. The store's own currency is preselected and listed first, so the ordinary
+ * case is one the merchant never has to think about.
+ */
+const CURRENCIES: { code: string; label: string }[] = [
+  { code: 'INR', label: 'Indian rupee' },
+  { code: 'USD', label: 'US dollar' },
+  { code: 'EUR', label: 'Euro' },
+  { code: 'GBP', label: 'Pound sterling' },
+  { code: 'AED', label: 'UAE dirham' },
+  { code: 'AUD', label: 'Australian dollar' },
+  { code: 'CAD', label: 'Canadian dollar' },
+  { code: 'SGD', label: 'Singapore dollar' },
+  { code: 'JPY', label: 'Japanese yen' },
+];
 
 function slugify(value: string): string {
   return value
@@ -91,10 +112,14 @@ export default function ProductForm() {
   const qc = useQueryClient();
   const toast = useToast();
 
+  const { store } = useStore();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [slugTouched, setSlugTouched] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
+  const [studioOpen, setStudioOpen] = useState(false);
+  // Asked for up front so the button is hidden rather than offered and refused.
+  const aiQuota = useAiQuota();
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -158,6 +183,12 @@ export default function ProductForm() {
   }, [productQ.data]);
 
   useDocumentTitle(isEdit ? productQ.data?.name ?? 'Edit product' : 'New product');
+
+  // A new product is priced in the store's own currency unless told otherwise. The cart refuses to
+  // mix currencies, so anything else is unsellable alongside the rest of the catalogue.
+  useEffect(() => {
+    if (!isEdit && store?.currency) set('currency', store.currency);
+  }, [isEdit, store?.currency]);
 
   // Auto-suggest slug from name until the user edits it (create mode only).
   const suggestedSlug = useMemo(() => slugify(form.name), [form.name]);
@@ -424,13 +455,28 @@ export default function ProductForm() {
                 onChange={(e) => set('compareAtPrice', e.target.value)}
               />
             </Field>
-            <Field label="Currency" required error={errors.currency} hint="3-letter code">
-              <Input
+            <Field
+              label="Currency"
+              required
+              error={errors.currency}
+              hint={store?.currency ? `This store trades in ${store.currency}.` : undefined}
+            >
+              <Select
+                aria-label="Currency"
                 value={form.currency}
-                onChange={(e) => set('currency', e.target.value.toUpperCase())}
-                maxLength={3}
-                invalid={!!errors.currency}
-              />
+                onChange={(e) => set('currency', e.target.value)}
+              >
+                {/* A product already priced in something not listed keeps its own code rather than
+                    being silently re-priced by the select falling back to its first option. */}
+                {!CURRENCIES.some((c) => c.code === form.currency) && form.currency ? (
+                  <option value={form.currency}>{form.currency}</option>
+                ) : null}
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -478,21 +524,31 @@ export default function ProductForm() {
         {/* Images repeater — CREATE mode only */}
         {!isEdit && (
           <Card className="space-y-4 p-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-200">Images</h2>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  setDraftImages((prev) => [
-                    ...prev,
-                    { url: '', altText: '', sortOrder: String(prev.length), isPrimary: prev.length === 0 },
-                  ])
-                }
-              >
-                <Plus className="h-4 w-4" /> Add image
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {/* Generation was previously reachable only after saving, via the edit screen's
+                    image manager — so the one moment a merchant has no photographs was the one
+                    moment they could not generate any. */}
+                {aiQuota.data?.allowed && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setStudioOpen(true)}>
+                    <Sparkles className="h-4 w-4" /> Generate with AI
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setDraftImages((prev) => [
+                      ...prev,
+                      { url: '', altText: '', sortOrder: String(prev.length), isPrimary: prev.length === 0 },
+                    ])
+                  }
+                >
+                  <Plus className="h-4 w-4" /> Add image
+                </Button>
+              </div>
             </div>
             {draftImages.length === 0 ? (
               <p className="text-sm text-slate-500">No images yet. You can also add them after creating the product.</p>
@@ -558,6 +614,31 @@ export default function ProductForm() {
                 ))}
               </div>
             )}
+
+            {/* There is no saved product to read yet, so the prompts are drafted from what the
+                merchant has typed so far — the name, and the category and brand they picked. */}
+            <AiImageStudio
+              open={studioOpen}
+              onClose={() => setStudioOpen(false)}
+              closeOnUse={false}
+              context={{
+                productName: form.name.trim() || null,
+                categoryName: categories.find((c) => c.id === form.categoryId)?.name ?? null,
+                brandName: brands.find((b) => b.id === form.brandId)?.name ?? null,
+              }}
+              onUse={(url, view) =>
+                setDraftImages((prev) => [
+                  ...prev,
+                  {
+                    url,
+                    altText: view ? `${view.charAt(0)}${view.slice(1).toLowerCase()} view` : '',
+                    sortOrder: String(prev.length),
+                    // The first image becomes the thumbnail; later ones must not steal that role.
+                    isPrimary: prev.length === 0,
+                  },
+                ])
+              }
+            />
           </Card>
         )}
 

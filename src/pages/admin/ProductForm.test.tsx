@@ -23,6 +23,7 @@ vi.mock('@/api/admin', () => ({
   adminProductVariants: { list: vi.fn(), create: vi.fn(), update: vi.fn(), setStock: vi.fn(), remove: vi.fn() },
 }));
 vi.mock('@/api/catalog', () => ({ listBrands: vi.fn() }));
+vi.mock('@/context/StoreContext', () => ({ useStore: () => ({ store: { currency: 'INR' } }) }));
 vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), push: vi.fn() }),
 }));
@@ -269,5 +270,33 @@ describe('Admin ProductForm — the primary image', () => {
 
     expect(await screen.findByText('Primary')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /the primary image/i })).toHaveLength(1);
+  });
+});
+
+describe('Admin ProductForm — currency', () => {
+  /**
+   * A free-text box accepted "inr " and typos that only surfaced as a 400 on save, and a product
+   * priced in something other than the store's currency cannot be added to a cart at all — the cart
+   * refuses to mix them.
+   */
+  it('offers currencies as a list rather than free text', async () => {
+    renderNewForm();
+
+    const select = await screen.findByLabelText('Currency');
+    expect(select.tagName).toBe('SELECT');
+  });
+
+  it('preselects the store currency on a new product', async () => {
+    renderNewForm();
+
+    await waitFor(() => expect(screen.getByLabelText('Currency')).toHaveValue('INR'));
+  });
+
+  /** A product already priced in an unlisted currency must not be silently re-priced. */
+  it('keeps a currency the list does not offer when editing', async () => {
+    getMock.mockResolvedValue(product({ currency: 'CHF' }));
+    renderEditForm();
+
+    await waitFor(() => expect(screen.getByLabelText('Currency')).toHaveValue('CHF'));
   });
 });
