@@ -53,3 +53,17 @@ export function timeAgo(iso: string | null | undefined): string {
   if (days < 30) return `${days}d ago`;
   return formatDate(iso);
 }
+
+/**
+ * What to call an order on screen.
+ *
+ * The order number is the reference a customer quotes on the phone and the one printed on their
+ * confirmation email; eight characters of a UUID is neither, and matches nothing they hold. Orders
+ * placed before numbering existed have none, so the short id stays as the fallback — keeping its
+ * "#" so it still reads as a reference rather than as a fragment of something longer.
+ *
+ * Takes the shape rather than a named type so it serves both the summary rows and the full order.
+ */
+export function orderRef(order: { orderNumber?: string | null; id: string }): string {
+  return order.orderNumber ?? `#${order.id.slice(0, 8)}`;
+}

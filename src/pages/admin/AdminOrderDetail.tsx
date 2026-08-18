@@ -5,7 +5,7 @@ import { ArrowLeft, MapPin } from 'lucide-react';
 import { adminOrders } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type { OrderPaymentStatus, OrderStatus } from '@/lib/types';
-import { formatDateTime, money, titleCase } from '@/lib/format';
+import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
 import { Button, Card, EmptyState, Modal, PageHeader } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
@@ -60,7 +60,7 @@ export default function AdminOrderDetail() {
     },
   });
 
-  useDocumentTitle(order ? `Order #${order.id.slice(0, 8)}` : 'Order');
+  useDocumentTitle(order ? `Order ${orderRef(order)}` : 'Order');
 
   if (isLoading) return <DetailSkeleton />;
   if (isError || !order) {
@@ -87,7 +87,7 @@ export default function AdminOrderDetail() {
       </Link>
 
       <PageHeader
-        title={`Order #${order.id.slice(0, 8)}`}
+        title={`Order ${orderRef(order)}`}
         subtitle={`Placed ${formatDateTime(order.createdAt)}`}
         action={
           <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export default function AdminOrderDetail() {
         }
       >
         <p className="text-sm text-slate-400">
-          Cancelling order <span className="font-mono text-slate-300">#{order.id.slice(0, 8)}</span> will restore
+          Cancelling order <span className="font-mono text-slate-300">{orderRef(order)}</span> will restore
           reserved stock for its items. This cannot be undone.
         </p>
       </Modal>
@@ -299,7 +299,7 @@ export default function AdminOrderDetail() {
         }
       >
         <p className="text-sm text-slate-400">
-          This records order <span className="font-mono text-slate-300">#{order.id.slice(0, 8)}</span> as refunded.
+          This records order <span className="font-mono text-slate-300">{orderRef(order)}</span> as refunded.
           It updates the payment status only — issue the actual refund through your payment provider separately.
         </p>
       </Modal>

@@ -16,7 +16,7 @@ import {
 import { listOrders } from '@/api/orders';
 import { updatePassword, updateProfile } from '@/api/users';
 import { ApiError } from '@/lib/http';
-import { money, formatDate, titleCase } from '@/lib/format';
+import { formatDate, money, orderRef, titleCase } from '@/lib/format';
 import { PASSWORD_HINT } from '@/lib/passwordRules';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -165,7 +165,7 @@ export default function Account() {
                 className="flex flex-wrap items-center justify-between gap-3 py-5 transition-colors hover:bg-ink-850 sm:px-2"
               >
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-mono text-body-sm text-slate-100">#{o.id.slice(0, 8)}</span>
+                  <span className="font-mono text-body-sm text-slate-100">{orderRef(o)}</span>
                   <OrderStatusBadge status={o.status} audience="customer" />
                   <span className="text-caption text-slate-500">{formatDate(o.createdAt)}</span>
                 </div>

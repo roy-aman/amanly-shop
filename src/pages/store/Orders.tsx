@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Package } from 'lucide-react';
 import { listOrders } from '@/api/orders';
-import { money, formatDate } from '@/lib/format';
+import { formatDate, money, orderRef } from '@/lib/format';
 import { OrderStatusBadge } from '@/components/StatusBadge';
 import { EmptyState, LinkButton, Pagination } from '@/components/ui';
 import { ListSkeleton } from '@/components/RouteSkeletons';
@@ -60,7 +60,7 @@ export default function Orders() {
                 {/* The order number is what a customer quotes back; eight characters of a UUID is
                     not something anyone can read down a phone. Older orders have none. */}
                 <span className="font-mono text-body-sm text-slate-100">
-                  {o.orderNumber ?? `#${o.id.slice(0, 8)}`}
+                  {orderRef(o)}
                 </span>
                 <OrderStatusBadge status={o.status} audience="customer" />
               </div>

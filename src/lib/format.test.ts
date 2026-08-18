@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { money, formatDate, formatDateTime, titleCase, timeAgo } from './format';
+import { formatDate, formatDateTime, money, orderRef, timeAgo, titleCase } from './format';
 
 describe('money', () => {
   it('returns an em dash for null/undefined/NaN', () => {
@@ -105,5 +105,25 @@ describe('timeAgo', () => {
     const out = timeAgo(long);
     expect(out).not.toMatch(/ago$/);
     expect(out).not.toBe('just now');
+  });
+});
+
+/**
+ * The reference a customer actually holds.
+ *
+ * A UUID fragment matches nothing: not the confirmation email, not what they would read down a
+ * phone. Orders have carried a number since V21, so the fallback exists only for rows placed
+ * before that and should be the rare case, not the one on screen.
+ */
+describe('orderRef', () => {
+  it('uses the order number a customer was given', () => {
+    expect(orderRef({ id: 'fba8faae-4c83-4b1d-8476-ca4644133f1e', orderNumber: 'ORD-Y2PJYKCT' })).toBe(
+      'ORD-Y2PJYKCT',
+    );
+  });
+
+  it('falls back to a short id only when there is no number', () => {
+    expect(orderRef({ id: 'fba8faae-4c83-4b1d-8476-ca4644133f1e', orderNumber: null })).toBe('#fba8faae');
+    expect(orderRef({ id: 'fba8faae-4c83-4b1d-8476-ca4644133f1e' })).toBe('#fba8faae');
   });
 });

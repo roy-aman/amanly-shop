@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PackageX } from 'lucide-react';
 import { getOrder, cancelOrder } from '@/api/orders';
 import { ApiError } from '@/lib/http';
-import { money, formatDateTime, titleCase } from '@/lib/format';
+import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { OrderTotals } from '@/components/OrderTotals';
 import { useToast } from '@/context/ToastContext';
@@ -27,7 +27,7 @@ export default function OrderDetail() {
 
   const order = orderQuery.data;
 
-  useDocumentTitle(order ? `Order #${order.id.slice(0, 8)}` : 'Order');
+  useDocumentTitle(order ? `Order ${orderRef(order)}` : 'Order');
 
   async function handleCancel() {
     setCancelling(true);
@@ -66,7 +66,7 @@ export default function OrderDetail() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-700 pb-6">
         <div>
-          <h1 className="font-display text-h1 text-slate-100">Order #{order.id.slice(0, 8)}</h1>
+          <h1 className="font-display text-h1 text-slate-100">Order {orderRef(order)}</h1>
           <p className="mt-2 text-body-sm text-slate-400">Placed {formatDateTime(order.createdAt)}</p>
         </div>
         {canCancel && (
@@ -172,7 +172,7 @@ export default function OrderDetail() {
         }
       >
         <p className="text-sm text-slate-400">
-          This will cancel order #{order.id.slice(0, 8)}. This action cannot be undone.
+          This will cancel order {orderRef(order)}. This action cannot be undone.
         </p>
       </Modal>
     </div>

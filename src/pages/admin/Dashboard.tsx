@@ -6,7 +6,7 @@ import { adminOrders } from '@/api/admin';
 import { adminStats } from '@/api/stats';
 import { getPublicStore } from '@/api/store';
 import type { LowStockProduct, TopProductStat } from '@/lib/types';
-import { formatDate, money } from '@/lib/format';
+import { formatDate, money, orderRef } from '@/lib/format';
 import { trailingRange } from '@/lib/dateRange';
 import { Card, DataTable, EmptyState, PageHeader, ThemedAreaChart, type Column } from '@/components/ui';
 import { DashboardSkeleton } from '@/components/RouteSkeletons';
@@ -179,7 +179,7 @@ export default function Dashboard() {
                     className="flex items-center justify-between gap-3 py-3 transition hover:opacity-80"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-mono text-xs text-slate-400">#{o.id.slice(0, 8)}</p>
+                      <p className="truncate font-mono text-xs text-slate-400">{orderRef(o)}</p>
                       <p className="text-sm text-slate-200">{money(o.totalAmount, o.currency)}</p>
                     </div>
                     <OrderStatusBadge status={o.status} />

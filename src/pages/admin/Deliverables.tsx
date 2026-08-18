@@ -4,7 +4,7 @@ import { PackageCheck, Truck } from 'lucide-react';
 import { adminOrders } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type { OrderStatus, OrderSummaryResponse } from '@/lib/types';
-import { formatDateTime, money } from '@/lib/format';
+import { formatDateTime, money, orderRef } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
 import { Button, Card, PageHeader } from '@/components/ui';
 import { ListSkeleton } from '@/components/RouteSkeletons';
@@ -24,7 +24,7 @@ function OrderCard({
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <Link to={`/admin/orders/${order.id}`} className="font-mono text-xs text-gold-400 hover:text-gold-300">
-          #{order.id.slice(0, 8)}
+          {orderRef(order)}
         </Link>
         <span className="text-xs text-slate-500">{formatDateTime(order.createdAt)}</span>
       </div>

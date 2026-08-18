@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ShoppingBag } from 'lucide-react';
 import { adminOrders } from '@/api/admin';
 import type { OrderPaymentStatus, OrderStatus } from '@/lib/types';
-import { formatDateTime, money, titleCase } from '@/lib/format';
+import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
 import { Card, EmptyState, Input, PageHeader, Pagination, Select, SkeletonTable } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/StatusBadge';
 
@@ -135,7 +135,7 @@ export default function AdminOrders() {
                     onClick={() => navigate(`/admin/orders/${o.id}`)}
                     className="cursor-pointer transition hover:bg-ink-800/40"
                   >
-                    <td className="px-3 py-3 font-mono text-xs text-slate-300">#{o.id.slice(0, 8)}</td>
+                    <td className="px-3 py-3 font-mono text-xs text-slate-300">{orderRef(o)}</td>
                     <td className="px-3 py-3 text-slate-400">{formatDateTime(o.createdAt)}</td>
                     <td className="px-3 py-3 text-slate-300">{o.itemCount}</td>
                     <td className="px-3 py-3 font-medium text-slate-100">{money(o.totalAmount, o.currency)}</td>
