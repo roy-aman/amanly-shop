@@ -45,6 +45,19 @@ const CURRENCIES: { code: string; label: string }[] = [
   { code: 'JPY', label: 'Japanese yen' },
 ];
 
+/**
+ * Tidies a name before it is compared or sent.
+ *
+ * Trimming and lower-casing stop being enough once names arrive by copy-paste. A non-breaking
+ * space survives trim(), and a doubled inner space is invisible on screen — so "Signet  Ring" and
+ * "Signet Ring" look identical to a person and different to ===, and the duplicate warning would
+ * miss exactly the duplicate it exists to catch. Matches the backend tidying, so both ends agree
+ * on what "the same name" means.
+ */
+function tidyName(value: string): string {
+  return value.replace(/[\s\u00A0\u200B\uFEFF]+/g, ' ').trim();
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -147,7 +160,7 @@ export default function ProductForm() {
    *
    * Create only — on an edit the product's own name matches itself.
    */
-  const nameToCheck = form.name.trim();
+  const nameToCheck = tidyName(form.name);
   const duplicatesQ = useQuery({
     queryKey: ['admin', 'product-name-check', nameToCheck],
     queryFn: () => adminProducts.list({ search: nameToCheck, size: 5 }),
@@ -156,7 +169,7 @@ export default function ProductForm() {
   });
   // The search matches names AND SKUs by substring, so it is narrowed to an exact name match here.
   const sameName = (duplicatesQ.data?.content ?? []).filter(
-    (p) => p.name.trim().toLowerCase() === nameToCheck.toLowerCase(),
+    (p) => tidyName(p.name).toLowerCase() === nameToCheck.toLowerCase(),
   );
 
   // Populate the form once the product loads (edit mode).
@@ -237,7 +250,7 @@ export default function ProductForm() {
 
     if (isEdit) {
       const body: UpdateProductRequest = {
-        name: form.name.trim(),
+        name: tidyName(form.name),
         // Blank means keep: the API does not clear or regenerate a barcode on edit.
         barcode: form.barcode.trim() || undefined,
         description: form.description.trim() || null,
@@ -255,7 +268,7 @@ export default function ProductForm() {
       updateMutation.mutate(body);
     } else {
       const body: CreateProductRequest = {
-        name: form.name.trim(),
+        name: tidyName(form.name),
         slug: form.slug.trim(),
         sku: form.sku.trim().toUpperCase(),
         barcode: form.barcode.trim() || undefined,

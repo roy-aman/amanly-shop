@@ -300,3 +300,45 @@ describe('Admin ProductForm — currency', () => {
     await waitFor(() => expect(screen.getByLabelText('Currency')).toHaveValue('CHF'));
   });
 });
+
+describe('Admin ProductForm — messy names', () => {
+  /**
+   * A non-breaking space survives trim(), and a doubled inner space is invisible on screen — so
+   * both look identical to a person and different to ===. Without tidying, the duplicate warning
+   * misses exactly the duplicate it exists to catch.
+   */
+  it('still spots the duplicate when the typed name has a doubled space', async () => {
+    listMock.mockResolvedValue(
+      pageOf([{ ...product(), id: 'p9', name: 'Signet Ring', sku: 'RING-9' } as never]),
+    );
+    const user = userEvent.setup();
+    renderNewForm();
+
+    await user.type(screen.getByLabelText('Product name'), 'Signet  Ring');
+
+    expect(await screen.findByText(/already exists in this store/i)).toBeInTheDocument();
+  });
+
+  it('still spots it when a non-breaking space came along with a paste', async () => {
+    listMock.mockResolvedValue(
+      pageOf([{ ...product(), id: 'p9', name: 'Signet Ring', sku: 'RING-9' } as never]),
+    );
+    const user = userEvent.setup();
+    renderNewForm();
+
+    await user.type(screen.getByLabelText('Product name'), 'Signet Ring ');
+
+    expect(await screen.findByText(/already exists in this store/i)).toBeInTheDocument();
+  });
+
+  /** What is compared has to be what is stored, or the warning and the row disagree. */
+  it('sends the tidied name rather than what was typed', async () => {
+    const user = userEvent.setup();
+    renderNewForm();
+
+    await user.type(screen.getByLabelText('Product name'), 'Signet  Ring');
+
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    expect(listMock.mock.calls.some((c) => c[0]?.search === 'Signet Ring')).toBe(true);
+  });
+});
