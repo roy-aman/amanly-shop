@@ -149,7 +149,12 @@ endpoints where two success codes mean different things — `POST /auth/login` a
   `adminProducts`.{list(params):Page<ProductSummaryResponse>, get(id), create(body), update(id,body), changeStatus(id,status), setStock(id,quantity), addImages(id,images[]), deleteImage(id,imageId), remove(id)};
   `adminProductVariants` (WP-3.5, STAFF+ADMIN; scoped under a product).{list(productId):ProductVariantResponse[], create(productId,body):ProductVariantResponse, update(productId,variantId,body) (SKU immutable), setStock(productId,variantId,quantity):ProductVariantResponse, remove(productId,variantId):void};
   `adminBrands` (WP-3.5, STAFF+ADMIN; NO delete — deactivate only).{list():BrandResponse[], get(id), create(body):BrandResponse, update(id,body):BrandResponse, deactivate(id):BrandResponse} (409 `BRAND_SLUG_EXISTS`);
-  `adminCategories`.{list():CategoryResponse[], create(body), update(id,body), remove(id)};
+  `adminCategories`.{list():CategoryResponse[], create(body), update(id,body), remove(id),
+  move(id,MoveCategoryRequest)};
+  - **`move` re-parents a category AND its whole subtree.** `parentId: null` promotes to the top
+    level; `sortOrder` rides along so a drag is one call. Never offer a destination inside the branch
+    being moved — `400 CATEGORY_CYCLE` — and note `400 CATEGORY_DEPTH_EXCEEDED` weighs the branch's
+    DEEPEST leaf, not the row being dragged.
   `adminOrders`.{list({page,size,sort}):Page<OrderSummaryResponse>, get(id), updateStatus(id,status)};
   `adminUsers`.{list({search,page,size,sort}):Page<UserResponse>, get(id), create(body), changeRoles(id,roles), lock(id,reason?), unlock(id), disable(id,reason?)};
   `adminStore`.{get():StoreSettingsResponse, updatePayment(body), updateWhatsapp(body), **updateCommerce(body)**(WP-P.6, `PUT /api/v1/admin/store/commerce-settings`, ADMIN)};
