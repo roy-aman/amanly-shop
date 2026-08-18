@@ -68,6 +68,23 @@ export interface AuthResponse {
 }
 
 // ── Catalog: category ─────────────────────────────────────────────────
+/**
+ * Re-parents a category and its whole subtree.
+ *
+ * `parentId: null` promotes it to the top level, so "no change" is deliberately not
+ * expressible — a move that could not promote would not be a move. `sortOrder` rides
+ * along because a drag sets position and parent at once, and two calls would show a
+ * wrong-order flicker between them.
+ *
+ * 400 CATEGORY_CYCLE (dropped inside its own branch, which would detach it from the
+ * tree) · 400 CATEGORY_DEPTH_EXCEEDED (the moved branch's DEEPEST leaf would nest too
+ * far, not the category being dragged) · 400 CATEGORY_CANNOT_PARENT_ITSELF.
+ */
+export interface MoveCategoryRequest {
+  parentId: string | null;
+  sortOrder?: number | null;
+}
+
 export interface CategoryResponse {
   id: string;
   name: string;

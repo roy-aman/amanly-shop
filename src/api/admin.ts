@@ -8,6 +8,7 @@ import type {
   ChangeUserRolesRequest,
   CreateBrandRequest,
   CreateCategoryRequest,
+  MoveCategoryRequest,
   CreateCouponRequest,
   CreateProductRequest,
   CreateVariantRequest,
@@ -131,6 +132,10 @@ export const adminCategories = {
   },
   remove(id: string): Promise<void> {
     return request('DELETE', `${A}/categories/${id}`, { auth: true });
+  },
+  /** Re-parents a category AND its subtree. Null parentId promotes to the top level. */
+  move(id: string, body: MoveCategoryRequest): Promise<CategoryResponse> {
+    return request('PATCH', `${A}/categories/${id}/parent`, { body, auth: true });
   },
 };
 

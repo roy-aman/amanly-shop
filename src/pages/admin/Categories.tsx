@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderTree, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FolderInput, FolderTree, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import { adminCategories } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type { CategoryResponse, CreateCategoryRequest, UpdateCategoryRequest } from '@/lib/types';
@@ -37,6 +37,9 @@ function orderTree(cats: CategoryResponse[]): CategoryResponse[] {
 
 export default function Categories() {
   const qc = useQueryClient();
+  const [dragging, setDragging] = useState<CategoryResponse | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<CategoryResponse | null>(null);
   const toast = useToast();
   const { isAdmin } = useAuth();
 
@@ -116,6 +119,52 @@ export default function Categories() {
     onError: (e) => onMutationError(e, 'Could not update'),
   });
 
+  /**
+   * Every category inside this one, itself included.
+   *
+   * A branch cannot be moved into its own subtree — that detaches it from every root, so the rows
+   * survive and nothing reaches them. The backend refuses it (CATEGORY_CYCLE); this is what keeps
+   * such a target from being offered or accepted in the first place, so the rule is felt as
+   * "that is not a drop zone" rather than as an error after the fact.
+   */
+  function descendantsOf(id: string, all: CategoryResponse[]): Set<string> {
+    const inside = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const c of all) {
+        if (c.parentId && inside.has(c.parentId) && !inside.has(c.id)) {
+          inside.add(c.id);
+          grew = true;
+        }
+      }
+    }
+    return inside;
+  }
+
+  const moveMutation = useMutation({
+    mutationFn: ({ id, parentId }: { id: string; parentId: string | null }) =>
+      adminCategories.move(id, { parentId }),
+    onSuccess: async (moved) => {
+      await qc.invalidateQueries({ queryKey: ['admin', 'categories'] });
+      toast.success(
+        `${moved.name} moved`,
+        moved.parentName ? `Now inside ${moved.parentName}.` : 'Now a top-level category.',
+      );
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'CATEGORY_CYCLE') {
+        toast.error('Cannot move it there', 'That category sits inside the one being moved.');
+        return;
+      }
+      if (e instanceof ApiError && e.code === 'CATEGORY_DEPTH_EXCEEDED') {
+        toast.error('Too deep', 'The deepest category in that branch would pass the nesting limit.');
+        return;
+      }
+      toast.error('Could not move the category', e instanceof Error ? e.message : 'Please try again.');
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminCategories.remove(id),
     onSuccess: () => {
@@ -160,6 +209,12 @@ export default function Categories() {
       />
 
       <Card className="p-4">
+        {ordered.length > 0 ? (
+          <p className="mb-3 text-caption text-slate-500">
+            Drag a category onto another to nest it inside, or use the move button to pick a new parent. A category
+            takes everything inside it when it moves.
+          </p>
+        ) : null}
         {isLoading ? (
           <RowsSkeleton rows={6} />
         ) : isError ? (
@@ -172,16 +227,55 @@ export default function Categories() {
           />
         ) : (
           <ul className="divide-y divide-ink-800">
-            {ordered.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0" style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-slate-100">{c.name}</span>
-                    <Badge tone={c.active ? 'green' : 'gray'}>{c.active ? 'Active' : 'Inactive'}</Badge>
+            {ordered.map((c) => {
+              const blocked = dragging ? descendantsOf(dragging.id, ordered).has(c.id) : false;
+              return (
+              <li
+                key={c.id}
+                draggable
+                onDragStart={() => setDragging(c)}
+                onDragEnd={() => {
+                  setDragging(null);
+                  setDropTarget(null);
+                }}
+                onDragOver={(e) => {
+                  // preventDefault is what marks this a valid drop zone; withholding it on a
+                  // category inside the dragged branch is how the cursor says "not here".
+                  if (!dragging || blocked) return;
+                  e.preventDefault();
+                  setDropTarget(c.id);
+                }}
+                onDragLeave={() => setDropTarget((t) => (t === c.id ? null : t))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDropTarget(null);
+                  if (dragging && !blocked && dragging.id !== c.id) {
+                    moveMutation.mutate({ id: dragging.id, parentId: c.id });
+                  }
+                  setDragging(null);
+                }}
+                className={`flex items-center justify-between gap-3 py-3 ${
+                  dropTarget === c.id ? 'rounded-lg bg-primary/10 ring-1 ring-primary/40' : ''
+                } ${dragging?.id === c.id ? 'opacity-50' : ''} ${
+                  blocked && dragging && dragging.id !== c.id ? 'opacity-40' : ''
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-2" style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
+                  <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-slate-600" aria-hidden />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-100">{c.name}</span>
+                      <Badge tone={c.active ? 'green' : 'gray'}>{c.active ? 'Active' : 'Inactive'}</Badge>
+                    </div>
+                    <p className="truncate font-mono text-xs text-slate-500">/{c.slug}</p>
                   </div>
-                  <p className="truncate font-mono text-xs text-slate-500">/{c.slug}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  {/* Dragging is not reachable by keyboard and is poor on touch, so the same move
+                      is always available as a plain picker. */}
+                  <Button size="sm" variant="ghost" onClick={() => setMoveTarget(c)} aria-label={`Move ${c.name}`}>
+                    <FolderInput className="h-4 w-4" />
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => openEdit(c)} aria-label={`Edit ${c.name}`}>
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -197,10 +291,62 @@ export default function Categories() {
                   )}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </Card>
+
+      {/* Move: the keyboard- and touch-reachable equivalent of a drag. */}
+      <Modal
+        open={!!moveTarget}
+        onClose={() => setMoveTarget(null)}
+        title={moveTarget ? `Move ${moveTarget.name}` : 'Move category'}
+      >
+        {moveTarget ? (
+          <>
+            <p className="text-body-sm text-slate-400">
+              Everything inside {moveTarget.name} moves with it. Categories inside it are not offered, because a branch
+              cannot contain itself.
+            </p>
+            <ul className="mt-4 max-h-72 space-y-1 overflow-y-auto">
+              <li>
+                <button
+                  type="button"
+                  disabled={moveTarget.parentId === null}
+                  onClick={() => {
+                    moveMutation.mutate({ id: moveTarget.id, parentId: null });
+                    setMoveTarget(null);
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-body-sm text-slate-200 transition hover:bg-ink-800 disabled:opacity-40"
+                >
+                  Top level
+                  {moveTarget.parentId === null ? <span className="text-slate-500"> — already here</span> : null}
+                </button>
+              </li>
+              {ordered
+                .filter((c) => !descendantsOf(moveTarget.id, ordered).has(c.id))
+                .map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      disabled={c.id === moveTarget.parentId}
+                      onClick={() => {
+                        moveMutation.mutate({ id: moveTarget.id, parentId: c.id });
+                        setMoveTarget(null);
+                      }}
+                      className="w-full rounded-lg px-3 py-2 text-left text-body-sm text-slate-200 transition hover:bg-ink-800 disabled:opacity-40"
+                      style={{ paddingLeft: `${0.75 + c.depth * 1.25}rem` }}
+                    >
+                      {c.name}
+                      {c.id === moveTarget.parentId ? <span className="text-slate-500"> — already here</span> : null}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </>
+        ) : null}
+      </Modal>
 
       {/* Create modal */}
       <Modal
