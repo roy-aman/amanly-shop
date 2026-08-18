@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { MailCheck } from 'lucide-react';
 import { ApiError } from '@/lib/http';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { Button, Field, Input, PasswordInput } from '@/components/ui';
+import { Button, Field, Input, LinkButton, PasswordInput } from '@/components/ui';
 import AuthLayout from '@/components/layout/AuthLayout';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
 import { PASSWORD_HINT } from '@/lib/passwordRules';
@@ -19,6 +20,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [joinPending, setJoinPending] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -31,7 +33,13 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await register(email, fullName, password);
+      const res = await register(email, fullName, password);
+      // 202: this address already exists elsewhere on the platform. Nothing was
+      // created and no session exists — the emailed link finishes the job.
+      if (res.kind === 'joinPending') {
+        setJoinPending(res.pending.message);
+        return;
+      }
       navigate('/', { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -47,6 +55,26 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (joinPending) {
+    return (
+      <AuthLayout title="Check your email" subtitle="One more step to finish setting up your account">
+        <div className="mb-5 flex flex-col items-center text-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10">
+            <MailCheck className="h-6 w-6 text-emerald-400" />
+          </div>
+          <p className="text-sm text-slate-300">{joinPending}</p>
+          <p className="mt-3 text-sm text-slate-400">
+            We sent a confirmation link to <span className="text-slate-200">{email}</span>. Your account and
+            password are created when you open it.
+          </p>
+        </div>
+        <LinkButton to="/login" fullWidth>
+          Back to sign in
+        </LinkButton>
+      </AuthLayout>
+    );
   }
 
   return (

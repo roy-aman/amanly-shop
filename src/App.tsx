@@ -28,6 +28,7 @@ const Register = lazy(() => import('@/pages/auth/Register'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
+const JoinStore = lazy(() => import('@/pages/auth/JoinStore'));
 const OAuthCallback = lazy(() => import('@/pages/auth/OAuthCallback'));
 const Forbidden = lazy(() => import('@/pages/auth/Forbidden'));
 
@@ -100,6 +101,7 @@ export default function App() {
         <Route path="/forgot-password" element={<Page title="Forgot password" fallback={<AuthFormSkeleton />}><ForgotPassword /></Page>} />
         <Route path="/reset-password" element={<Page title="Reset password" fallback={<AuthFormSkeleton />}><ResetPassword /></Page>} />
         <Route path="/verify-email" element={<Page title="Verify email" fallback={<AuthFormSkeleton />}><VerifyEmail /></Page>} />
+        <Route path="/join-store" element={<Page title="Finish joining" fallback={<AuthFormSkeleton />}><JoinStore /></Page>} />
         <Route path="/oauth2-callback" element={<Page title="Signing in" fallback={<AuthFormSkeleton />}><OAuthCallback /></Page>} />
         <Route path="/admin/login" element={<Page title="Platform sign in" fallback={<AuthFormSkeleton />}><AdminLogin /></Page>} />
         <Route path="/admin/forbidden" element={<Page title="Access denied" fallback={<AuthFormSkeleton />}><Forbidden /></Page>} />

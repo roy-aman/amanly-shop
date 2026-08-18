@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { setSessionExpiredHandler, TokenStore, type EntryPoint } from '@/lib/http';
 import * as authApi from '@/api/auth';
 import * as usersApi from '@/api/users';
-import type { AuthResponse, LoginResult, RoleName, UserResponse } from '@/lib/types';
+import type { AuthResponse, LoginResult, RegisterResult, RoleName, UserResponse } from '@/lib/types';
 
 interface AuthContextValue {
   user: UserResponse | null;
@@ -27,7 +27,12 @@ interface AuthContextValue {
    *  operator must still enter their code. Nobody is signed in on the latter. */
   login: (email: string, password: string, via?: EntryPoint) => Promise<LoginResult>;
   verifyLoginOtp: (email: string, code: string, via?: EntryPoint) => Promise<AuthResponse>;
-  register: (email: string, fullName: string, password: string) => Promise<AuthResponse>;
+  /** Two-armed: `session` when the account was created and signed in,
+   *  `joinPending` when the address already exists elsewhere on the platform and
+   *  the emailed link must be opened first. Nobody is signed in on the latter. */
+  register: (email: string, fullName: string, password: string) => Promise<RegisterResult>;
+  /** Second half of the `joinPending` arm: exchanges the emailed token for a session. */
+  completeStoreJoin: (token: string) => Promise<AuthResponse>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   setUser: (user: UserResponse) => void;
@@ -112,13 +117,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return auth;
   }, []);
 
+  // Two-armed like `login`: a 202 created nothing and issued no tokens, so nobody
+  // may be marked signed in until the emailed join link is opened.
   const register = useCallback(async (email: string, fullName: string, password: string) => {
     const res = await authApi.register(email, fullName, password);
-    // Registration is always a shopper arriving on the storefront.
+    if (res.kind === 'session') {
+      // Registration is always a shopper arriving on the storefront.
+      TokenStore.setEntryPoint('store');
+      setEntry('store');
+      setUserState(res.auth.user);
+    }
+    return res;
+  }, []);
+
+  // Completing a join is the second half of that 202 — it is the point a session
+  // finally exists, so the entry point is stamped here rather than at register().
+  const completeStoreJoin = useCallback(async (token: string) => {
+    const auth = await authApi.completeStoreJoin(token);
     TokenStore.setEntryPoint('store');
     setEntry('store');
-    setUserState(res.user);
-    return res;
+    setUserState(auth.user);
+    return auth;
   }, []);
 
   const logout = useCallback(async () => {
@@ -149,11 +168,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       verifyLoginOtp,
       register,
+      completeStoreJoin,
       logout,
       refreshUser,
       setUser,
     }),
-    [user, entry, loading, login, verifyLoginOtp, register, logout, refreshUser, setUser],
+    [user, entry, loading, login, verifyLoginOtp, register, completeStoreJoin, logout, refreshUser, setUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

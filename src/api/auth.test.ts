@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { login, verifyLoginOtp } from './auth';
+import { completeStoreJoin, login, register, verifyLoginOtp } from './auth';
 import { TokenStore } from '@/lib/http';
 import type { AuthResponse } from '@/lib/types';
 
@@ -80,6 +80,57 @@ describe('login', () => {
 
     expect(result.kind).toBe('otpRequired');
     if (result.kind === 'otpRequired') expect(result.challenge.otp).toBe('483920');
+    expect(TokenStore.isAuthenticated()).toBe(false);
+  });
+});
+
+describe('register', () => {
+  it('201 yields a session and stores the tokens', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respond(201, authResponse())));
+
+    const result = await register('new@example.com', 'New Person', 'pw');
+
+    expect(result.kind).toBe('session');
+    expect(TokenStore.getAccessToken()).toBe('access-1');
+  });
+
+  it('202 yields a pending join and stores NOTHING', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        respond(202, { status: 'JOIN_VERIFICATION_SENT', message: 'Check your email.', otp: null }),
+      ),
+    );
+
+    const result = await register('exists-elsewhere@example.com', 'Returning Person', 'pw');
+
+    expect(result.kind).toBe('joinPending');
+    // The account does not exist yet: this arm used to be read as an AuthResponse,
+    // writing `undefined` into the token store and reporting a signed-in user.
+    expect(TokenStore.getAccessToken()).toBeNull();
+    expect(TokenStore.isAuthenticated()).toBe(false);
+  });
+});
+
+describe('completeStoreJoin', () => {
+  it('exchanges the emailed token for a session', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respond(200, authResponse())));
+
+    const auth = await completeStoreJoin('join-token');
+
+    expect(auth.accessToken).toBe('access-1');
+    expect(TokenStore.getAccessToken()).toBe('access-1');
+  });
+
+  it('surfaces a spent or expired token without storing anything', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        respond(401, { status: 401, code: 'INVALID_ACCOUNT_ACTION_TOKEN', message: 'Token is invalid or expired' }),
+      ),
+    );
+
+    await expect(completeStoreJoin('spent')).rejects.toMatchObject({ code: 'INVALID_ACCOUNT_ACTION_TOKEN' });
     expect(TokenStore.isAuthenticated()).toBe(false);
   });
 });

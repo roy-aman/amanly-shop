@@ -909,6 +909,26 @@ export type LoginResult =
   | { kind: 'session'; auth: AuthResponse }
   | { kind: 'otpRequired'; challenge: OtpChallengeResponse };
 
+// ── Registering an address that already exists elsewhere on the platform ──
+// Mirrors POST /api/v1/auth/register, which answers with EITHER shape:
+//   201 → AuthResponse         brand-new account, signed in
+//   202 → JoinPendingResponse  the address is already registered at another
+//                              store; nothing is created until the emailed
+//                              link is opened
+// Branch on the STATUS CODE, exactly as login does. No tokens exist on the 202
+// arm, so treating it as a session writes `undefined` over the token store.
+export interface JoinPendingResponse {
+  status: 'JOIN_VERIFICATION_SENT';
+  message: string;
+  /** DEV ONLY, same rules as {@link OtpChallengeResponse.otp}. */
+  otp?: string | null;
+}
+
+/** Discriminated result of `register()` — the caller must handle both arms. */
+export type RegisterResult =
+  | { kind: 'session'; auth: AuthResponse }
+  | { kind: 'joinPending'; pending: JoinPendingResponse };
+
 export interface VerifyLoginOtpRequest {
   email: string;
   code: string;

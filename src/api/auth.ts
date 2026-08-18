@@ -1,5 +1,11 @@
 import { request, requestWithStatus, TokenStore } from '@/lib/http';
-import type { AuthResponse, LoginResult, OtpChallengeResponse } from '@/lib/types';
+import type {
+  AuthResponse,
+  JoinPendingResponse,
+  LoginResult,
+  OtpChallengeResponse,
+  RegisterResult,
+} from '@/lib/types';
 
 const P = '/api/v1/auth';
 
@@ -38,8 +44,35 @@ export async function verifyLoginOtp(email: string, code: string): Promise<AuthR
   return data;
 }
 
-export async function register(email: string, fullName: string, password: string): Promise<AuthResponse> {
-  const data = await request<AuthResponse>('POST', `${P}/register`, { body: { email, fullName, password } });
+/**
+ * Create an account. Two outcomes, distinguished by STATUS CODE:
+ *
+ *   201 → a session; tokens are stored and `kind` is `'session'`.
+ *   202 → the address is already registered elsewhere on the platform, so joining
+ *         this store has to be confirmed from the emailed link. Nothing is created
+ *         and NO tokens exist yet — finish at `/join-store`.
+ */
+export async function register(email: string, fullName: string, password: string): Promise<RegisterResult> {
+  const res = await requestWithStatus<AuthResponse | JoinPendingResponse>('POST', `${P}/register`, {
+    body: { email, fullName, password },
+  });
+  if (res.status === 202) {
+    return { kind: 'joinPending', pending: res.data as JoinPendingResponse };
+  }
+  const auth = res.data as AuthResponse;
+  TokenStore.save(auth);
+  return { kind: 'session', auth };
+}
+
+/**
+ * Exchange the token from the join confirmation email for a session at this store.
+ *
+ * The password was captured at registration and held with the token, so there is
+ * nothing to collect here — the membership and the password are both created by
+ * this call. The store comes from the token, not from where it is opened.
+ */
+export async function completeStoreJoin(token: string): Promise<AuthResponse> {
+  const data = await request<AuthResponse>('POST', `${P}/store-join/verify`, { body: { token } });
   TokenStore.save(data);
   return data;
 }
