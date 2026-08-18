@@ -27,7 +27,6 @@ import {
 } from '@/components/ui';
 
 // Reservations expire soon → warn once we're at/under this many minutes.
-const RESERVATION_LOW_MINUTES = 5;
 // How long the undo affordance stays available after a remove.
 const UNDO_WINDOW_MS = 6000;
 
@@ -340,11 +339,17 @@ export default function Cart() {
                     </span>
                   </div>
 
-                  {reservedMinutes != null && (
+                  {/* A reassurance, never a countdown to losing the item. The hold on stock does
+                      lapse after fifteen minutes, but the line stays in the bag either way — the
+                      sweeper releases the reservation and leaves the bag alone — so this badge
+                      simply goes away when the hold does. Amber and "expiring" are gone with it:
+                      nothing bad happens at zero, and a warning that resolves into nothing teaches
+                      shoppers to distrust the next one. */}
+                  {reservedMinutes != null && reservedMinutes > 0 && (
                     <div className="mt-3">
-                      <Badge tone={reservedMinutes <= RESERVATION_LOW_MINUTES ? 'amber' : 'gray'}>
+                      <Badge tone="gray">
                         <Clock className="h-3 w-3" />
-                        {reservedMinutes <= 0 ? 'Reservation expiring' : `Reserved for ${reservedMinutes} min`}
+                        Stock held for {reservedMinutes} min
                       </Badge>
                     </div>
                   )}

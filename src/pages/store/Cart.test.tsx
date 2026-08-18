@@ -185,11 +185,25 @@ describe('Cart (WP-2.4)', () => {
     expect(screen.getByRole('link', { name: /start shopping/i })).toHaveAttribute('href', '/products');
   });
 
-  it('surfaces the reservation window and offers a working coupon input (WP-3.4)', () => {
+  it('surfaces the stock hold and offers a working coupon input (WP-3.4)', () => {
     renderCart();
-    expect(screen.getByText(/reserved for 12 min/i)).toBeInTheDocument();
+    expect(screen.getByText(/stock held for 12 min/i)).toBeInTheDocument();
     // Coupon entry is now live (WP-3.4) — the promo input is enabled.
     expect(screen.getByLabelText(/promo code/i)).toBeEnabled();
+  });
+
+  /**
+   * The hold lapses; the line does not. Saying nothing is the honest UI — the shopper keeps the
+   * item either way, so a badge counting down to zero would be warning them about a consequence
+   * that no longer exists.
+   */
+  it('says nothing at all once the stock hold has lapsed', () => {
+    currentCart = cart([item({ reservationRemainingMinutes: null })]);
+    renderCart();
+
+    expect(screen.getByText('Signet Ring')).toBeInTheDocument();
+    expect(screen.queryByText(/stock held/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/expir/i)).not.toBeInTheDocument();
   });
 
   it('applying a valid coupon validates it and shows the discount (WP-3.4)', async () => {
