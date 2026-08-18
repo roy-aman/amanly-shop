@@ -159,6 +159,12 @@ describe('Bulk product upload', () => {
     await waitFor(() => expect(exportMock).toHaveBeenCalled());
   });
 
+  it('explains what the odd characters in front of sku are', () => {
+    renderWithProviders(<BulkProductUpload />);
+
+    expect(screen.getByText(/odd characters in/i)).toBeInTheDocument();
+  });
+
   /** "Export what I am looking at" has to mean the filter actually on screen. */
   it('carries the status filter into the export', async () => {
     const user = userEvent.setup();
@@ -166,7 +172,31 @@ describe('Bulk product upload', () => {
 
     await user.click(screen.getByRole('button', { name: /export csv/i }));
 
-    await waitFor(() => expect(exportMock).toHaveBeenCalledWith({ status: 'ACTIVE' }));
+    await waitFor(() => expect(exportMock).toHaveBeenCalledWith({ status: 'ACTIVE' }, true));
+  });
+
+  /**
+   * The byte-order mark is what makes Excel on Windows read UTF-8, and what some phone spreadsheet
+   * apps render as junk glued to the sku heading. Neither setting is right everywhere, so it stays
+   * a choice — defaulting to the one most merchants need.
+   */
+  it('asks for the Excel-readable file by default', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<BulkProductUpload />);
+
+    await user.click(screen.getByRole('button', { name: /export csv/i }));
+
+    await waitFor(() => expect(exportMock).toHaveBeenCalledWith({}, true));
+  });
+
+  it('drops the mark when the merchant is not opening it in Excel', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<BulkProductUpload />);
+
+    await user.click(screen.getByRole('checkbox', { name: /download for excel/i }));
+    await user.click(screen.getByRole('button', { name: /export csv/i }));
+
+    await waitFor(() => expect(exportMock).toHaveBeenCalledWith({}, false));
   });
 
   it('says out loud that a blank cell does not clear a field', () => {

@@ -46,9 +46,18 @@ export const productBulk = {
    * object URL. Exporting an empty catalogue yields the header row alone, which
    * doubles as the blank template.
    */
-  async exportCsv(filters: { status?: ProductStatus; categoryId?: string; brandId?: string; search?: string } = {}) {
+  async exportCsv(
+    filters: { status?: ProductStatus; categoryId?: string; brandId?: string; search?: string } = {},
+    /**
+     * Lead the file with a byte-order mark. On by default: it is what makes Excel on Windows read
+     * UTF-8 rather than turning ₹ and accented names into mojibake. Turn it off for a reader that
+     * does not strip it — some phone spreadsheet apps show it as junk glued to the `sku` heading.
+     * The importer accepts either.
+     */
+    excelBom = true,
+  ) {
     const token = TokenStore.getAccessToken();
-    const res = await fetch(apiUrl(`${A}/export.csv${buildQuery(filters)}`), {
+    const res = await fetch(apiUrl(`${A}/export.csv${buildQuery({ ...filters, excelBom })}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) throw new Error('The export could not be produced.');

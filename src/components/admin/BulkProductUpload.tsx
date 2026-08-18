@@ -55,6 +55,7 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [excelBom, setExcelBom] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Poll while the job is in flight. Cleared on unmount so navigating away
@@ -100,7 +101,7 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
   async function onExport() {
     setExporting(true);
     try {
-      await productBulk.exportCsv(statusFilter ? { status: statusFilter } : {});
+      await productBulk.exportCsv(statusFilter ? { status: statusFilter } : {}, excelBom);
     } catch (e) {
       toast.error('Could not export', e instanceof Error ? e.message : 'Please try again.');
     } finally {
@@ -155,6 +156,25 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
           Exporting with no products gives just the header row, which works as a blank template.
         </li>
       </ul>
+
+      {/* The mark is what makes Excel read UTF-8 correctly and what some phone spreadsheet apps
+          render as junk in front of the sku heading. Neither is right everywhere, so it is a choice
+          rather than a decision made for the merchant. */}
+      <label className="mt-3 flex items-start gap-2 text-body-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={excelBom}
+          onChange={(e) => setExcelBom(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-primary"
+        />
+        <span>
+          Download for Excel on Windows
+          <span className="block text-caption text-slate-500">
+            Keeps accented names and ₹ readable there. Untick if the file opens with odd characters in
+            front of &ldquo;sku&rdquo; — some phone spreadsheet apps do that.
+          </span>
+        </span>
+      </label>
 
       {!isAdmin ? (
         <p className="mt-4 rounded-lg border border-ink-700 bg-ink-850 p-3 text-caption text-slate-400">
