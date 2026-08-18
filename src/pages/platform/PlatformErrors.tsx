@@ -285,7 +285,10 @@ function ErrorRow({
               </span>
             )}
           </p>
-          <p className="mt-1 truncate text-caption text-slate-400">
+          {/* Never truncated: the endpoint IS the identity of an HTTP failure, and an elided path
+              is exactly the part an operator needs to reproduce it. Monospace and wrapped rather
+              than cut, since a long admin path is otherwise unreadable. */}
+          <p className="mt-1 break-all font-mono text-caption text-slate-300">
             {event.httpMethod ? `${event.httpMethod} ${event.path}` : event.path}
           </p>
           {event.message && <p className="mt-1 line-clamp-2 text-caption text-slate-500">{event.message}</p>}
@@ -343,14 +346,16 @@ function ErrorRow({
             <p className="text-caption text-slate-500">Loading…</p>
           ) : (
             <>
-              {detailQuery.data?.queryString && (
-                <div>
-                  <p className="text-caption text-slate-500">Query</p>
-                  <p className="mt-1 break-all font-mono text-caption text-slate-300">
-                    {detailQuery.data.queryString}
-                  </p>
-                </div>
-              )}
+              <div>
+                <p className="text-caption text-slate-500">Request</p>
+                {/* Path and query rejoined into the thing that was actually called, so it can be
+                    copied straight into curl rather than reassembled by hand. */}
+                <p className="mt-1 break-all font-mono text-caption text-slate-300">
+                  {event.httpMethod ? `${event.httpMethod} ` : ''}
+                  {event.path}
+                  {detailQuery.data?.queryString ? `?${detailQuery.data.queryString}` : ''}
+                </p>
+              </div>
               <div>
                 <p className="text-caption text-slate-500">Stack trace</p>
                 <pre className="mt-1 max-h-80 overflow-auto rounded-lg border border-ink-700 bg-ink-900 p-3 font-mono text-caption leading-relaxed text-slate-400">
