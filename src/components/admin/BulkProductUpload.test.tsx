@@ -85,8 +85,8 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
-    await user.click(screen.getByRole('checkbox', { name: /check the file first/i }));
     await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
+    await user.click(screen.getByRole('checkbox', { name: /check the file first/i }));
     await user.click(screen.getByRole('button', { name: /upload/i }));
 
     await waitFor(() => expect(importMock).toHaveBeenCalled());
@@ -125,8 +125,8 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
-    await user.click(screen.getByRole('checkbox', { name: /check the file first/i }));
     await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
+    await user.click(screen.getByRole('checkbox', { name: /check the file first/i }));
     await user.click(screen.getByRole('button', { name: /upload/i }));
 
     expect(await screen.findByText(/2 rejected/i)).toBeInTheDocument();
@@ -170,8 +170,11 @@ describe('Bulk product upload', () => {
     await waitFor(() => expect(exportMock).toHaveBeenCalled());
   });
 
-  it('explains what the odd characters in front of sku are', () => {
+  it('explains what the odd characters in front of sku are', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
+
+    await user.click(screen.getByRole('button', { name: /how it works/i }));
 
     expect(screen.getByText(/odd characters in/i)).toBeInTheDocument();
   });
@@ -204,15 +207,42 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
+    await user.click(screen.getByRole('button', { name: /how it works/i }));
     await user.click(screen.getByRole('checkbox', { name: /download for excel/i }));
     await user.click(screen.getByRole('button', { name: /export csv/i }));
 
     await waitFor(() => expect(exportMock).toHaveBeenCalledWith({}, false));
   });
 
-  it('says out loud that a blank cell does not clear a field', () => {
+  it('says out loud that a blank cell does not clear a field', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
+    await user.click(screen.getByRole('button', { name: /how it works/i }));
+
     expect(screen.getByText(/leaves that field unchanged/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The bug this replaces: the button offered after a clean check was labelled "Upload for real"
+   * and its handler only cleared the form — file included. A merchant who trusted it imported
+   * nothing and lost their selection, which is how a 20-row catalogue came to create 0 products.
+   */
+  it('actually imports when the merchant applies a checked file', async () => {
+    importMock.mockResolvedValue(job({ dryRun: true, status: 'COMPLETED', createdCount: 2, failedCount: 0 }));
+    const user = userEvent.setup();
+    renderWithProviders(<BulkProductUpload />);
+
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
+    await user.click(screen.getByRole('button', { name: /check file/i }));
+    await screen.findByText(/2 would be added/i);
+
+    importMock.mockResolvedValue(job({ dryRun: false, status: 'COMPLETED', createdCount: 2 }));
+    await user.click(screen.getByRole('button', { name: /apply for real/i }));
+
+    await waitFor(() => expect(importMock).toHaveBeenCalledTimes(2));
+    // The second call is the real one, and it carries the same file rather than nothing.
+    expect(importMock.mock.calls[1][1]).toBe(false);
+    expect(importMock.mock.calls[1][0]).toBeInstanceOf(File);
   });
 });
