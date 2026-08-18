@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { activateRow } from '@/lib/rowActivation';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImageOff, Package, Plus, Trash2 } from 'lucide-react';
 import { adminProducts } from '@/api/admin';
@@ -29,6 +30,7 @@ const PAGE_SIZE = 15;
 
 export default function Inventory() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToast();
   const { isAdmin } = useAuth();
 
@@ -174,7 +176,11 @@ export default function Inventory() {
               </thead>
               <tbody className="divide-y divide-ink-800">
                 {rows.map((p) => (
-                  <tr key={p.id} className="transition hover:bg-ink-800/40">
+                  <tr
+                    key={p.id}
+                    onClick={activateRow(() => navigate(`/admin/inventory/${p.id}`))}
+                    className="cursor-pointer transition hover:bg-ink-800/40"
+                  >
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-ink-700 bg-ink-850">
@@ -201,12 +207,6 @@ export default function Inventory() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        <Link
-                          to={`/admin/inventory/${p.id}`}
-                          className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-ink-700"
-                        >
-                          Edit
-                        </Link>
                         <Button size="sm" variant="outline" onClick={() => openStock(p)}>
                           Set stock
                         </Button>

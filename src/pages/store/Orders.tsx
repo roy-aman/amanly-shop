@@ -57,8 +57,12 @@ export default function Orders() {
           >
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
-                <span className="font-mono text-body-sm text-slate-100">#{o.id.slice(0, 8)}</span>
-                <OrderStatusBadge status={o.status} />
+                {/* The order number is what a customer quotes back; eight characters of a UUID is
+                    not something anyone can read down a phone. Older orders have none. */}
+                <span className="font-mono text-body-sm text-slate-100">
+                  {o.orderNumber ?? `#${o.id.slice(0, 8)}`}
+                </span>
+                <OrderStatusBadge status={o.status} audience="customer" />
               </div>
               <p className="text-caption text-slate-500">
                 {formatDate(o.createdAt)} · {o.itemCount} item{o.itemCount === 1 ? '' : 's'}

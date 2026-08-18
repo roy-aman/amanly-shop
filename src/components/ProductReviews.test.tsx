@@ -90,11 +90,16 @@ describe('ProductReviews (PDP tab)', () => {
     expect(screen.getByRole('button', { name: /submit review/i })).toBeInTheDocument();
   });
 
-  it('hides the CTA and notes verified-buyer-only when the user has not purchased', async () => {
+  /**
+   * The copy names the step that unlocks it rather than the club the shopper is not in: "only
+   * verified buyers" reads as a permission they will never get, when delivery of the order they
+   * may already have placed is all that stands in the way.
+   */
+  it('hides the CTA and says what unlocks a review when the user has not purchased', async () => {
     mineMock.mockResolvedValue({ purchased: false, canReview: false, review: null });
     renderWithProviders(<ProductReviews productId="p1" isAuthenticated={true} />);
 
-    expect(await screen.findByText(/only verified buyers can review/i)).toBeInTheDocument();
+    expect(await screen.findByText(/once your order has been delivered/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /write a review/i })).not.toBeInTheDocument();
   });
 

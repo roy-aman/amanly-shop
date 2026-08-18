@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CheckCircle2, Info, X, XCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/components/ui';
 
@@ -39,6 +39,21 @@ const ACCENTS: Record<ToastKind, string> = {
   warning: 'border-l-warning-500',
 };
 
+/**
+ * How long each kind lingers.
+ *
+ * <p>A confirmation is read in a glance — "added to bag" earns about as long as it takes to look at
+ * the cart badge, and outstaying that is what makes a toast feel like litter. A failure has to be
+ * read and often acted on, so it is given longer. Neither number traps anyone: a click anywhere
+ * clears the lot (see below).
+ */
+const DURATION_MS: Record<ToastKind, number> = {
+  success: 3500,
+  info: 3500,
+  warning: 5000,
+  error: 5000,
+};
+
 // Errors/warnings interrupt (assertive); success/info are polite status updates.
 const ROLES: Record<ToastKind, 'alert' | 'status'> = {
   success: 'status',
@@ -58,10 +73,35 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (kind: ToastKind, title: string, message?: string) => {
       const id = ++counter;
       setToasts((prev) => [...prev, { id, kind, title, message }]);
-      window.setTimeout(() => remove(id), 5000);
+      window.setTimeout(() => remove(id), DURATION_MS[kind]);
     },
     [remove],
   );
+
+  /**
+   * Anything the visitor does next dismisses what is on screen.
+   *
+   * <p>A toast is an aside about something already finished; making someone aim at a small × to get
+   * rid of it treats it as a dialogue. Carrying on — a click, a tap, Escape — says they are done
+   * with it, so it goes.
+   *
+   * <p>The click that <em>created</em> the toast cannot dismiss it: this effect runs after the
+   * render that the click's own handler caused, by which time that pointerdown has been dispatched.
+   * The listener is also only attached while something is showing, so an idle page carries none.
+   */
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const clear = () => setToasts([]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clear();
+    };
+    document.addEventListener('pointerdown', clear);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', clear);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [toasts.length]);
 
   const api = useMemo<ToastApi>(
     () => ({

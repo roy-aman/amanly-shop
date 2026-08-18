@@ -1,4 +1,5 @@
 import { Badge } from './ui';
+import type { Tone } from './ui';
 import type { OrderPaymentStatus, OrderStatus, ProductStatus, UserStatus } from '@/lib/types';
 import { titleCase } from '@/lib/format';
 
@@ -9,8 +10,35 @@ const ORDER_TONE: Record<OrderStatus, Parameters<typeof Badge>[0]['tone']> = {
   DELIVERED: 'green',
   CANCELLED: 'red',
 };
-export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  return <Badge tone={ORDER_TONE[status]}>{titleCase(status)}</Badge>;
+/**
+  * What the same status is called to the person who placed the order.
+  *
+  * <p>PENDING is a fulfilment state — it means staff have not picked the order yet — but read by a
+  * customer it sounds like something is stuck, or worse, that their order did not go through. They
+  * are told the fact they care about: it was placed. Staff keep the operational word, because that
+  * is the queue they work from. The amber of a to-do item becomes the blue of something in hand.
+  *
+  * <p>Only the statuses whose plain name misleads are overridden; PROCESSING, SHIPPED, DELIVERED and
+  * CANCELLED already say the true thing to both audiences.
+  */
+const CUSTOMER_ORDER_LABEL: Partial<Record<OrderStatus, string>> = {
+  PENDING: 'Order placed',
+};
+const CUSTOMER_ORDER_TONE: Partial<Record<OrderStatus, Tone>> = {
+  PENDING: 'blue',
+};
+
+export function OrderStatusBadge({
+  status,
+  audience = 'staff',
+}: {
+  status: OrderStatus;
+  audience?: 'staff' | 'customer';
+}) {
+  const customer = audience === 'customer';
+  const label = (customer && CUSTOMER_ORDER_LABEL[status]) || titleCase(status);
+  const tone = (customer && CUSTOMER_ORDER_TONE[status]) || ORDER_TONE[status];
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 const PAYMENT_TONE: Record<OrderPaymentStatus, Parameters<typeof Badge>[0]['tone']> = {

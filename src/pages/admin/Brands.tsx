@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, PowerOff, Tags } from 'lucide-react';
+import { Plus, PowerOff, Tags } from 'lucide-react';
 import { adminBrands } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import { formatDate } from '@/lib/format';
@@ -182,7 +182,15 @@ export default function Brands() {
               />
             )}
             <div className="min-w-0">
-              <p className="truncate font-medium text-slate-100">{b.name}</p>
+              {/* Carries the row's action for the keyboard: onRowClick reaches a mouse only. */}
+              <button
+                type="button"
+                onClick={() => openEdit(b)}
+                aria-label={`Edit ${b.name}`}
+                className="block max-w-full truncate rounded text-left font-medium text-slate-100 transition duration-150 hover:text-gold-300"
+              >
+                {b.name}
+              </button>
               {b.description && <p className="truncate text-xs text-slate-500">{b.description}</p>}
             </div>
           </div>
@@ -244,11 +252,9 @@ export default function Brands() {
                 }
               />
             }
+            onRowClick={openEdit}
             rowActions={(b) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="ghost" onClick={() => openEdit(b)} aria-label={`Edit ${b.name}`}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
                 {b.active && (
                   <Button
                     size="sm"

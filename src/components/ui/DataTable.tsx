@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { activateRow } from '@/lib/rowActivation';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from './cn';
 import { Skeleton } from './Skeleton';
@@ -170,7 +171,7 @@ export function DataTable<T>({
             rows.map((row, i) => (
               <tr
                 key={getRowKey(row, i)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onClick={onRowClick ? activateRow(() => onRowClick(row)) : undefined}
                 className={cn(
                   'border-b border-ink-800 transition last:border-b-0',
                   onRowClick && 'cursor-pointer hover:bg-ink-800/50',

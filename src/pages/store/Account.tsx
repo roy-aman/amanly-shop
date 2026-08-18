@@ -166,7 +166,7 @@ export default function Account() {
               >
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-mono text-body-sm text-slate-100">#{o.id.slice(0, 8)}</span>
-                  <OrderStatusBadge status={o.status} />
+                  <OrderStatusBadge status={o.status} audience="customer" />
                   <span className="text-caption text-slate-500">{formatDate(o.createdAt)}</span>
                 </div>
                 <span className="text-body-sm font-semibold text-slate-100">

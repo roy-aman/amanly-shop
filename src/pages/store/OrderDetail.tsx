@@ -81,7 +81,7 @@ export default function OrderDetail() {
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        <OrderStatusBadge status={order.status} />
+        <OrderStatusBadge status={order.status} audience="customer" />
         <PaymentStatusBadge status={order.paymentStatus} />
         <span className="text-xs text-slate-500">Payment: {titleCase(order.paymentMethod)}</span>
       </div>

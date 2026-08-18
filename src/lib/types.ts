@@ -493,6 +493,9 @@ export interface OrderResponse {
 
 export interface OrderSummaryResponse {
   id: string;
+  /** The reference a customer can quote, e.g. "ORD-Y2PJYKCT". Null for orders
+   *  placed before order numbers existed — fall back to a shortened `id`. */
+  orderNumber?: string | null;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   totalAmount: number;

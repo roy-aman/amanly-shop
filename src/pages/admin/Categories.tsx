@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderInput, FolderTree, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FolderInput, FolderTree, GripVertical, Plus, Trash2 } from 'lucide-react';
+import { activateRow } from '@/lib/rowActivation';
 import { adminCategories } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type { CategoryResponse, CreateCategoryRequest, UpdateCategoryRequest } from '@/lib/types';
@@ -254,7 +255,8 @@ export default function Categories() {
                   }
                   setDragging(null);
                 }}
-                className={`flex items-center justify-between gap-3 py-3 ${
+                onClick={activateRow(() => openEdit(c))}
+                className={`flex cursor-pointer items-center justify-between gap-3 py-3 transition duration-150 hover:bg-ink-800/40 ${
                   dropTarget === c.id ? 'rounded-lg bg-primary/10 ring-1 ring-primary/40' : ''
                 } ${dragging?.id === c.id ? 'opacity-50' : ''} ${
                   blocked && dragging && dragging.id !== c.id ? 'opacity-40' : ''
@@ -264,7 +266,16 @@ export default function Categories() {
                   <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-slate-600" aria-hidden />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-100">{c.name}</span>
+                      {/* A real button carries the row's action for the keyboard; the row-wide
+                          handler above is the mouse convenience layered on top. */}
+                      <button
+                        type="button"
+                        onClick={() => openEdit(c)}
+                        aria-label={`Edit ${c.name}`}
+                        className="rounded font-medium text-slate-100 transition duration-150 hover:text-gold-300"
+                      >
+                        {c.name}
+                      </button>
                       <Badge tone={c.active ? 'green' : 'gray'}>{c.active ? 'Active' : 'Inactive'}</Badge>
                     </div>
                     <p className="truncate font-mono text-xs text-slate-500">/{c.slug}</p>
@@ -275,9 +286,6 @@ export default function Categories() {
                       is always available as a plain picker. */}
                   <Button size="sm" variant="ghost" onClick={() => setMoveTarget(c)} aria-label={`Move ${c.name}`}>
                     <FolderInput className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(c)} aria-label={`Edit ${c.name}`}>
-                    <Pencil className="h-4 w-4" />
                   </Button>
                   {isAdmin && (
                     <Button

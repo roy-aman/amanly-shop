@@ -256,8 +256,14 @@ export default function ProductReviews({
       );
     }
 
-    // Authenticated, not a verified buyer, no review.
-    return <p className="text-caption text-slate-500">Only verified buyers can review this product.</p>;
+    // Authenticated, not a verified buyer, no review. Naming the condition matters: "only verified
+    // buyers" reads as a permission the shopper will never have, when in fact it is a step away.
+    return (
+      <p className="text-caption text-slate-500">
+        Reviews come from people who bought the item — you can write one once your order has been
+        delivered.
+      </p>
+    );
   }
 }
 
