@@ -53,6 +53,17 @@ beforeEach(() => {
 
 describe('Bulk product upload', () => {
   /**
+   * Excel's CSV export rewrites a 13-digit barcode as 8.90123E+12 and the digits cannot be
+   * recovered, so the workbook has to be selectable directly — a picker limited to .csv would force
+   * every merchant through the one step that corrupts their data.
+   */
+  it('lets a merchant choose the Excel workbook itself, not only a CSV', () => {
+    renderWithProviders(<BulkProductUpload />);
+
+    expect(screen.getByLabelText('Excel or CSV file').getAttribute('accept')).toContain('.xlsx');
+  });
+
+  /**
    * Checking first is the default because the alternative — a merchant's first
    * action being an irreversible write over their whole catalogue — is a bad way
    * to learn that a column was misnamed.
@@ -62,7 +73,7 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
-    await user.upload(screen.getByLabelText('CSV file'), csv());
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
     await user.click(screen.getByRole('button', { name: /check file/i }));
 
     await waitFor(() => expect(importMock).toHaveBeenCalled());
@@ -75,7 +86,7 @@ describe('Bulk product upload', () => {
     renderWithProviders(<BulkProductUpload />);
 
     await user.click(screen.getByRole('checkbox', { name: /check the file first/i }));
-    await user.upload(screen.getByLabelText('CSV file'), csv());
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
     await user.click(screen.getByRole('button', { name: /upload/i }));
 
     await waitFor(() => expect(importMock).toHaveBeenCalled());
@@ -87,7 +98,7 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
-    await user.upload(screen.getByLabelText('CSV file'), csv());
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
     await user.click(screen.getByRole('button', { name: /check file/i }));
 
     expect(await screen.findByText(/2 would be added/i)).toBeInTheDocument();
@@ -115,7 +126,7 @@ describe('Bulk product upload', () => {
     renderWithProviders(<BulkProductUpload />);
 
     await user.click(screen.getByRole('checkbox', { name: /check the file first/i }));
-    await user.upload(screen.getByLabelText('CSV file'), csv());
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
     await user.click(screen.getByRole('button', { name: /upload/i }));
 
     expect(await screen.findByText(/2 rejected/i)).toBeInTheDocument();
@@ -131,7 +142,7 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
-    await user.upload(screen.getByLabelText('CSV file'), csv());
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
     await user.click(screen.getByRole('button', { name: /check file/i }));
 
     expect(await screen.findByText(/could not be used/i)).toBeInTheDocument();
@@ -144,7 +155,7 @@ describe('Bulk product upload', () => {
     const user = userEvent.setup();
     renderWithProviders(<BulkProductUpload />);
 
-    await user.upload(screen.getByLabelText('CSV file'), csv());
+    await user.upload(screen.getByLabelText('Excel or CSV file'), csv());
     await user.click(screen.getByRole('button', { name: /check file/i }));
 
     expect(await screen.findByText(/already running for this store/i)).toBeInTheDocument();

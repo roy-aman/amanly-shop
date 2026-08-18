@@ -122,7 +122,7 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
         <div className="min-w-0">
           <h2 className="text-h4 text-slate-100">Bulk upload</h2>
           <p className="mt-1 text-body-sm text-slate-400">
-            Export the catalogue, edit it in a spreadsheet, and send it back. Rows are matched on <strong>SKU</strong>:
+            Export the catalogue, edit it in Excel, and send the workbook back. Rows are matched on <strong>SKU</strong>:
             an existing SKU is updated, a new one is added as a draft.
           </p>
         </div>
@@ -149,7 +149,15 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
         </li>
         <li className="flex gap-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          Save from Excel as <strong>CSV UTF-8</strong>, not plain CSV, or accented names and ₹ signs arrive mangled.
+          <span>
+            <strong>Upload the .xlsx workbook itself</strong> — it needs no export step. Saving as CSV rewrites a
+            13-digit barcode as <code>8.90123E+12</code> and the missing digits cannot be recovered.
+          </span>
+        </li>
+        <li className="flex gap-2">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          If you do send a CSV, save it as <strong>CSV UTF-8</strong>, not plain CSV, or accented names and ₹ signs
+          arrive mangled.
         </li>
         <li className="flex gap-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -184,12 +192,12 @@ export function BulkProductUpload({ statusFilter }: { statusFilter?: ProductStat
       ) : (
         <>
           <div className="mt-5 flex flex-wrap items-end gap-3">
-            <Field label="CSV file" error={error} className="min-w-[16rem] flex-1">
+            <Field label="Excel or CSV file" error={error} className="min-w-[16rem] flex-1">
               <input
                 ref={fileInput}
                 type="file"
-                accept=".csv,text/csv"
-                aria-label="CSV file"
+                accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                aria-label="Excel or CSV file"
                 disabled={isActive(job)}
                 onChange={(e) => {
                   setFile(e.target.files?.[0] ?? null);
