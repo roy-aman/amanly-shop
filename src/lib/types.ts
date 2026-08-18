@@ -260,6 +260,13 @@ export interface ProductSummaryResponse {
   ratingAvg?: number | null;
   /** Number of APPROVED reviews (0 when none). Optional for the same reason. */
   ratingCount?: number;
+  /**
+   * Whether the product has at least one ACTIVE variant. When true it cannot be added to the bag
+   * from a listing — the shopper must pick the variant on the product page first. Optional so
+   * existing cached payloads (localStorage recently-viewed summaries) still type-check; an absent
+   * flag reads as "no variants", which the backend rejects with VARIANT_REQUIRED if that is wrong.
+   */
+  hasVariants?: boolean;
 }
 
 export interface ProductImageRequest {

@@ -52,7 +52,8 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `CategoryTreeResponse` {id,name,slug,sortOrder,children[]};
 `ProductImageResponse` {id,url,altText,sortOrder,isPrimary};
 `ProductResponse` {id,name,slug,description,shortDescription,sku,price,compareAtPrice,currency,status,categoryId,categoryName,categorySlug,`brandId`?:string|null,`brandName`?:string|null,weight,sellingUnit,stockQuantity,tags:string[],images[],`variants`?:ProductVariantResponse[],`ratingAvg`:number|null,`ratingCount`:number,createdAt,updatedAt};
-`ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,`brandId`?:string|null,`brandName`?:string|null,primaryImageUrl,stockQuantity,`ratingAvg`:number|null,`ratingCount`:number};
+`ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,`brandId`?:string|null,`brandName`?:string|null,primaryImageUrl,stockQuantity,`ratingAvg`:number|null,`ratingCount`:number,`hasVariants`?:boolean};
+  `hasVariants` — true when the product has ≥1 ACTIVE variant, i.e. it CANNOT be added to the bag from a listing (the backend answers `400 VARIANT_REQUIRED`); send the shopper to the PDP to choose. Optional so cached summaries (localStorage recently-viewed) still type-check; absent reads as false. Batched server-side (one query per page), not per row.
   (WP-3.5: `brandId`/`brandName`/`variants` are additive & nullable — typed OPTIONAL so pre-3.5 cached payloads still compile; backend always populates them. `variants` is `[]` for a variantless product; a product with ≥1 ACTIVE variant is variant-based — a `variantId` is then REQUIRED to add it to the cart.)
   (WP-3.2b: `ratingAvg`/`ratingCount` are the APPROVED-review aggregate. Typed OPTIONAL in TS so pre-3.2 cached payloads — e.g. localStorage recently-viewed summaries — still compile; backend always populates them. Treat `ratingAvg==null` / `ratingCount==0` as "no ratings" and render nothing, never "0 (0)".)
 `ProductImageRequest` {url,altText?,sortOrder,isPrimary};
@@ -222,7 +223,8 @@ Render placed orders with `@/components/OrderTotals`; never recompute a placed o
 `@/context/ThemeContext` → `useTheme()`: {preference:'light'|'dark'|'system', setPreference(p), resolved:'light'|'dark', forcedByConsole, acquireForcedDark()}.
   - **Sole owner of the `dark` class on `<html>`.** Console layouts call `useDarkTheme()` (`@/lib/useDarkTheme`), which registers a claim instead of writing the class — the previous add-on-mount/remove-on-unmount version silently reverted a shopper's dark choice on the way out of `/admin`. Claims are counted, so nested console layouts each release independently.
   - `resolved` is what is on screen after the OS and any console claim; `preference` is what the shopper asked for. Render pickers off `preference`, colours off tokens.
-`@/context/CartContext` → `useCart()`: {cart, itemCount, loading, refresh(), setCart(c)}. Call `refresh()` after cart mutations.
+`@/context/CartContext` → `useCart()`: {cart, itemCount, loading, refresh(), setCart(c), lineFor(productId), addProduct(productId,qty,name), setProductQuantity(productId,qty,name)}. Call `refresh()` after cart mutations made outside the context.
+  `addProduct`/`setProductQuantity` own the whole interaction — they write the returned cart into state, toast success/failure, and `addProduct` is **auth-gated** (redirects to `/login` preserving `from`), mirroring `useWishlist().toggle`. `setProductQuantity(id, 0, name)` removes the line. Both are **variantless-line only**; a variant product is bought from its PDP. `useCart()` does **not** throw outside a provider (returns an inert value) so leaf components carrying bag controls still render in isolated tests.
 `@/context/WishlistContext` → `useWishlist()`: {ids:Set<string>, count, ready, isWishlisted(id), toggle(id), refresh()}
   (WP-3.3b). Loads wishlisted ids once for authenticated users (skips all network calls when logged out); `toggle`
   is **optimistic** (heart flips immediately, rolls back + toasts on API error) and **auth-gated** (redirects to
@@ -288,6 +290,20 @@ className?}`. `overlay` = round chip floating over a card image (used by `Produc
 card `<Link>` navigation); `inline` = bordered pill for the PDP buy box. `aria-pressed` reflects wishlisted state,
 gold focus ring, filled gold heart when saved. All optimism/rollback/auth-gating lives in the context, so the button
 needs no props beyond the product and can be embedded anywhere without prop threading.
+
+### `@/components/AddToBagButton`
+Quick-add on a catalogue card, backed by `useCart()`. Props `{product:ProductSummaryResponse, className?}`. Four states,
+in order: **sold out** (`stockQuantity<=0`, disabled) → **choose options** (`hasVariants`, a `<Link>` to the PDP, never an
+add) → **add to bag** (variantless, not in the bag) → **−/+ stepper** showing "N in bag", where `−` at 1 removes the line.
+`+` is disabled at `stockQuantity`. Every handler calls `stopPropagation`/`preventDefault` because the control sits inside
+a card whose whole surface links to the PDP. All network/auth/toast behaviour lives in `useCart()`, so like
+`WishlistButton` it needs no props beyond the product.
+
+**`ProductCard` is no longer an `<a>` wrapped around everything.** It is a `relative` container; the title holds the only
+link, stretched over the card with `after:absolute after:inset-0` (the Bootstrap `stretched-link` idea). That keeps the
+whole card clickable while the bag/wishlist controls stay real buttons — interactive elements cannot legally nest inside
+an anchor, and a click on `+` must not also navigate. Anything meant to stay clickable needs to out-rank the stretched
+pseudo-element: the wishlist chip is `z-20`, the buy row `z-10`.
 
 ### App-wide UX infrastructure (WP-1.4)
 Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reuse these on every new page.

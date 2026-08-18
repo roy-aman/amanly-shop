@@ -3,6 +3,7 @@ import { ImageOff } from 'lucide-react';
 import type { ProductSummaryResponse } from '@/lib/types';
 import { cn, PriceTag, RatingStars, revealOnLoad } from '@/components/ui';
 import WishlistButton from '@/components/WishlistButton';
+import AddToBagButton from '@/components/AddToBagButton';
 
 /** Layout variants: the default portrait grid tile, and a horizontal list row. */
 export type ProductCardVariant = 'grid' | 'list';
@@ -19,12 +20,16 @@ export type ProductCardVariant = 'grid' | 'list';
  * apparel and lifestyle goods are taller than they are wide, and a square crop
  * either clips the product or floats it in dead space.
  *
- * NOTE — there is no quick-add action here, on purpose. `ProductSummaryResponse`
- * carries no variant information, so the card cannot know whether a product
- * requires a size/colour choice before it can be added; a one-click add would
- * silently put the wrong SKU in the bag for every variant product. The correct
- * fix is a Quick View that fetches the full product (which does carry variants)
- * — or a `hasVariants` flag on the summary DTO — not a guess from this payload.
+ * The card carries a quick-add (see `AddToBagButton`). This was deliberately absent
+ * until `ProductSummaryResponse` gained `hasVariants`: without it the card could not
+ * tell whether a product needed a size/colour chosen first, and a one-click add would
+ * have put the wrong SKU in the bag for every variant product. With the flag, variant
+ * products are sent to their page to be chosen and only variantless ones add in place.
+ *
+ * The whole card is the click target, via a stretched link on the title rather than an
+ * anchor wrapped around everything: the buy controls are real buttons, and interactive
+ * elements cannot legally nest inside an `<a>` — nor should a click meant for `+` also
+ * navigate away from the grid.
  */
 export default function ProductCard({
   product,
@@ -67,7 +72,9 @@ export default function ProductCard({
   const wishlist = (
     <div
       className={cn(
-        'absolute right-2 top-2 transition-opacity duration-200',
+        // z-20: the title's stretched link paints over the whole card, and it comes
+        // later in the DOM, so anything meant to stay clickable has to out-rank it.
+        'absolute right-2 top-2 z-20 transition-opacity duration-200',
         // Always visible where there is no hover to reveal it; on pointer
         // devices it stays out of the way until the card is engaged.
         'opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100',
@@ -116,29 +123,51 @@ export default function ProductCard({
     </div>
   );
 
+  /**
+   * The title link, stretched over the whole card by a pseudo-element. This is the Bootstrap
+   * `stretched-link` idea and it is what lets the card be one big target while the buy controls
+   * stay real buttons: a screen reader still hears one link named after the product, and a mouse
+   * anywhere on the card hits it — except where a control deliberately sits on top.
+   */
+  const titleLink = (
+    <Link
+      to={`/products/${product.slug}`}
+      className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+    >
+      {product.name}
+    </Link>
+  );
+
+  const buy = (
+    <div className="relative z-10 pt-3">
+      <AddToBagButton product={product} />
+    </div>
+  );
+
   if (variant === 'list') {
     return (
-      <Link
-        to={`/products/${product.slug}`}
-        className="group flex gap-5 rounded-2xl border-b border-ink-700 px-2 py-5 transition-colors duration-300 last:border-b-0 hover:bg-ink-850/60"
-      >
+      <div className="group relative flex gap-5 rounded-2xl border-b border-ink-700 px-2 py-5 transition-colors duration-300 last:border-b-0 hover:bg-ink-850/60">
         {tile('aspect-[4/5] w-24 shrink-0 sm:w-32')}
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-1">
           {product.categoryName && (
             <p className="text-overline uppercase text-slate-500">{product.categoryName}</p>
           )}
           <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100 transition-colors duration-300 group-hover:text-slate-400">
-            {product.name}
+            {titleLink}
           </h3>
           {rating}
           <div className="mt-auto pt-2">{price}</div>
+          {/* Narrower than the tile it sits under, so a row of them does not read as a toolbar. */}
+          <div className="relative z-10 max-w-[13rem] pt-3">
+            <AddToBagButton product={product} />
+          </div>
         </div>
-      </Link>
+      </div>
     );
   }
 
   return (
-    <Link to={`/products/${product.slug}`} className="group flex flex-col">
+    <div className="group relative flex flex-col">
       {tile('aspect-[4/5]')}
 
       <div className="flex flex-1 flex-col gap-1.5 pt-3.5">
@@ -149,11 +178,12 @@ export default function ProductCard({
             first line fragment once the text wraps. The image zoom is already
             carrying the hover. */}
         <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100 transition-colors duration-300 group-hover:text-slate-400">
-          {product.name}
+          {titleLink}
         </h3>
         {rating}
         <div className="mt-auto pt-1">{price}</div>
+        {buy}
       </div>
-    </Link>
+    </div>
   );
 }
