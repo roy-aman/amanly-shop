@@ -47,6 +47,13 @@ const PRIMARY_NAV = [
   { to: '/products', label: 'Shop all' },
 ];
 
+/**
+ * "Services" is not in the constant above because it is not true of every shop.
+ * It appears only where the store actually takes bookings, and a store that does
+ * not sees precisely the nav it saw before this feature existed.
+ */
+const SERVICES_NAV = { to: '/services', label: 'Services' };
+
 const SOCIALS = [
   { label: 'Instagram', icon: Instagram },
   { label: 'YouTube', icon: Youtube },
@@ -82,6 +89,9 @@ export default function StoreLayout() {
   });
   const storeName = store?.name || BRAND_NAME;
   const categories = tree ?? [];
+  // Undefined counts as off: a payload cached before the flag existed, or an
+  // older backend, must not put a link to a surface that answers 404.
+  const primaryNav = store?.bookingsEnabled ? [...PRIMARY_NAV, SERVICES_NAV] : PRIMARY_NAV;
 
   // The header carries no border until the page moves; the hairline appearing
   // on scroll is what separates it from the content instead of a permanent rule.
@@ -196,7 +206,7 @@ export default function StoreLayout() {
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
-            {PRIMARY_NAV.map((n) => (
+            {primaryNav.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -387,6 +397,9 @@ export default function StoreLayout() {
                     ? [
                         { label: 'My account', to: '/account' },
                         { label: 'Orders', to: '/orders' },
+                        ...(store?.bookingsEnabled
+                          ? [{ label: 'My bookings', to: '/account/bookings' }]
+                          : []),
                         { label: 'Wishlist', to: '/account/wishlist' },
                         { label: 'Addresses', to: '/account/addresses' },
                       ]
@@ -437,7 +450,7 @@ export default function StoreLayout() {
       <Drawer open={mobileOpen} onOpenChange={setMobileOpen} side="left" title={storeName}>
         <div className="space-y-8">
           <nav className="flex flex-col" aria-label="Mobile">
-            {PRIMARY_NAV.map((n) => (
+            {primaryNav.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -480,6 +493,7 @@ export default function StoreLayout() {
                   })),
                   { to: '/account', label: 'Account' },
                   { to: '/orders', label: 'Orders' },
+                  ...(store?.bookingsEnabled ? [{ to: '/account/bookings', label: 'My bookings' }] : []),
                   {
                     to: '/account/wishlist',
                     label: `Wishlist${wishlistCount > 0 ? ` (${wishlistCount})` : ''}`,

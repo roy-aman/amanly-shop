@@ -5,13 +5,21 @@ import { ArrowRight, Headset, RotateCcw, ShieldCheck, Truck } from 'lucide-react
 import { getPublicStore } from '@/api/store';
 import { listBanners } from '@/api/banners';
 import { getCategoryTree, getTopProducts, listProducts } from '@/api/catalog';
-import type { CategoryTreeResponse, Page, ProductSummaryResponse, PublicStoreResponse } from '@/lib/types';
+import { listServices } from '@/api/services';
+import type {
+  CategoryTreeResponse,
+  Page,
+  ProductSummaryResponse,
+  PublicStoreResponse,
+  ServiceOfferingResponse,
+} from '@/lib/types';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useInView } from '@/lib/useInView';
 import { BRAND_DESCRIPTION, BRAND_NAME } from '@/lib/brand';
 import { cn, EmptyState, LinkButton, Skeleton } from '@/components/ui';
 import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import ProductCard from '@/components/ProductCard';
+import ServiceCard from '@/components/ServiceCard';
 import { BannerSlot } from '@/components/BannerSlot';
 
 /** How many products to pull per rail. */
@@ -101,6 +109,16 @@ export default function Home() {
     queryFn: () => getTopProducts({ limit: RAIL_SIZE }),
   });
 
+  // Services, for shops that take bookings. Gated on the store payload rather
+  // than merely rendering empty: a retail-only shop must not fire this request
+  // at all, since without the entitlement it answers 404 by design.
+  const bookingsEnabled = storeQuery.data?.bookingsEnabled === true;
+  const services = useQuery({
+    queryKey: ['services', { page: 0, size: RAIL_SIZE }],
+    queryFn: () => listServices({ page: 0, size: RAIL_SIZE }),
+    enabled: bookingsEnabled,
+  });
+
   // Same query key as the BannerSlot below, so this shares that cache rather than
   // fetching twice. Read here because it decides the shape of the whole page: the
   // merchant's own campaign leads when there is one, and the typographic hero
@@ -155,6 +173,15 @@ export default function Home() {
         <Reveal>
           <BestSellersRail query={bestSellers} />
         </Reveal>
+
+        {/* Renders nothing at all unless this shop takes bookings AND has
+            published services — a rail that could appear empty on the front page
+            is worse than one that never appears. */}
+        {bookingsEnabled && (
+          <Reveal>
+            <ServicesRailSection query={services} />
+          </Reveal>
+        )}
 
         <Reveal>
           <ProductRailSection
@@ -436,6 +463,37 @@ function ProductRailSection({
     <section>
       <SectionHeading title={title} subtitle={subtitle} viewAllTo={viewAllTo} />
       {query.isLoading ? <ProductGridSkeleton count={4} /> : <ProductRail products={products} />}
+    </section>
+  );
+}
+
+/**
+ * Services on the front page.
+ *
+ * Same rail furniture as the product sections so the page keeps one rhythm, and
+ * the same rule about hiding itself: nothing to show, nothing rendered. The
+ * subtitle carries the one fact that makes people click — that they can choose a
+ * time themselves rather than ringing up.
+ */
+function ServicesRailSection({ query }: { query: UseQueryResult<Page<ServiceOfferingResponse>> }) {
+  const services = query.data?.content ?? [];
+  if (!query.isLoading && services.length === 0) return null;
+  return (
+    <section>
+      <SectionHeading
+        title="Book an appointment"
+        subtitle="Pick a service and a time that suits you. Pay when you come in."
+        viewAllTo="/services"
+      />
+      {query.isLoading ? (
+        <ProductGridSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+          {services.slice(0, 4).map((service) => (
+            <ServiceCard key={service.id} service={service} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
