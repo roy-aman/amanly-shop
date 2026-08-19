@@ -44,6 +44,14 @@ const Account = lazy(() => import('@/pages/store/Account'));
 const Wishlist = lazy(() => import('@/pages/store/Wishlist'));
 const Addresses = lazy(() => import('@/pages/store/Addresses'));
 
+// Services & bookings. Every route below is dead weight for a shop that only
+// sells goods, which is exactly why they are lazy: the chunks are never fetched
+// unless someone navigates to one, and nothing links to them when the store has
+// bookings switched off.
+const Services = lazy(() => import('@/pages/store/Services'));
+const ServiceDetail = lazy(() => import('@/pages/store/ServiceDetail'));
+
+
 // Admin console
 const Dashboard = lazy(() => import('@/pages/admin/Dashboard'));
 const AdminOrders = lazy(() => import('@/pages/admin/AdminOrders'));
@@ -123,6 +131,13 @@ export default function App() {
           <Route index element={<Page title="" fallback={<StoreListSkeleton />}><Home /></Page>} />
           <Route path="/products" element={<Page title="Shop" fallback={<StoreListSkeleton />}><Products /></Page>} />
           <Route path="/products/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ProductDetail /></Page>} />
+
+          {/* Services. Browsing and choosing a time stay public: asking someone to
+              sign in before they know whether you have a Thursday evening free is
+              how a booking flow loses people. The wizard prompts at the last step
+              and carries the chosen slot through the round trip. */}
+          <Route path="/services" element={<Page fallback={<StoreListSkeleton />}><Services /></Page>} />
+          <Route path="/services/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ServiceDetail /></Page>} />
 
           {/* Customer area — requires any authenticated user */}
           <Route element={<RequireAuth />}>
