@@ -167,7 +167,11 @@ export default function ProductCard({
   }
 
   return (
-    <div className="group relative flex flex-col">
+    // `h-full` is what makes a row of cards line up. Grid and flex containers stretch their items
+    // to the tallest one already, but the card only inherited that height if it asked for it —
+    // without this it was content-height, `mt-auto` below had nothing to push against, and a
+    // two-line product name shoved that card's Add button lower than its neighbours'.
+    <div className="group relative flex h-full flex-col">
       {tile('aspect-[4/5]')}
 
       <div className="flex flex-1 flex-col gap-1.5 pt-3.5">
@@ -177,10 +181,16 @@ export default function ProductCard({
             `line-clamp-2` and an absolutely-positioned rule sits under only the
             first line fragment once the text wraps. The image zoom is already
             carrying the hover. */}
-        <h3 className="line-clamp-2 text-body-sm font-medium text-slate-100 transition-colors duration-300 group-hover:text-slate-400">
+        {/* Two lines are reserved whether or not the name needs them (3.1em = 2 x the 1.55
+            line-height of `body-sm`). It clamps at two anyway, so this costs a short name some
+            whitespace and buys every card the same price position — across rows too, which
+            bottom-anchoring alone cannot do since grid rows size independently. */}
+        <h3 className="line-clamp-2 min-h-[3.1em] text-body-sm font-medium text-slate-100 transition-colors duration-300 group-hover:text-slate-400">
           {titleLink}
         </h3>
         {rating}
+        {/* Everything from here down is bottom-anchored, so a card carrying a rating badge still
+            puts its price and its button level with a card that has none. */}
         <div className="mt-auto pt-1">{price}</div>
         {buy}
       </div>
