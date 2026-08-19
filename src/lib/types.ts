@@ -414,6 +414,8 @@ export interface CartItemResponse {
   unitPrice: number;
   subtotal: number;
   reservationRemainingMinutes: number | null;
+  /** The product's primary image, for the line's thumbnail; null when it has none. */
+  productImageUrl?: string | null;
 }
 export interface CartResponse {
   cartId: string;
@@ -449,6 +451,13 @@ export interface OrderItemResponse {
   unitPrice: number;
   quantity: number;
   subtotal: number;
+  /**
+   * The product's CURRENT primary image, for the line's thumbnail. Decoration, not a snapshot:
+   * unlike name/sku/price it is read live, so replacing a product photo changes the thumbnail on
+   * old orders too. Null when the product has no image or has since been deleted. Optional so
+   * cached payloads predating it still type-check.
+   */
+  productImageUrl?: string | null;
 }
 
 export interface PaymentAction {

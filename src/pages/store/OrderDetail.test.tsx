@@ -111,6 +111,32 @@ describe('OrderDetail receipt layout', () => {
     expect(screen.getByText('SKU: B1')).toBeInTheDocument();
   });
 
+  /**
+   * The picture is read live from the product, not snapshotted onto the line — no money depends on
+   * a thumbnail, and a snapshotted URL would only guarantee that old orders eventually point at
+   * deleted images. A product removed since placement sends none, and the monogram takes over.
+   */
+  it('shows the product photograph on the line, and its initials when there is none', async () => {
+    getOrderMock.mockResolvedValue(
+      order({
+        items: [
+          { id: 'i1', productId: 'p1', productName: 'Signet Ring', sku: 'R1', unitPrice: 100, quantity: 1, subtotal: 100, productImageUrl: 'https://cdn.test/ring.jpg' },
+          { id: 'i2', productId: 'p2', productName: 'Leather Belt', sku: 'B1', unitPrice: 60, quantity: 1, subtotal: 60 },
+        ],
+      }),
+    );
+    renderWithProviders(<OrderDetail />);
+
+    await screen.findByText('Signet Ring');
+    // Empty alt: the product name is the next thing in the row as real text, so a described image
+    // would say it twice.
+    const thumbs = document.querySelectorAll('img[alt=""]');
+    expect(thumbs).toHaveLength(1);
+    expect(thumbs[0]).toHaveAttribute('src', 'https://cdn.test/ring.jpg');
+    // The line with no photo falls back to initials rather than a hole.
+    expect(screen.getByText('LB')).toBeInTheDocument();
+  });
+
   it('carries the order reference in the header and in the facts block', async () => {
     getOrderMock.mockResolvedValue(order({ orderNumber: 'ORD-Y2PJYKCT' }));
     renderWithProviders(<OrderDetail />);

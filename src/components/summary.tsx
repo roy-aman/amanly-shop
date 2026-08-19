@@ -82,15 +82,26 @@ export function InfoRow({
 }
 
 /**
- * The square that stands in for a product photo.
+ * The square at the start of a line: the product's photograph, or its initials when there is none.
  *
- * <p>Order items snapshot name, SKU and price at placement and carry no image — deliberately, so a
- * later catalogue edit cannot rewrite the history of a placed order. Rather than invent a URL or
- * leave a hole in the row, each line gets a monogram tile: it gives the list the same rhythm real
- * thumbnails would, and reads as a considered placeholder rather than a broken image. Adding real
- * photos means one products-by-ids endpoint; this does not pretend to be that.
+ * <p>The picture is read live from the product rather than snapshotted onto the line. Name, SKU and
+ * price ARE snapshotted, so a catalogue edit can never rewrite what someone was charged — but a
+ * thumbnail is decoration, no money depends on it, and a snapshotted URL would only guarantee that
+ * old orders eventually point at deleted images. A product removed since placement simply sends no
+ * URL, and the line falls back to its monogram.
+ *
+ * <p>The monogram is a real state, not a loading shim: it keeps the list's rhythm for a merchant who
+ * has not uploaded photos yet, and reads as considered rather than broken.
  */
-export function ItemThumb({ name, className }: { name: string; className?: string }) {
+export function ItemThumb({
+  name,
+  imageUrl,
+  className,
+}: {
+  name: string;
+  imageUrl?: string | null;
+  className?: string;
+}) {
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -100,14 +111,20 @@ export function ItemThumb({ name, className }: { name: string; className?: strin
 
   return (
     <div
-      aria-hidden
       className={cn(
-        'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-ink-850',
+        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-ink-850',
         'text-body-sm font-semibold tracking-wide text-slate-400',
         className,
       )}
+      // Empty alt on the image and aria-hidden on the monogram, for one reason: the product name is
+      // the next thing in the row as real text, so either would say it twice to a screen reader.
+      aria-hidden={!imageUrl}
     >
-      {initials}
+      {imageUrl ? (
+        <img src={imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+      ) : (
+        initials
+      )}
     </div>
   );
 }
@@ -122,6 +139,7 @@ export function ItemThumb({ name, className }: { name: string; className?: strin
 export function OrderLine({
   name,
   meta,
+  imageUrl,
   quantity,
   unitPrice,
   subtotal,
@@ -129,13 +147,14 @@ export function OrderLine({
   name: string;
   /** Variant options or SKU — whatever identifies which one of these it is. */
   meta?: string | null;
+  imageUrl?: string | null;
   quantity: number;
   unitPrice: string;
   subtotal: string;
 }) {
   return (
     <div className="flex items-start gap-3.5 py-3.5">
-      <ItemThumb name={name} />
+      <ItemThumb name={name} imageUrl={imageUrl} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-body-sm font-medium text-slate-100">{name}</p>
         {meta && <p className="mt-0.5 truncate text-caption text-slate-400">{meta}</p>}

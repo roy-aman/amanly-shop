@@ -109,6 +109,7 @@ export default function OrderDetail() {
               key={it.id}
               name={it.productName}
               meta={it.variantOptions ?? `SKU: ${it.variantSku ?? it.sku}`}
+              imageUrl={it.productImageUrl}
               quantity={it.quantity}
               unitPrice={money(it.unitPrice, order.currency)}
               subtotal={money(it.subtotal, order.currency)}

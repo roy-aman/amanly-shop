@@ -65,10 +65,11 @@ Brands & variants (WP-3.5): `BrandResponse` {id,name,slug,description:string|nul
   `ProductVariantResponse` {id,sku,options:Record<string,string>,optionsLabel:string,priceOverride:number|null,effectivePrice:number,stockQuantity,imageId:string|null,active};
   `CreateVariantRequest` {sku,options(non-empty),price?,stockQuantity?,imageId?,active?}; `UpdateVariantRequest` {options,price?,imageId?,active(REQUIRED)} (SKU immutable; stock via a dedicated endpoint; 409 `VARIANT_SKU_EXISTS`/`VARIANT_OPTIONS_EXISTS`).
 `CreateCategoryRequest` {name,slug,description?,parentId?}; `UpdateCategoryRequest` {name,description?,sortOrder?,active?};
-`CartItemResponse` {cartItemId,productId,productName,productSlug,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptionsLabel`?:string|null,quantity,unitPrice,subtotal,reservationRemainingMinutes} (WP-3.5 variant fields null for a variantless line);
+`CartItemResponse` {cartItemId,productId,productName,productSlug,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptionsLabel`?:string|null,quantity,unitPrice,subtotal,reservationRemainingMinutes,`productImageUrl`?:string|null} (WP-3.5 variant fields null for a variantless line);
 `CartResponse` {cartId,userId,items[],totalAmount,currency};
 `ShippingDetails`/`ShippingAddressRequest` {name,phone?,addressLine1,addressLine2?,city,state?,postalCode,country};
-`OrderItemResponse` {id,productId,productName,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptions`?:string|null,unitPrice,quantity,subtotal} (WP-3.5 variant snapshot null for a variantless line);
+`OrderItemResponse` {id,productId,productName,sku,`variantId`?:string|null,`variantSku`?:string|null,`variantOptions`?:string|null,unitPrice,quantity,subtotal,`productImageUrl`?:string|null} (WP-3.5 variant snapshot null for a variantless line);
+  `productImageUrl` — the product's **current** primary image, for the line's thumbnail. **Decoration, not a snapshot**: unlike name/SKU/price it is read live server-side (one batched query per order), so replacing a product photo changes the thumbnail on old orders too, and a product deleted since placement sends null. Nothing about the money depends on it.
 `PaymentAction` {provider,razorpayKeyId,razorpayOrderId,amountMinor,currency};
 `OrderResponse` {id,`orderNumber`?:string|null,userId,status,paymentMethod,paymentStatus,`totalAmount`(payable),`subtotalAmount`(WP-P.6),`discountAmount`:number(0 when none, WP-3.4),`shippingAmount`(WP-P.6),`taxAmount`(WP-P.6),`taxRatePercent`(WP-P.6),`taxInclusive`:boolean(WP-P.6),`couponCode`:string|null(WP-3.4),currency,shippingAddress,notes,items[],paymentAction,createdAt,updatedAt};
   - **Money breakdown (WP-P.6).** All figures are placement-time snapshots — editing store settings never changes a placed order. The relationship depends on `taxInclusive`:
@@ -315,8 +316,10 @@ An order renders as a narrow stack (`max-w-2xl`) of labelled blocks — Items or
 Bill summary — not a four-column table in a wide grid, which is an admin screen.
 
 `emphasis` on `InfoRow` is the payable total: at most one per block. `ItemThumb` is a **monogram tile, not an image** —
-`OrderItemResponse` snapshots name/SKU/price at placement and carries no image URL (so a catalogue edit cannot rewrite a
-placed order). Real photos would need a products-by-ids endpoint; the tile does not pretend to be one.
+`ItemThumb` renders `imageUrl` when the line has one and the product's initials when it does not — a real state for a
+merchant who has uploaded no photos, not a loading shim. The URL is read live from the product (see `productImageUrl`
+above): name/SKU/price are snapshotted so the money can never be rewritten, but a thumbnail is decoration and a
+snapshotted URL would only guarantee that old orders eventually point at deleted images.
 
 ### `@/components/CategoryRail`
 `CategoryRail({categories:CategoryTreeResponse[], activeId, onSelect, loading?, className?})` — root categories as a

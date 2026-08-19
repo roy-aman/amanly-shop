@@ -638,6 +638,7 @@ export default function Checkout() {
                   key={i.cartItemId}
                   name={i.productName}
                   meta={i.variantOptionsLabel ?? null}
+                  imageUrl={i.productImageUrl}
                   quantity={i.quantity}
                   unitPrice={money(i.unitPrice, currency)}
                   subtotal={money(i.subtotal, currency)}
