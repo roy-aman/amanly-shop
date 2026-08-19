@@ -577,6 +577,23 @@ export interface PublicStoreResponse {
   /** Newlines are line breaks. */
   heroHeadline?: string | null;
   heroSubtext?: string | null;
+  /**
+   * Whether this store takes bookings *right now* — the EFFECTIVE answer, already
+   * combining the platform entitlement with the merchant's own switch. The whole
+   * services surface (nav item, routes, home section) hangs off this one flag.
+   *
+   * Optional because a bundle can be live against a backend that predates the
+   * field, and because a payload cached before a deploy will not carry it.
+   * `undefined` therefore has to read as "off": a shop that cannot serve bookings
+   * must never be offered them.
+   */
+  bookingsEnabled?: boolean;
+  /** IANA zone the shop keeps its diary in ("Asia/Kolkata"). Opening hours and
+   *  appointment times belong to the shop, never to the browser — see the
+   *  formatters in lib/format.ts. */
+  timezone?: string;
+  /** Where customers physically come for an appointment; also the ICS location. */
+  businessAddress?: string | null;
 }
 
 export interface StoreSettingsResponse {
@@ -600,6 +617,22 @@ export interface StoreSettingsResponse {
   heroEyebrow?: string | null;
   heroHeadline?: string | null;
   heroSubtext?: string | null;
+  /**
+   * The two booking flags, kept APART on purpose — the console has to tell the
+   * merchant which of two very different situations they are in.
+   *
+   * `bookingsAllowed` is the platform entitlement: false means "not part of your
+   * plan", which no switch in this console can change. `bookingsEnabled` is the
+   * merchant's own switch, which they flip in booking settings. The storefront
+   * only ever sees the AND of the two; collapsing them here would be the
+   * difference between someone flipping a toggle and someone raising a ticket.
+   */
+  bookingsAllowed?: boolean;
+  bookingsEnabled?: boolean;
+  /** IANA zone; written through booking settings, read by every console screen
+   *  that shows an appointment time. */
+  timezone?: string;
+  businessAddress?: string | null;
 }
 
 /**
@@ -1325,4 +1358,382 @@ export interface AiQuotaResponse {
   approxSecondsPerImage: number;
   /** null when there is no limit. */
   remaining: number | null;
+}
+
+// ── Services & bookings (WP-BU.0) ─────────────────────────────────────
+// Mirrors com.royalcommerce.application.booking.dto.* and the service half of
+// review.dto.*. The vertical is generic: any shop that sells appointments
+// rather than (or as well as) goods. Nothing here is specific to a trade.
+//
+// Two rules govern this whole section, and both come from production incidents:
+//
+//  1. THE SERVER OWNS THE DIARY. Availability, opening hours, lead times and
+//     cut-offs are computed on the backend under a per-store lock. The UI asks
+//     what is free and offers exactly that back — it never derives a time.
+//  2. TIMES BELONG TO THE SHOP. Instants are UTC on the wire and must be
+//     rendered in the store's `timezone`, never the browser's. A customer three
+//     zones away has to read the same clock face the shop does.
+
+export type BookingStatus = 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+/** How the booking was made. Walk-ins and phone bookings are taken by staff in
+ *  the console and may have no customer account behind them. */
+export type BookingSource = 'ONLINE' | 'WALK_IN' | 'PHONE';
+export type BookingCancelledBy = 'CUSTOMER' | 'STORE';
+
+/** A bookable service as a customer sees it. No stock, no SKU, no cart —
+ *  `durationMinutes` does the work a size or weight does in the product
+ *  catalogue, and it is what shoppers actually compare on. */
+export interface ServiceOfferingResponse {
+  id: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  name: string;
+  slug: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  durationMinutes: number;
+  imageUrl: string | null;
+  imageAltText: string | null;
+  /** Live average over APPROVED reviews, 1dp. `null` when there are none — show
+   *  nothing rather than an empty five-star row. */
+  ratingAvg: number | null;
+  ratingCount: number;
+}
+
+/** The console's view: adds what a customer must not see or does not need. */
+export interface AdminServiceOfferingResponse {
+  id: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  name: string;
+  slug: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  durationMinutes: number;
+  /** Clean-up time blocked after each appointment. Deliberately invisible to the
+   *  customer: their `endsAt` excludes it, but the diary counts it. */
+  bufferMinutes: number;
+  imageUrl: string | null;
+  imageAltText: string | null;
+  active: boolean;
+  sortOrder: number;
+}
+
+/** Service categories are a FLAT list, not the product category tree. */
+export interface ServiceCategoryResponse {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface CreateServiceCategoryRequest {
+  name: string;
+  slug: string;
+  sortOrder?: number;
+  active?: boolean;
+}
+
+/** Update is a full replace: `sortOrder` and `active` are required, so the edit
+ *  form has to send back the values it loaded rather than only what changed. */
+export interface UpdateServiceCategoryRequest {
+  name: string;
+  slug: string;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface CreateServiceOfferingRequest {
+  categoryId?: string | null;
+  name: string;
+  slug: string;
+  description?: string | null;
+  price: number;
+  /** 5..480 */
+  durationMinutes: number;
+  /** 0..120; omitted means 0. */
+  bufferMinutes?: number;
+  imageUrl?: string | null;
+  imageAltText?: string | null;
+  active?: boolean;
+  sortOrder?: number;
+}
+
+/** Full replace — unlike the create form, `bufferMinutes`, `active` and
+ *  `sortOrder` are mandatory here. Load, edit, send everything back. */
+export interface UpdateServiceOfferingRequest {
+  categoryId?: string | null;
+  name: string;
+  slug: string;
+  description?: string | null;
+  price: number;
+  durationMinutes: number;
+  bufferMinutes: number;
+  imageUrl?: string | null;
+  imageAltText?: string | null;
+  active: boolean;
+  sortOrder: number;
+}
+
+/** A practitioner as a customer sees them. Nothing links staff to services in
+ *  this version, so a picker can only offer "everyone who takes appointments",
+ *  never "who can do this one". */
+export interface PublicStaffResponse {
+  id: string;
+  displayName: string;
+  title: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+}
+
+export interface StaffProfileResponse {
+  id: string;
+  /** Linked login, when this person also signs into the console. */
+  userId: string | null;
+  displayName: string;
+  title: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface SaveStaffProfileRequest {
+  userId?: string | null;
+  displayName: string;
+  title?: string | null;
+  bio?: string | null;
+  photoUrl?: string | null;
+  active?: boolean;
+  sortOrder?: number;
+}
+
+/**
+ * One offered start time.
+ *
+ * `startsAt` is the contract: send this exact string back when booking. Parsing
+ * it into a Date and re-serialising yields an equal instant in a different
+ * spelling, and the server refuses times it did not offer (400
+ * BOOKING_OUTSIDE_RULES). `endsAt` covers the service only — the clean-up buffer
+ * is deliberately not exposed. `localTime` is a pre-rendered "14:30" in the
+ * shop's zone, which is why a picker needs no timezone library.
+ */
+export interface AvailabilitySlot {
+  startsAt: string;
+  endsAt: string;
+  localTime: string;
+}
+
+/**
+ * What is free on one day.
+ *
+ * An EMPTY `slots` array is a normal, successful answer: closed that day, fully
+ * booked, a past date, or beyond the booking window. It is never an error and
+ * must never be rendered as one.
+ */
+export interface AvailabilityResponse {
+  date: string;
+  timezone: string;
+  slots: AvailabilitySlot[];
+}
+
+/** A customer's booking. There are no payment fields at all — booking is free
+ *  and the customer pays at the venue. */
+export interface BookingResponse {
+  id: string;
+  /** "BKG-XXXXXXXX" — the reference a customer quotes on the phone. */
+  bookingNumber: string;
+  serviceOfferingId: string;
+  /** Snapshot taken when the booking was made: later menu edits never move a
+   *  price that has already been promised. */
+  serviceName: string;
+  price: number;
+  currency: string;
+  durationMinutes: number;
+  staffProfileId: string | null;
+  /** Joined at read time and nullable — assignment can change after booking. */
+  staffName: string | null;
+  startsAt: string;
+  endsAt: string;
+  status: BookingStatus;
+  source: BookingSource;
+  customerName: string;
+  customerPhone: string | null;
+  notes: string | null;
+  cancellationReason: string | null;
+  /** Prebuilt calendar.google.com template link. Needs no authentication, so it
+   *  is a plain anchor — unlike the .ics route, which carries the bearer token. */
+  googleCalendarUrl: string;
+}
+
+/** The console's view. `internalNote` is staff-only and must never reach a
+ *  customer-facing screen. */
+export interface AdminBookingResponse extends BookingResponse {
+  bufferMinutes: number;
+  /** null for walk-ins and phone bookings — those customers have no account. */
+  customerUserId: string | null;
+  customerEmail: string | null;
+  internalNote: string | null;
+  cancelledAt: string | null;
+  cancelledBy: BookingCancelledBy | null;
+}
+
+/** Name and email are snapshotted from the account server-side — don't send them. */
+export interface PlaceBookingRequest {
+  serviceOfferingId: string;
+  /** The offered slot's `startsAt`, byte for byte. */
+  startsAt: string;
+  /** Omitted or null = "anyone available", which yields more times. */
+  staffProfileId?: string | null;
+  customerPhone?: string | null;
+  notes?: string | null;
+}
+
+/** Staff-created booking. `customerName` is required precisely because there may
+ *  be no account; `source` must be WALK_IN or PHONE (ONLINE is rejected).
+ *  Walk-ins skip the lead-time and advance-window rules but NEVER the clash
+ *  check — a double booking is still a 409. */
+export interface CreateWalkInBookingRequest {
+  serviceOfferingId: string;
+  startsAt: string;
+  staffProfileId?: string | null;
+  source: Exclude<BookingSource, 'ONLINE'>;
+  customerName: string;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  notes?: string | null;
+  internalNote?: string | null;
+}
+
+/** Moves the booking IN PLACE: same row, same id, same booking number, and the
+ *  calendar entry the customer already added updates instead of duplicating. */
+export interface RescheduleBookingRequest {
+  newStartsAt: string;
+}
+
+export interface CancelBookingRequest {
+  reason?: string | null;
+}
+
+/** null unassigns. */
+export interface AssignStaffRequest {
+  staffProfileId: string | null;
+}
+
+/** A booking can never be put BACK to CONFIRMED, and COMPLETED / NO_SHOW are
+ *  refused until the appointment's start time has passed. */
+export interface BookingStatusChangeRequest {
+  status: Exclude<BookingStatus, 'CONFIRMED'>;
+  reason?: string | null;
+}
+
+/**
+ * One day's opening hours.
+ *
+ * `weekday` is ISO-8601 — 1 = Monday … 7 = Sunday. NOT JavaScript's
+ * `Date.getDay()`, which is 0 = Sunday. A weekday missing from the list means
+ * CLOSED; there is no flag for it.
+ */
+export interface BusinessHoursEntry {
+  weekday: number;
+  /** Wall clock in the store's zone, "09:30". */
+  openTime: string;
+  closeTime: string;
+}
+
+export interface PublicBusinessHoursResponse {
+  timezone: string;
+  businessHours: BusinessHoursEntry[];
+}
+
+/**
+ * Everything that governs the diary, in one payload (ADMIN only).
+ *
+ * A store that has never saved settings reads back DEFAULTS rather than a 404 —
+ * with an empty `businessHours`, which means closed every day. That is why a
+ * half-configured shop shows "no times" instead of breaking.
+ */
+export interface BookingSettingsResponse {
+  /** Platform entitlement — read-only here. */
+  bookingsAllowed: boolean;
+  bookingsEnabled: boolean;
+  timezone: string;
+  businessAddress: string | null;
+  slotGranularityMinutes: number;
+  /** How many appointments may run at once ("chairs"). */
+  maxConcurrentBookings: number;
+  minLeadTimeMinutes: number;
+  maxAdvanceDays: number;
+  cancellationCutoffHours: number;
+  /** null = that reminder is off. The second must be closer than the first. */
+  reminderHoursBeforeFirst: number | null;
+  reminderHoursBeforeSecond: number | null;
+  /** WhatsApp stays silent until these name templates Meta has approved. */
+  whatsappConfirmationTemplate: string | null;
+  whatsappReminderTemplate: string | null;
+  businessHours: BusinessHoursEntry[];
+}
+
+/**
+ * FULL REPLACE — including `businessHours`, which is deleted and re-inserted.
+ *
+ * Every field below is required by the server; there is no "null means keep what
+ * you had". A form that submits before its GET resolves would close the shop for
+ * the week, so submission must stay blocked until the current settings load.
+ */
+export interface UpdateBookingSettingsRequest {
+  bookingsEnabled: boolean;
+  /** IANA id; validated with ZoneId.of, so a bad string is a 400. */
+  timezone: string;
+  businessAddress?: string | null;
+  /** 5..120 */
+  slotGranularityMinutes: number;
+  /** 1..100 */
+  maxConcurrentBookings: number;
+  /** 0..10080 */
+  minLeadTimeMinutes: number;
+  /** 1..365 */
+  maxAdvanceDays: number;
+  /** 0..336 */
+  cancellationCutoffHours: number;
+  /** 1..168, or null to switch off. */
+  reminderHoursBeforeFirst?: number | null;
+  reminderHoursBeforeSecond?: number | null;
+  whatsappConfirmationTemplate?: string | null;
+  whatsappReminderTemplate?: string | null;
+  /** An empty list closes the shop every day of the week. */
+  businessHours: BusinessHoursEntry[];
+}
+
+/**
+ * My review of a service, plus whether I may write one.
+ *
+ * Deliberately the same shape as {@link MyReviewResponse} except for the
+ * eligibility field: a service review is earned by a COMPLETED appointment
+ * (`booked`) where a product review is earned by a delivered order
+ * (`purchased`). That one word is the only reason this interface exists.
+ */
+export interface MyServiceReviewResponse {
+  booked: boolean;
+  canReview: boolean;
+  review: MyReview | null;
+}
+
+/** Moderation queue row (ADMIN/STAFF). Note `verifiedBooking` where the product
+ *  equivalent says `verifiedPurchase`. */
+export interface AdminServiceReviewResponse {
+  id: string;
+  serviceOfferingId: string;
+  userId: string;
+  reviewerName: string;
+  rating: number;
+  title: string | null;
+  body: string | null;
+  status: ReviewStatus;
+  verifiedBooking: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
