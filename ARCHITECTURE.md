@@ -318,6 +318,17 @@ Bill summary — not a four-column table in a wide grid, which is an admin scree
 `OrderItemResponse` snapshots name/SKU/price at placement and carries no image URL (so a catalogue edit cannot rewrite a
 placed order). Real photos would need a products-by-ids endpoint; the tile does not pretend to be one.
 
+### `@/components/CategoryRail`
+`CategoryRail({categories:CategoryTreeResponse[], activeId, onSelect, loading?, className?})` — root categories as a
+snap-scrolling row of picture tiles above the **PLP** grid. Uses `imageUrl`/`imageAltText` off the tree (both already on
+the DTO); falls back to the category's initial when the merchant has uploaded no photo. **Roots only** — sub-categories
+stay in the filter rail's select, which handles arbitrary depth. Renders `null` below two categories.
+
+**Holds no selection.** `onSelect` writes `categoryId` to the URL, the same place the filter select and the chips read
+from, so the three controls cannot disagree and a shared link lands on the same view. Tapping the active tile clears it.
+Mounted on the PLP only: on a phone the filter rail is `hidden lg:block`, so this is the sole visible way to narrow the
+catalogue — Home already has a stronger 4:5 collection-tile treatment and does not need the same row twice.
+
 ### App-wide UX infrastructure (WP-1.4)
 Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reuse these on every new page.
 

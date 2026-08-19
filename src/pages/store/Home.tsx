@@ -325,10 +325,12 @@ function SectionHeading({
 
 // ── Collections ─────────────────────────────────────────────────────────
 /**
- * Category tiles are typographic. `CategoryTreeResponse` carries no image, so
- * rather than fake one with a gradient wash (the previous approach), the tile
- * commits to being a label — large type on a pale ground, which is how the
- * reference brands present collection entry points anyway.
+ * Collection tiles. `CategoryTreeResponse` carries `imageUrl`, so a merchant who has uploaded one
+ * gets real photography behind the name; the scrim below keeps the type legible over it.
+ *
+ * <p>Until then the tile commits to being a label — large type on a pale ground with a gold wash on
+ * hover — rather than faking a picture with a gradient. That is how the reference brands present
+ * collection entry points anyway, so the unset state is a deliberate look, not a placeholder.
  */
 function CategoryTiles({ categories, loading }: { categories: CategoryTreeResponse[]; loading: boolean }) {
   return (

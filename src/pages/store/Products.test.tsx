@@ -65,6 +65,9 @@ const CATEGORY: CategoryTreeResponse = {
   children: [],
 };
 
+/** A second root, so the category rail has something to choose between and renders. */
+const CATEGORY_2: CategoryTreeResponse = { ...CATEGORY, id: 'c2', name: 'Belts', slug: 'belts' };
+
 // Renders Products with a location probe so tests can assert the URL query string.
 function renderPLP(initialEntry = '/products') {
   function Probe() {
@@ -96,7 +99,7 @@ function categorySelect() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  tree.mockResolvedValue([CATEGORY]);
+  tree.mockResolvedValue([CATEGORY, CATEGORY_2]);
   brandsMock.mockResolvedValue([BRAND]);
   products.mockResolvedValue(page([product('p1')]));
 });
@@ -115,6 +118,31 @@ describe('Products (PLP)', () => {
     await waitFor(() =>
       expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ categoryId: 'c1' })),
     );
+  });
+
+  /**
+   * The rail and the select are two doors onto one fact. Both write `categoryId` to the URL, which
+   * is the only reason they can never disagree — so the wiring, not the tile, is what is worth
+   * pinning here.
+   */
+  it('the category rail narrows the catalogue the same way the filter select does', async () => {
+    const user = userEvent.setup();
+    renderPLP();
+
+    await screen.findByText('Product p1');
+
+    await user.click(await screen.findByRole('button', { name: 'Belts' }));
+
+    await waitFor(() => expect(locSearch()).toContain('categoryId=c2'));
+    await waitFor(() =>
+      expect(products).toHaveBeenLastCalledWith(expect.objectContaining({ categoryId: 'c2' })),
+    );
+    // The select is the same control by another route, so it has to have moved too.
+    await waitFor(() => expect(categorySelect()).toHaveValue('c2'));
+
+    // Tapping the chosen one again is the way back to everything.
+    await user.click(screen.getByRole('button', { name: 'Belts' }));
+    await waitFor(() => expect(locSearch()).not.toContain('categoryId'));
   });
 
   it('applying the brand filter updates the URL and re-queries the API (WP-3.5)', async () => {

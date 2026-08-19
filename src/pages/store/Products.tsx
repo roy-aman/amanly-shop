@@ -19,6 +19,7 @@ import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import ProductCard, { type ProductCardVariant } from '@/components/ProductCard';
 import { BannerSlot } from '@/components/BannerSlot';
+import { CategoryRail } from '@/components/CategoryRail';
 
 // Sort options map to the real backend-sortable fields (createdAt / price / name).
 // A "popularity" sort is intentionally absent: WP-3.1a ships /products/top (used
@@ -85,6 +86,7 @@ export default function Products() {
 
   const categoriesQuery = useQuery({ queryKey: ['categoryTree'], queryFn: getCategoryTree });
   const categories = useMemo(() => flattenCategories(categoriesQuery.data ?? []), [categoriesQuery.data]);
+  const rootCategories = categoriesQuery.data ?? [];
   const categoryName = categories.find((c) => c.id === categoryId)?.name;
 
   const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: listBrands });
@@ -308,6 +310,17 @@ export default function Products() {
             : `${resultCount} ${resultCount === 1 ? 'piece' : 'pieces'}`}
         </p>
       </header>
+
+      {/* Category first, above everything. On a phone the filter rail is behind a button, so this
+          is the only visible way to narrow the catalogue — and category is the narrowing people
+          actually want. It writes to the same `categoryId` the select and the chips read. */}
+      <CategoryRail
+        categories={rootCategories}
+        activeId={categoryId}
+        onSelect={(id) => setFilter({ categoryId: id })}
+        loading={categoriesQuery.isLoading}
+        className="mt-6"
+      />
 
       <div className="mt-8 lg:grid lg:grid-cols-[15rem_1fr] lg:gap-12">
         {/* Desktop filter rail */}
