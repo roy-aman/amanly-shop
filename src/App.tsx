@@ -51,6 +51,8 @@ const Addresses = lazy(() => import('@/pages/store/Addresses'));
 const Services = lazy(() => import('@/pages/store/Services'));
 const ServiceDetail = lazy(() => import('@/pages/store/ServiceDetail'));
 const BookService = lazy(() => import('@/pages/store/BookService'));
+const MyBookings = lazy(() => import('@/pages/store/MyBookings'));
+const MyBookingDetail = lazy(() => import('@/pages/store/MyBookingDetail'));
 
 
 // Admin console
@@ -150,6 +152,8 @@ export default function App() {
             <Route path="/account" element={<Page title="Account" fallback={<FormSkeleton />}><Account /></Page>} />
             <Route path="/account/wishlist" element={<Page title="Wishlist" fallback={<StoreListSkeleton />}><Wishlist /></Page>} />
             <Route path="/account/addresses" element={<Page title="Addresses" fallback={<FormSkeleton />}><Addresses /></Page>} />
+            <Route path="/account/bookings" element={<Page title="My bookings" fallback={<ListSkeleton />}><MyBookings /></Page>} />
+            <Route path="/account/bookings/:id" element={<Page fallback={<DetailSkeleton />}><MyBookingDetail /></Page>} />
             {/* Name and password moved into the profile page. Kept as a redirect rather than
                 deleted so an existing bookmark or emailed link lands somewhere useful. */}
             <Route path="/account/settings" element={<Navigate to="/account" replace />} />
