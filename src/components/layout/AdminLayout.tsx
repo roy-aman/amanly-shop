@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3,
   Boxes,
+  CalendarClock,
+  CalendarCog,
   ChevronDown,
   FolderTree,
   GalleryHorizontalEnd,
@@ -18,7 +20,9 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Store,
+  UserRound,
   TicketPercent,
   Truck,
   Users,
@@ -26,6 +30,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { getPublicStore } from '@/api/store';
 import { titleCase } from '@/lib/format';
+import { useBookingsEntitlement } from '@/lib/useBookingsGate';
 import { useDarkTheme } from '@/lib/useDarkTheme';
 import { BRAND_NAME } from '@/lib/brand';
 import {
@@ -52,6 +57,15 @@ interface NavItem {
 interface NavGroup {
   label: string;
   items: NavItem[];
+  /**
+   * A whole group that only exists for stores the platform has entitled.
+   *
+   * Different from `adminOnly`, which is about who is looking: this is about
+   * what the shop has bought. A store without the entitlement gets a console
+   * that never mentions bookings at all — no group, no empty screens, and no
+   * links to endpoints that would answer 403.
+   */
+  entitlement?: 'bookings';
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -72,6 +86,20 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
       { to: '/admin/deliverables', label: 'Deliverables', icon: Truck },
       { to: '/admin/coupons', label: 'Coupons', icon: TicketPercent },
+    ],
+  },
+  {
+    label: 'Bookings',
+    entitlement: 'bookings',
+    items: [
+      { to: '/admin/bookings', label: 'Diary', icon: CalendarClock },
+      { to: '/admin/services', label: 'Services', icon: Sparkles },
+      { to: '/admin/service-categories', label: 'Service groups', icon: FolderTree },
+      { to: '/admin/staff', label: 'Team', icon: UserRound },
+      { to: '/admin/service-reviews', label: 'Service reviews', icon: MessagesSquare },
+      // The settings that govern the diary are the merchant's own, not counter
+      // staff's: opening hours and how far ahead people may book.
+      { to: '/admin/booking-settings', label: 'Booking setup', icon: CalendarCog, adminOnly: true },
     ],
   },
   { label: 'People', items: [{ to: '/admin/users', label: 'Users', icon: Users, adminOnly: true }] },
@@ -102,6 +130,12 @@ const CRUMB_LABELS: Record<string, string> = {
   users: 'Users',
   settings: 'Settings',
   'qr-code': 'Store QR code',
+  bookings: 'Diary',
+  services: 'Services',
+  'service-categories': 'Service groups',
+  staff: 'Team',
+  'service-reviews': 'Service reviews',
+  'booking-settings': 'Booking setup',
   new: 'New',
 };
 
@@ -114,7 +148,10 @@ function buildCrumbs(pathname: string): Crumb[] {
     const isLast = i === parts.length - 1;
     let label: string;
     if (i === 0) label = 'Admin';
+    // Numeric ids, and UUIDs — a booking's id is a UUID, and thirty-six
+    // characters of hex in a breadcrumb is noise rather than a reference.
     else if (/^\d+$/.test(seg)) label = `#${seg}`;
+    else if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(seg)) label = `#${seg.slice(0, 8)}`;
     else label = CRUMB_LABELS[seg] ?? titleCase(seg);
     crumbs.push({ label, to: isLast ? undefined : acc });
   });
@@ -129,6 +166,7 @@ export default function AdminLayout() {
   useDarkTheme();
 
   const { user, isAdmin, showsPlatformConsole, logout } = useAuth();
+  const { bookingsAllowed } = useBookingsEntitlement();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -146,13 +184,16 @@ export default function AdminLayout() {
 
   const crumbs = useMemo(() => buildCrumbs(location.pathname), [location.pathname]);
 
-  // Groups the current user is allowed to see (empty groups dropped).
+  // Groups the current user is allowed to see (empty groups dropped). The
+  // entitlement filter runs first and fails closed: while the store settings are
+  // loading, or if that request errored, the bookings group stays hidden rather
+  // than offering screens the server would refuse.
   const groups = useMemo(
     () =>
-      NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => !it.adminOnly || isAdmin) })).filter(
-        (g) => g.items.length > 0,
-      ),
-    [isAdmin],
+      NAV_GROUPS.filter((g) => !g.entitlement || (g.entitlement === 'bookings' && bookingsAllowed))
+        .map((g) => ({ ...g, items: g.items.filter((it) => !it.adminOnly || isAdmin) }))
+        .filter((g) => g.items.length > 0),
+    [isAdmin, bookingsAllowed],
   );
 
   function toggleCollapsed() {

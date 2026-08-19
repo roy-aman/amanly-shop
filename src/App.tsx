@@ -74,6 +74,14 @@ const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
 const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'));
 const StoreQrCode = lazy(() => import('@/pages/admin/StoreQrCode'));
 
+// Bookings console. Only rendered for stores the platform has entitled, but the
+// routes exist unconditionally: a merchant who is entitled mid-session should
+// not need a reload, and every one of these screens states its own case when the
+// server says the store has no such plan.
+const AdminServices = lazy(() => import('@/pages/admin/AdminServices'));
+const AdminServiceCategories = lazy(() => import('@/pages/admin/AdminServiceCategories'));
+const AdminStaff = lazy(() => import('@/pages/admin/AdminStaff'));
+
 // Platform console — only a PLATFORM_ADMIN ever loads these chunks.
 const PlatformStores = lazy(() => import('@/pages/platform/PlatformStores'));
 const PlatformStoreDetail = lazy(() => import('@/pages/platform/PlatformStoreDetail'));
@@ -184,6 +192,9 @@ export default function App() {
             {/* STAFF too, not ADMIN-only: the backend allows both, and printing
                 a poster for the shop window is counter work. */}
             <Route path="qr-code" element={<Page title="Store QR code" fallback={<FormSkeleton />}><StoreQrCode /></Page>} />
+            <Route path="services" element={<Page title="Services" fallback={<ListSkeleton action />}><AdminServices /></Page>} />
+            <Route path="service-categories" element={<Page title="Service groups" fallback={<ListSkeleton action />}><AdminServiceCategories /></Page>} />
+            <Route path="staff" element={<Page title="Team" fallback={<ListSkeleton action />}><AdminStaff /></Page>} />
 
             {/* ADMIN-only sections */}
             <Route element={<RequireAdmin />}>
