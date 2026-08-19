@@ -385,6 +385,11 @@ Sales), `/admin/inventory`, `/admin/inventory/new`, `/admin/inventory/:id`,
 `/admin/categories`, `/admin/brands` (WP-3.5 — brand CRUD/deactivate, STAFF+ADMIN, sidebar under Catalog; no
 delete), `/admin/reviews` (WP-3.2b — review moderation, STAFF+ADMIN, sidebar under Catalog),
 `/admin/reports`, `/admin/users`, `/admin/users/:id`, `/admin/settings`, `/admin/forbidden`.
+Bookings (WP-BU, only for stores the platform has entitled — see "Services & bookings" below):
+`/services`, `/services/:slug`, `/book/:slug` (public until submit), `/account/bookings`,
+`/account/bookings/:id` (RequireAuth); `/admin/bookings`, `/admin/bookings/:id`, `/admin/services`,
+`/admin/service-categories`, `/admin/staff`, `/admin/service-reviews` (RequireStaff),
+`/admin/booking-settings` (RequireAdmin).
 Platform (in `PlatformLayout`, `RequirePlatformAdmin`): `/platform` stores list, `/platform/stores/:storeId`
 store detail (entitlements + domains), `/platform/operators`. Reached from the admin user menu, which
 shows the entry only to an operator.
@@ -469,3 +474,142 @@ Data sources are all existing contracts — no new endpoints: `getPublicStore()`
 - No order status filter on the API → fetch a page and filter client-side where needed (e.g. Deliverables).
 - Product images: create via `CreateProductRequest.images`; after creation manage via
   `adminProducts.addImages` / `deleteImage`. `UpdateProductRequest` cannot change slug/sku/images.
+
+## Services & bookings (WP-BU.0–BU.11)
+
+A second half to the shop: appointments alongside (or instead of) goods. Generic to any
+appointment-based trade — keep copy industry-neutral ("services", "bookings", "team", "the store").
+Everything below is dark for a retail-only store: nothing renders, and nothing is requested.
+
+### The gate — read this before adding anything here
+- **Storefront:** `useBookingsEnabled()` from `@/lib/useBookingsGate` → `{enabled, loading, timezone,
+  businessAddress, currency}`. `enabled` comes from `PublicStoreResponse.bookingsEnabled`, which the
+  server has ALREADY combined (`bookingsAllowed && bookingsEnabled`). **`undefined` means off** — an
+  older backend or a payload cached before the field existed must not produce a link to a surface
+  that answers 404. Shares the `['public-store']` query, so it costs no extra request.
+- **Console:** `useBookingsEntitlement()` → `{bookingsAllowed, bookingsEnabled, loading, timezone}`
+  from `StoreSettingsResponse`. The two flags stay APART here: "not part of your plan" (403
+  `BOOKINGS_NOT_ALLOWED`, a conversation with the platform) is a different message from "bookings are
+  switched off" (a toggle the merchant owns). Console screens are reachable on `bookingsAllowed`
+  alone, by design — a shop builds its menu, hours and team in private, then goes live in one move.
+- Both fail closed while loading or on error.
+
+### Store-clock formatters — `@/lib/format`
+Appointment times belong to the shop, never the browser. `formatDate`/`formatDateTime` (browser zone)
+are correct for order history and **wrong for anything the shop has to be open for**.
+- `zonedToday(tz)` → today as `YYYY-MM-DD` on the shop's calendar (not `toISOString().slice(0,10)`,
+  which rolls over in UTC and offers an evening customer a "today" that has ended).
+- `addDaysISO(date, n)`, `weekdayFromISODate(date)` → **ISO weekday, Monday = 1 … Sunday = 7** (NOT
+  `Date.getDay()`), `weekdayName(weekday, short?)`.
+- `formatTimeInZone(iso, tz)`, `formatDateInZone`, `formatDateTimeInZone` — the only sanctioned way to
+  render a booking instant.
+- `formatISODateLabel(date, opts)` — a plain calendar date, read through UTC so it cannot shift.
+- `minutesInZone(iso, tz)` — minutes since the shop's midnight (day-view positioning).
+- `zonedWallClockToInstant(date, minutesOfDay, tz)` — the shop's wall clock → the instant the server
+  filters on. Two-pass, so it is correct across a daylight-saving change. Getting a day span wrong
+  silently drops the first and last appointments of the day.
+- `formatWallClock('14:30')` → "2:30 PM" by string parsing only (no Date, no zone) — for availability
+  labels and opening hours, which have no date attached.
+- `durationLabel(minutes)` → "1 hr 15 min".
+
+### `@/api/services`
+`listServices({categoryId?,q?,page?,size?})` (no `sort` — the merchant's order is the point) ·
+`getService(slug)` **BY SLUG** · `getAvailability(serviceId, date, staffId?)` **BY UUID**, `date` is
+`YYYY-MM-DD` in the STORE's zone · `listServiceCategories()` · `getBusinessHours()`.
+`adminServices {list,get,create,update,remove}` · `adminServiceCategories {list,create,update,remove}`.
+Detail is by slug while availability and reviews are by id, so a booking screen must resolve the
+service first — carry the object, not the slug.
+
+### `@/api/staff`
+`listStaff()` (public, unpaged) · `adminStaffProfiles {list,get,create,update,remove}`.
+
+### `@/api/bookings`
+`placeBooking(body)` · `listMyBookings({page,size})` · `getMyBooking(id)` ·
+`cancelBooking(id, reason?)` · `rescheduleBooking(id, newStartsAt)` ·
+`downloadBookingIcs(id, bookingNumber)`.
+`adminBookings {list,get,createWalkIn,assignStaff,setStatus,reschedule,downloadIcs}` ·
+`adminBookingSettings {get,update}` (ADMIN only).
+
+### `@/api/serviceReviews`
+`listServiceReviews` · `getServiceReviewSummary` · `getMyServiceReview` (returns `booked`, where the
+product one returns `purchased`) · `createServiceReview` · `updateMyServiceReview` ·
+`adminServiceReviews {list,approve,reject}`.
+
+### Rules that are not negotiable
+1. **Never compute a bookable time.** `getAvailability` is the only source; the server applies opening
+   hours, granularity, notice, the advance window, buffers, capacity and staff diaries under a lock.
+2. **Send `slot.startsAt` back byte for byte.** A Date round-trip yields an equal instant in a
+   different spelling and the server refuses times it did not offer (400 `BOOKING_OUTSIDE_RULES`).
+   `SlotPicker` hands back the whole slot for this reason.
+3. **Empty availability is a normal answer** — closed, full, past, or beyond the window. Never an
+   error state.
+4. **Never render an appointment time in the browser's zone.**
+5. **409 `SLOT_NO_LONGER_AVAILABLE` is expected.** Invalidate `['availability', …]`, re-render the
+   picker, tell the customer. **Never retry automatically** — that books a time nobody chose.
+6. **409 `BOOKING_CUTOFF_PASSED`**: the customer's change window is not published on any endpoint the
+   storefront can read, so always offer cancel/reschedule on a future CONFIRMED booking and treat this
+   answer as the boundary → "please contact the store". Staff have no cut-off.
+7. **Pay at venue.** No payment UI on a booking, ever, and never the words "payment pending".
+8. **The .ics endpoint is bearer-authed** — an `<a href>` 401s. Use `downloadBookingIcs` (fetch +
+   blob). Prefer `booking.googleCalendarUrl`, which is a plain anchor needing no auth.
+9. **Reschedule is in place** — same id, same booking number, same calendar UID. Say so on screen, or
+   people go looking for a duplicate.
+10. **No staff ↔ service link exists.** A picker offers everybody, with "anyone available" default
+    (which also yields more times).
+11. **Full-replace payloads**: `adminBookingSettings.update` (weekly hours included — an omitted week
+    shuts the shop, so block submit until the GET resolves) and `adminServices.update`
+    (`bufferMinutes`/`active`/`sortOrder` mandatory).
+12. `internalNote` on a booking is staff-only. It must never reach a customer-facing screen.
+13. `Field` renders labels without `htmlFor` → every control inside one needs an explicit `aria-label`.
+
+### Query keys & freshness
+`['services', filters]` · `['service', slug]` · `['service-categories']` · `['staff']` ·
+`['business-hours']` · `['availability', serviceId, date, staffId ?? 'any']` ·
+`['bookings','mine',page]` · `['bookings', id]` · `['service-reviews', serviceId, …]` ·
+`['admin','services'|'service-categories'|'staff'|'bookings'|'booking-settings'|'service-reviews', …]` ·
+`['admin','bookings','day',date]`.
+**Availability overrides the app defaults**: `staleTime: 15_000`, `refetchOnWindowFocus: true`. A
+cached slot list is a promise the server never made. Every booking mutation invalidates `['bookings']`
+(or `['admin','bookings']`) **and** `['availability']`.
+
+### Components
+- `DateStrip` (`@/components/ui`) — `{value, onChange, timezone, daysToShow?, className?}`. A strip
+  rather than a month grid because `maxAdvanceDays` is not public, so a calendar could not grey out
+  what it cannot know. Shows no availability of its own, deliberately.
+- `SlotPicker` (`@/components/ui`) — `{slots, value?, onChange(slot), loading?, emptyMessage?}`.
+  Groups by daypart from `localTime`; renders the shop's label, never the instant.
+- `ServiceCard` (`@/components`) — duration-forward, no stock, no cart, 16:9 image.
+- `BookingStatusBadge` / `BookingSourceBadge` (`@/components/BookingStatusBadge`).
+- `ServiceReviews` (`@/components`) — wraps `ReviewsSection`.
+- `ReviewsSection` (`@/components`) — the shared review screen. `{subjectId, isAuthenticated, adapter,
+  copy}`; `ProductReviews` and `ServiceReviews` are thin wrappers supplying endpoints + wording.
+  Adapters normalise `purchased`/`booked` → `eligible`.
+- `DayTimeline` (`@/components/admin`) — `{bookings, timezone, date, hours, onSelect}`. One day only,
+  positioned on the shop's clock, generic lane packing. Must NOT read capacity settings (admin-only
+  endpoint, and STAFF use the screen).
+- `BusinessHoursEditor` (`@/components/admin`) — seven rows; **a closed day is the absence of an
+  entry**, matching the API.
+- `ReviewModeration` (`@/components/admin`) — the shared moderation queue; `Reviews` and
+  `ServiceReviews` pages are thin wrappers.
+
+### Routes
+Store: `/services`, `/services/:slug`, `/book/:slug` (**public until submit**), and under
+`RequireAuth`: `/account/bookings`, `/account/bookings/:id`.
+Admin (`RequireStaff`): `/admin/bookings` (`?view=today|list&date=`), `/admin/bookings/:id`,
+`/admin/services`, `/admin/service-categories`, `/admin/staff`, `/admin/service-reviews`.
+Admin (`RequireAdmin`): `/admin/booking-settings`.
+The wizard keeps its state in the URL (`?date=&start=&staff=`) so the sign-in round trip does not cost
+the customer their chosen slot — sign-in returns through a path, so anything that must survive it has
+to be in the path.
+
+### Booking gaps to handle gracefully (do not invent endpoints)
+- **The cancellation cut-off is not public.** Do not try to hide the change buttons based on it; the
+  409 is the boundary.
+- **No staff ↔ service relation.** No "who can do this treatment" filter is possible.
+- **No booking stats.** `/admin/stats/*` is commerce-only: no appointments-today tile, no no-show rate,
+  no service revenue. A single day can be aggregated from one `adminBookings.list` call (that is what
+  the Today view does); **never page months of bookings into the browser to draw a trend.**
+- **No per-person rota or time off.** Everybody is available whenever the shop is open; their own
+  bookings carve out the day.
+- **WhatsApp is silent** until the merchant saves Meta-approved template names. Email always works.
+  The settings screen says so, because silence otherwise reads as a broken feature.

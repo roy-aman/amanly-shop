@@ -6,6 +6,9 @@
    Not part of the app's routes or navigation — a review harness only.
    =================================================================== */
 import { useState, type ReactNode } from 'react';
+import type { AvailabilitySlot, BusinessHoursEntry } from '@/lib/types';
+import { BookingSourceBadge, BookingStatusBadge } from '@/components/BookingStatusBadge';
+import { BusinessHoursEditor } from '@/components/admin/BusinessHoursEditor';
 import { MoreHorizontal, Pencil, Plus, ShoppingCart, Star, Trash2, TrendingUp, Users } from 'lucide-react';
 import {
   Accordion,
@@ -15,6 +18,7 @@ import {
   Button,
   Card,
   Carousel,
+  DateStrip,
   ConfirmDialog,
   DataTable,
   Drawer,
@@ -38,6 +42,7 @@ import {
   SearchInput,
   Select,
   Skeleton,
+  SlotPicker,
   SkeletonCard,
   SkeletonDetail,
   SkeletonTable,
@@ -62,6 +67,14 @@ import {
   ProductStatusBadge,
   UserStatusBadge,
 } from '@/components/StatusBadge';
+
+const DEMO_SLOTS: AvailabilitySlot[] = [
+  { startsAt: '2026-08-21T03:30:00Z', endsAt: '2026-08-21T04:30:00Z', localTime: '09:00' },
+  { startsAt: '2026-08-21T04:30:00Z', endsAt: '2026-08-21T05:30:00Z', localTime: '10:00' },
+  { startsAt: '2026-08-21T07:30:00Z', endsAt: '2026-08-21T08:30:00Z', localTime: '13:00' },
+  { startsAt: '2026-08-21T09:30:00Z', endsAt: '2026-08-21T10:30:00Z', localTime: '15:00' },
+  { startsAt: '2026-08-21T12:30:00Z', endsAt: '2026-08-21T13:30:00Z', localTime: '18:00' },
+];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -109,6 +122,12 @@ export default function KitchenSink() {
   const [tableLoading, setTableLoading] = useState(false);
   const [chips, setChips] = useState<Record<string, boolean>>({ 'In stock': true, 'On sale': false, New: false });
   const [search, setSearch] = useState('');
+  const [bookingDate, setBookingDate] = useState('2026-08-21');
+  const [slot, setSlot] = useState<AvailabilitySlot | null>(null);
+  const [hours, setHours] = useState<BusinessHoursEntry[]>([
+    { weekday: 1, openTime: '09:00', closeTime: '18:00' },
+    { weekday: 2, openTime: '09:00', closeTime: '18:00' },
+  ]);
 
   const columns: Column<DemoRow>[] = [
     { key: 'name', header: 'Product', sortable: true },
@@ -463,6 +482,42 @@ export default function KitchenSink() {
             <DataTable columns={columns} data={[]} getRowKey={(r) => r.id} empty="No products found." />
           </div>
           <Pagination page={page} totalPages={5} onChange={setPage} />
+        </Section>
+
+        <Section title="Booking: date strip & slot picker">
+          <div className="max-w-2xl space-y-6">
+            <DateStrip value={bookingDate} onChange={setBookingDate} timezone="Asia/Kolkata" daysToShow={5} />
+            <SlotPicker slots={DEMO_SLOTS} value={slot?.startsAt} onChange={setSlot} />
+            <p className="text-xs text-slate-500">
+              Times render from the slot's own store-local label, never from the browser's clock. An
+              empty list is a normal answer — closed, full, or beyond the shop's booking window:
+            </p>
+            <SlotPicker slots={[]} onChange={() => {}} />
+            <p className="text-xs text-slate-500">Loading:</p>
+            <SlotPicker slots={[]} loading onChange={() => {}} />
+          </div>
+        </Section>
+
+        <Section title="Booking: status & source badges">
+          <div className="flex flex-wrap gap-2">
+            <BookingStatusBadge status="CONFIRMED" />
+            <BookingStatusBadge status="COMPLETED" />
+            <BookingStatusBadge status="CANCELLED" />
+            <BookingStatusBadge status="NO_SHOW" />
+            <BookingSourceBadge source="ONLINE" />
+            <BookingSourceBadge source="WALK_IN" />
+            <BookingSourceBadge source="PHONE" />
+          </div>
+        </Section>
+
+        <Section title="Booking: opening hours editor">
+          <div className="max-w-2xl">
+            <BusinessHoursEditor value={hours} onChange={setHours} />
+            <p className="mt-2 text-xs text-slate-500">
+              A closed day is the absence of an entry, not a flag on one — unchecking removes it from
+              the list the server is sent.
+            </p>
+          </div>
         </Section>
       </div>
     </div>
