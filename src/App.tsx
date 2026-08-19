@@ -83,6 +83,8 @@ const AdminServiceCategories = lazy(() => import('@/pages/admin/AdminServiceCate
 const AdminStaff = lazy(() => import('@/pages/admin/AdminStaff'));
 const AdminBookings = lazy(() => import('@/pages/admin/AdminBookings'));
 const AdminBookingDetail = lazy(() => import('@/pages/admin/AdminBookingDetail'));
+const BookingSettings = lazy(() => import('@/pages/admin/BookingSettings'));
+const AdminServiceReviews = lazy(() => import('@/pages/admin/ServiceReviews'));
 
 // Platform console — only a PLATFORM_ADMIN ever loads these chunks.
 const PlatformStores = lazy(() => import('@/pages/platform/PlatformStores'));
@@ -199,12 +201,16 @@ export default function App() {
             <Route path="staff" element={<Page title="Team" fallback={<ListSkeleton action />}><AdminStaff /></Page>} />
             <Route path="bookings" element={<Page title="Diary" fallback={<ListSkeleton action />}><AdminBookings /></Page>} />
             <Route path="bookings/:id" element={<Page fallback={<DetailSkeleton />}><AdminBookingDetail /></Page>} />
+            <Route path="service-reviews" element={<Page title="Service reviews" fallback={<ListSkeleton />}><AdminServiceReviews /></Page>} />
 
             {/* ADMIN-only sections */}
             <Route element={<RequireAdmin />}>
               <Route path="users" element={<Page title="Users" fallback={<ListSkeleton />}><AdminUsers /></Page>} />
               <Route path="users/:id" element={<Page fallback={<DetailSkeleton />}><AdminUserDetail /></Page>} />
               <Route path="settings" element={<Page title="Settings" fallback={<FormSkeleton />}><AdminSettings /></Page>} />
+              {/* ADMIN-only to match the server: opening hours and how far ahead
+                  people may book are the owner's decisions, not the counter's. */}
+              <Route path="booking-settings" element={<Page title="Booking setup" fallback={<FormSkeleton />}><BookingSettings /></Page>} />
             </Route>
 
             {/* Admin 404 — renders inside AdminLayout chrome. */}
