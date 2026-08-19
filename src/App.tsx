@@ -81,6 +81,8 @@ const StoreQrCode = lazy(() => import('@/pages/admin/StoreQrCode'));
 const AdminServices = lazy(() => import('@/pages/admin/AdminServices'));
 const AdminServiceCategories = lazy(() => import('@/pages/admin/AdminServiceCategories'));
 const AdminStaff = lazy(() => import('@/pages/admin/AdminStaff'));
+const AdminBookings = lazy(() => import('@/pages/admin/AdminBookings'));
+const AdminBookingDetail = lazy(() => import('@/pages/admin/AdminBookingDetail'));
 
 // Platform console — only a PLATFORM_ADMIN ever loads these chunks.
 const PlatformStores = lazy(() => import('@/pages/platform/PlatformStores'));
@@ -195,6 +197,8 @@ export default function App() {
             <Route path="services" element={<Page title="Services" fallback={<ListSkeleton action />}><AdminServices /></Page>} />
             <Route path="service-categories" element={<Page title="Service groups" fallback={<ListSkeleton action />}><AdminServiceCategories /></Page>} />
             <Route path="staff" element={<Page title="Team" fallback={<ListSkeleton action />}><AdminStaff /></Page>} />
+            <Route path="bookings" element={<Page title="Diary" fallback={<ListSkeleton action />}><AdminBookings /></Page>} />
+            <Route path="bookings/:id" element={<Page fallback={<DetailSkeleton />}><AdminBookingDetail /></Page>} />
 
             {/* ADMIN-only sections */}
             <Route element={<RequireAdmin />}>
