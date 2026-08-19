@@ -17,6 +17,7 @@ import type { AddressRequest, AddressResponse, PaymentMethod, PlaceOrderRequest,
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import { BRAND_NAME } from '@/lib/brand';
+import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
 import {
   Button,
   Field,
@@ -358,6 +359,7 @@ export default function Checkout() {
   if (!cart || cart.items.length === 0) return <PageLoader />;
 
   const currency = cart.currency;
+  const bagCount = cart.items.reduce((n, i) => n + i.quantity, 0);
 
   return (
     <div>
@@ -371,7 +373,7 @@ export default function Checkout() {
         {/* ── Step content ─────────────────────────────────────────────── */}
         <div className="space-y-6">
           {step === 0 && (
-            <section className="space-y-5 border border-ink-700 p-6">
+            <section className="space-y-5 rounded-2xl border border-ink-700 bg-ink-900 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Delivery address
               </h2>
@@ -493,7 +495,7 @@ export default function Checkout() {
           )}
 
           {step === 1 && (
-            <section className="space-y-4 border border-ink-700 p-6">
+            <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Payment method
               </h2>
@@ -535,7 +537,7 @@ export default function Checkout() {
           )}
 
           {step === 2 && (
-            <section className="space-y-6 border border-ink-700 p-6">
+            <section className="space-y-6 rounded-2xl border border-ink-700 bg-ink-900 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Review &amp; place order
               </h2>
@@ -625,69 +627,79 @@ export default function Checkout() {
         </div>
 
         {/* ── Sticky order summary ─────────────────────────────────────── */}
-        <aside className="lg:sticky lg:top-28 lg:self-start">
-          <div className="space-y-4 bg-ink-850 p-6">
-            <h2 className="text-overline uppercase text-slate-500">Order summary</h2>
-            <div className="space-y-2">
+        {/* The same blocks the order receipt uses. What the shopper approves here and what they are
+            shown afterwards should be recognisably one object — laid out differently, people
+            re-read the second looking for what changed. */}
+        <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
+          <SummarySection title={`Items · ${bagCount}`} bodyClassName="px-5 py-1">
+            <Divided>
               {cart.items.map((i) => (
-                <div key={i.cartItemId} className="flex items-start justify-between gap-3 text-sm">
-                  <span className="min-w-0 text-slate-300">
-                    {i.productName} <span className="text-slate-500">× {i.quantity}</span>
-                  </span>
-                  <span className="shrink-0 text-slate-200">{money(i.subtotal, currency)}</span>
-                </div>
+                <OrderLine
+                  key={i.cartItemId}
+                  name={i.productName}
+                  meta={i.variantOptionsLabel ?? null}
+                  quantity={i.quantity}
+                  unitPrice={money(i.unitPrice, currency)}
+                  subtotal={money(i.subtotal, currency)}
+                />
               ))}
+            </Divided>
+          </SummarySection>
+
+          {couponDropped && (
+            <div className="flex items-start gap-2 rounded-2xl border border-warning-500/30 bg-warning-500/15 p-3 text-xs text-warning-300" role="status">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <p>Your coupon was removed — {couponDropped}</p>
             </div>
+          )}
 
-            {couponDropped && (
-              <div className="flex items-start gap-2 border border-warning-500/30 bg-warning-500/15 p-3 text-xs text-warning-300" role="status">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <p>Your coupon was removed — {couponDropped}</p>
-              </div>
-            )}
+          <SummarySection title="Bill summary" bodyClassName="px-5 py-1.5">
+            <dl className="divide-y divide-ink-700">
+              <InfoRow label="Item total">{money(cart.totalAmount, currency)}</InfoRow>
 
-            <dl className="space-y-2 border-t border-ink-600 pt-5 text-sm">
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-400">Subtotal</dt>
-                <dd className="text-slate-200">{money(cart.totalAmount, currency)}</dd>
-              </div>
               {appliedCoupon && (
-                <div className="flex items-center justify-between text-success-300">
-                  <dt className="flex items-center gap-1">
-                    <Tag className="h-3.5 w-3.5" /> Discount ({appliedCoupon.code})
-                  </dt>
-                  <dd className="font-medium">−{money(appliedCoupon.discountAmount, currency)}</dd>
-                </div>
+                <InfoRow
+                  label={
+                    <span className="flex items-center gap-1 text-success-300">
+                      <Tag className="h-3.5 w-3.5" aria-hidden /> Discount ({appliedCoupon.code})
+                    </span>
+                  }
+                >
+                  <span className="text-success-300">−{money(appliedCoupon.discountAmount, currency)}</span>
+                </InfoRow>
               )}
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-400">Delivery</dt>
-                <dd className={estimate?.shipping === 0 ? 'text-success-300' : 'text-slate-200'}>
-                  {estimate ? (estimate.shipping === 0 ? 'Free' : money(estimate.shipping, currency)) : '—'}
-                </dd>
-              </div>
+
+              <InfoRow label="Delivery">
+                {estimate ? (
+                  estimate.shipping === 0 ? (
+                    <span className="text-success-300">Free</span>
+                  ) : (
+                    money(estimate.shipping, currency)
+                  )
+                ) : (
+                  '—'
+                )}
+              </InfoRow>
+
               {estimate?.hasTax && !estimate.taxInclusive && (
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-400">Tax ({estimate.taxRatePercent}%)</dt>
-                  <dd className="text-slate-200">{money(estimate.tax, currency)}</dd>
-                </div>
+                <InfoRow label={`Tax (${estimate.taxRatePercent}%)`}>
+                  {money(estimate.tax, currency)}
+                </InfoRow>
               )}
+
+              <InfoRow label={estimate ? 'Estimated total' : 'Total'} emphasis>
+                {money(estimate?.total ?? appliedCoupon?.total ?? cart.totalAmount, currency)}
+              </InfoRow>
             </dl>
 
-            <div className="flex items-center justify-between border-t border-ink-600 pt-5 text-base font-bold">
-              <span className="text-slate-300">{estimate ? 'Estimated total' : 'Total'}</span>
-              <span className="text-h3 text-slate-100">
-                {money(estimate?.total ?? appliedCoupon?.total ?? cart.totalAmount, currency)}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              {/* The server recomputes everything at placement — the discount
-                  against the live cart, delivery and tax against current
-                  settings — so this figure is always advisory. */}
+            <p className="pb-2.5 text-caption text-slate-500">
+              {/* The server recomputes everything at placement — the discount against the live cart,
+                  delivery and tax against current settings — so this figure is always advisory. */}
               {estimate?.taxInclusive && estimate.hasTax
                 ? `Includes ${money(estimate.tax, currency)} tax. Confirmed when you place the order.`
                 : 'Confirmed when you place the order.'}
             </p>
-          </div>
+          </SummarySection>
         </aside>
       </div>
     </div>

@@ -1,17 +1,26 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PackageX } from 'lucide-react';
+import { ChevronLeft, Clock, MapPin, PackageX } from 'lucide-react';
 import { getOrder, cancelOrder } from '@/api/orders';
 import { ApiError } from '@/lib/http';
 import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { OrderTotals } from '@/components/OrderTotals';
+import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
 import { useToast } from '@/context/ToastContext';
 import { Button, EmptyState, LinkButton, Modal } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
+/**
+ * A placed order, laid out as the receipt it is: a narrow stack of labelled blocks — what was
+ * bought, the order's facts, where it goes, what it cost.
+ *
+ * <p>It used to be a four-column table inside a two-column grid, which is an admin screen. The
+ * figures were the same; finding any one of them meant reading across. Capping the column keeps the
+ * eye travelling down a single edge, which is why receipts have always been narrow.
+ */
 export default function OrderDetail() {
   const { id = '' } = useParams();
   const queryClient = useQueryClient();
@@ -61,100 +70,102 @@ export default function OrderDetail() {
 
   const a = order.shippingAddress;
   const canCancel = order.status === 'PENDING' || order.status === 'PROCESSING';
+  const itemCount = order.items.reduce((n, it) => n + it.quantity, 0);
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-700 pb-6">
-        <div>
-          <h1 className="font-display text-h1 text-slate-100">Order {orderRef(order)}</h1>
-          <p className="mt-2 text-body-sm text-slate-400">Placed {formatDateTime(order.createdAt)}</p>
+    <div className="mx-auto max-w-2xl space-y-4">
+      {/* Back, the word for the page, and the reference number quietly under it — the header every
+          order screen a shopper already uses has trained them to expect. */}
+      <header className="flex items-start gap-3">
+        <Link
+          to="/orders"
+          aria-label="Back to orders"
+          className="-ml-2 mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-ink-850 hover:text-slate-100"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display text-h2 text-slate-100">Order summary</h1>
+          <p className="mt-0.5 text-body-sm tabular-nums text-slate-500">{orderRef(order)}</p>
         </div>
         {canCancel && (
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            className="rounded text-body-sm text-slate-500 underline-offset-4 transition hover:text-danger-300 hover:underline"
+            className="shrink-0 rounded text-body-sm text-slate-500 underline-offset-4 transition hover:text-danger-300 hover:underline"
           >
             Cancel order
           </button>
         )}
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <OrderStatusBadge status={order.status} audience="customer" />
-        <PaymentStatusBadge status={order.paymentStatus} />
-        <span className="text-xs text-slate-500">Payment: {titleCase(order.paymentMethod)}</span>
-      </div>
+      <SummarySection
+        title={`Items ordered${itemCount > 1 ? ` · ${itemCount}` : ''}`}
+        bodyClassName="px-5 py-1"
+      >
+        <Divided>
+          {order.items.map((it) => (
+            <OrderLine
+              key={it.id}
+              name={it.productName}
+              meta={it.variantOptions ?? `SKU: ${it.variantSku ?? it.sku}`}
+              quantity={it.quantity}
+              unitPrice={money(it.unitPrice, order.currency)}
+              subtotal={money(it.subtotal, order.currency)}
+            />
+          ))}
+        </Divided>
+      </SummarySection>
 
-      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_20rem]">
-        {/* Items */}
-        <div className="space-y-10">
-          <div className="border-y border-ink-700">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-ink-700 text-left text-overline uppercase text-slate-500">
-                    <th className="px-2 py-4 font-medium">Item</th>
-                    <th className="px-2 py-4 text-right font-medium">Price</th>
-                    <th className="px-2 py-4 text-right font-medium">Qty</th>
-                    <th className="px-2 py-4 text-right font-medium">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.items.map((it) => (
-                    <tr key={it.id} className="border-b border-ink-700 last:border-0">
-                      <td className="px-2 py-4">
-                        <div className="font-medium text-slate-100">{it.productName}</div>
-                        {it.variantOptions && <div className="text-xs text-slate-300">{it.variantOptions}</div>}
-                        <div className="text-xs text-slate-500">SKU: {it.variantSku ?? it.sku}</div>
-                      </td>
-                      <td className="px-2 py-4 text-right text-slate-300">{money(it.unitPrice, order.currency)}</td>
-                      <td className="px-2 py-4 text-right text-slate-300">{it.quantity}</td>
-                      <td className="px-2 py-4 text-right font-medium text-slate-100">{money(it.subtotal, order.currency)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <OrderTotals order={order} className="border-t border-ink-700 px-2 py-5" />
+      <SummarySection title="Order info" bodyClassName="px-5 py-1.5">
+        <dl className="divide-y divide-ink-700">
+          <InfoRow label="Order ID">
+            <span className="tabular-nums">{orderRef(order)}</span>
+          </InfoRow>
+          <InfoRow label="Ordered on">{formatDateTime(order.createdAt)}</InfoRow>
+          <InfoRow label="Status">
+            <OrderStatusBadge status={order.status} audience="customer" />
+          </InfoRow>
+          <InfoRow label="Payment">
+            <span className="inline-flex items-center gap-2">
+              {titleCase(order.paymentMethod)}
+              <PaymentStatusBadge status={order.paymentStatus} />
+            </span>
+          </InfoRow>
+          <InfoRow label="Last updated">{formatDateTime(order.updatedAt)}</InfoRow>
+        </dl>
+      </SummarySection>
+
+      <SummarySection title="Delivery address">
+        <div className="flex items-start gap-3.5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
+            <MapPin className="h-5 w-5" aria-hidden />
           </div>
-
-          {order.notes && (
-            <div className="bg-ink-850 p-6">
-              <h2 className="mb-2 text-overline uppercase text-slate-500">Order notes</h2>
-              <p className="whitespace-pre-line text-body-sm text-slate-400">{order.notes}</p>
-            </div>
-          )}
+          <address className="min-w-0 space-y-0.5 text-body-sm not-italic text-slate-400">
+            <p className="font-medium text-slate-100">{a.name}</p>
+            {a.phone && <p>{a.phone}</p>}
+            <p>{a.addressLine1}</p>
+            {a.addressLine2 && <p>{a.addressLine2}</p>}
+            <p>{[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}</p>
+            <p>{a.country}</p>
+          </address>
         </div>
+      </SummarySection>
 
-        {/* Shipping + meta */}
-        <div className="space-y-6">
-          <div>
-            <h2 className="mb-3 text-overline uppercase text-slate-500">Shipping address</h2>
-            <address className="space-y-0.5 text-sm not-italic text-slate-300">
-              <p className="font-medium text-slate-100">{a.name}</p>
-              {a.phone && <p className="text-slate-400">{a.phone}</p>}
-              <p>{a.addressLine1}</p>
-              {a.addressLine2 && <p>{a.addressLine2}</p>}
-              <p>
-                {[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}
-              </p>
-              <p>{a.country}</p>
-            </address>
+      {order.notes && (
+        <SummarySection title="Delivery instructions">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-850 text-slate-400">
+              <Clock className="h-5 w-5" aria-hidden />
+            </div>
+            <p className="whitespace-pre-line text-body-sm text-slate-400">{order.notes}</p>
           </div>
+        </SummarySection>
+      )}
 
-          <div className="border-t border-ink-700 pt-5 text-body-sm text-slate-500">
-            <div className="flex justify-between py-1">
-              <span>Placed</span>
-              <span className="text-slate-300">{formatDateTime(order.createdAt)}</span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span>Last updated</span>
-              <span className="text-slate-300">{formatDateTime(order.updatedAt)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SummarySection title="Bill summary">
+        <OrderTotals order={order} />
+      </SummarySection>
 
       <Modal
         open={confirmOpen}

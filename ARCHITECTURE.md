@@ -305,6 +305,19 @@ whole card clickable while the bag/wishlist controls stay real buttons — inter
 an anchor, and a click on `+` must not also navigate. Anything meant to stay clickable needs to out-rank the stretched
 pseudo-element: the wishlist chip is `z-20`, the buy row `z-10`.
 
+### `@/components/summary` — the receipt language
+`SummarySection({title, action?, children, bodyClassName?})` · `InfoRow({label:ReactNode, children, emphasis?})` ·
+`OrderLine({name, meta?, quantity, unitPrice, subtotal})` · `ItemThumb({name})` · `Divided`.
+
+Shared by **Checkout's summary aside** and the **order detail page**, deliberately: the summary a shopper approves and
+the one they are shown afterwards must read as the same object, or people re-read the second looking for what changed.
+An order renders as a narrow stack (`max-w-2xl`) of labelled blocks — Items ordered / Order info / Delivery address /
+Bill summary — not a four-column table in a wide grid, which is an admin screen.
+
+`emphasis` on `InfoRow` is the payable total: at most one per block. `ItemThumb` is a **monogram tile, not an image** —
+`OrderItemResponse` snapshots name/SKU/price at placement and carries no image URL (so a catalogue edit cannot rewrite a
+placed order). Real photos would need a products-by-ids endpoint; the tile does not pretend to be one.
+
 ### App-wide UX infrastructure (WP-1.4)
 Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reuse these on every new page.
 
