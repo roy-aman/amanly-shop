@@ -17,6 +17,7 @@ import {
 } from '@/components/ui';
 import { ProductGridSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { usePageMeta } from '@/lib/usePageMeta';
 import ProductCard, { type ProductCardVariant } from '@/components/ProductCard';
 import { BannerSlot } from '@/components/BannerSlot';
 import { CategoryRail } from '@/components/CategoryRail';
@@ -40,12 +41,16 @@ const DEFAULT_SIZE = 12;
 
 const VIEW_STORAGE_KEY = 'rc-plp-view';
 
-/** Flatten the category tree (roots + descendants) into indent-tagged options for a single-select. */
-function flattenCategories(nodes: CategoryTreeResponse[], depth = 0): { id: string; name: string; depth: number }[] {
-  return nodes.flatMap((n) => [
-    { id: n.id, name: n.name, depth },
-    ...flattenCategories(n.children ?? [], depth + 1),
-  ]);
+/**
+ * Flatten the category tree (roots + descendants), keeping the depth for the select's indentation
+ * and the node itself so the page can reach the selected category's banner and copy — the select
+ * only ever needed id and name, but the header needs the whole thing.
+ */
+function flattenCategories(
+  nodes: CategoryTreeResponse[],
+  depth = 0,
+): { node: CategoryTreeResponse; depth: number }[] {
+  return nodes.flatMap((n) => [{ node: n, depth }, ...flattenCategories(n.children ?? [], depth + 1)]);
 }
 
 function readView(): ProductCardVariant {
@@ -55,7 +60,7 @@ function readView(): ProductCardVariant {
 
 export default function Products() {
   const [searchParams, setSearchParams] = useSearchParams();
-  useDocumentTitle('Shop');
+  // Set below, once the selected category is known.
 
   // ── URL-synced state (shareable, back/forward-safe) ─────────────────────
   const categoryId = searchParams.get('categoryId') ?? '';
@@ -87,7 +92,8 @@ export default function Products() {
   const categoriesQuery = useQuery({ queryKey: ['categoryTree'], queryFn: getCategoryTree });
   const categories = useMemo(() => flattenCategories(categoriesQuery.data ?? []), [categoriesQuery.data]);
   const rootCategories = categoriesQuery.data ?? [];
-  const categoryName = categories.find((c) => c.id === categoryId)?.name;
+  const selectedCategory = categories.find((c) => c.node.id === categoryId)?.node;
+  const categoryName = selectedCategory?.name;
 
   const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: listBrands });
   const brands = brandsQuery.data ?? [];
@@ -173,9 +179,9 @@ export default function Products() {
         >
           <option value="">All categories</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>
+            <option key={c.node.id} value={c.node.id}>
               {'  '.repeat(c.depth)}
-              {c.name}
+              {c.node.name}
             </option>
           ))}
         </Select>
@@ -293,6 +299,16 @@ export default function Products() {
 
   const resultCount = data?.totalElements ?? 0;
 
+  // Every view of this page used to be titled "Shop" and share one generic description, so a
+  // crawler saw a dozen near-identical pages. The category's own name and copy make each one
+  // distinct; the canonical collapses the sort/page/view permutations of the same goods onto one
+  // address, which is the part that actually matters (see usePageMeta).
+  useDocumentTitle(categoryName ?? (search ? `Search: ${search}` : 'Shop'));
+  usePageMeta({
+    description: selectedCategory?.description,
+    canonicalPath: categoryId ? `/products?categoryId=${encodeURIComponent(categoryId)}` : '/products',
+  });
+
   return (
     <div>
       {/* Renders nothing at all unless the merchant has a listing banner booked. */}
@@ -301,6 +317,21 @@ export default function Products() {
       {/* Page head — the count sits with the title rather than in a toolbar strip,
           so the first thing read is "what am I looking at, and how much of it". */}
       <header className="border-b border-ink-700 pb-6">
+        {/* The category's own banner, which the admin has always accepted and nothing has ever
+            shown. It appears only when a category is selected: on "everything" there is no one
+            category whose picture this would be, and the PLP_STRIP banner slot above already owns
+            that spot for merchant campaigns. */}
+        {selectedCategory?.bannerUrl && (
+          <div className="mb-6 overflow-hidden rounded-2xl bg-ink-850">
+            <img
+              src={selectedCategory.bannerUrl}
+              // Empty alt: the category name is the h1 immediately below, so describing the banner
+              // would say it twice. It is decoration here, not content.
+              alt=""
+              className="h-32 w-full object-cover sm:h-44 lg:h-56"
+            />
+          </div>
+        )}
         <h1 className="font-display text-h1 text-slate-100">
           {categoryName ?? (search ? `“${search}”` : 'Shop')}
         </h1>
@@ -309,6 +340,14 @@ export default function Products() {
             ? 'Loading the catalog…'
             : `${resultCount} ${resultCount === 1 ? 'piece' : 'pieces'}`}
         </p>
+        {/* The merchant's own words about this category. Measure-capped because a paragraph running
+            the full width of a listing page is unreadable — and unique copy per category is the
+            single strongest signal this page can give a crawler. */}
+        {selectedCategory?.description && (
+          <p className="mt-4 max-w-prose text-body-sm leading-relaxed text-slate-400">
+            {selectedCategory.description}
+          </p>
+        )}
       </header>
 
       {/* Category first, above everything. On a phone the filter rail is behind a button, so this

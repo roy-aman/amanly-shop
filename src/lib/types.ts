@@ -111,6 +111,13 @@ export interface CategoryTreeResponse {
   // second round trip per category just to find out what picture to show.
   imageUrl: string | null;
   imageAltText: string | null;
+  /**
+   * The wide hero for this category and its own copy, shown at the top of the listing page when a
+   * shopper narrows to it. Carried here for the same reason as `imageUrl`: this is the only category
+   * payload the storefront fetches. Optional so cached payloads predating them still type-check.
+   */
+  bannerUrl?: string | null;
+  description?: string | null;
   children: CategoryTreeResponse[];
 }
 

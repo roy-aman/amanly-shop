@@ -145,6 +145,56 @@ describe('Products (PLP)', () => {
     await waitFor(() => expect(locSearch()).not.toContain('categoryId'));
   });
 
+  /**
+   * The merchant's banner and copy were saved by the admin and displayed nowhere at all — the
+   * field's own hint promised a category page that was never built. They belong to a category, so
+   * they appear only once a shopper has narrowed to one.
+   */
+  it('shows the category banner and copy once a category is chosen, and not before', async () => {
+    tree.mockResolvedValue([
+      { ...CATEGORY, bannerUrl: 'https://cdn.test/rings.jpg', description: 'Signet rings, cast in the round.' },
+      CATEGORY_2,
+    ]);
+    const user = userEvent.setup();
+    renderPLP();
+
+    await screen.findByText('Product p1');
+    // "Everything" has no one category whose banner this would be.
+    expect(document.querySelector('img[alt=""]')).toBeNull();
+    expect(screen.queryByText(/cast in the round/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Rings' }));
+
+    await waitFor(() =>
+      expect(document.querySelector('img[alt=""]')).toHaveAttribute('src', 'https://cdn.test/rings.jpg'),
+    );
+    expect(screen.getByText('Signet rings, cast in the round.')).toBeInTheDocument();
+  });
+
+  /** A category with no banner must not leave a gap where one would have been. */
+  it('renders no banner for a category that has none', async () => {
+    const user = userEvent.setup();
+    renderPLP();
+
+    await screen.findByText('Product p1');
+    await user.click(screen.getByRole('button', { name: 'Rings' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Rings'));
+    expect(document.querySelector('img[alt=""]')).toBeNull();
+  });
+
+  it('titles the page after the category rather than calling every view "Shop"', async () => {
+    const user = userEvent.setup();
+    renderPLP();
+
+    await screen.findByText('Product p1');
+    expect(document.title).toContain('Shop');
+
+    await user.click(screen.getByRole('button', { name: 'Rings' }));
+
+    await waitFor(() => expect(document.title).toContain('Rings'));
+  });
+
   it('applying the brand filter updates the URL and re-queries the API (WP-3.5)', async () => {
     const user = userEvent.setup();
     renderPLP();

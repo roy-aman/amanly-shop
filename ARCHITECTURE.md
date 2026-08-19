@@ -49,7 +49,8 @@ Interfaces: `Page<T>` {content:T[], totalElements, totalPages, number(0-based), 
 `UserResponse` {id,email,fullName,provider,status,roles:RoleName[],emailVerifiedAt,createdAt,updatedAt};
 `AuthResponse` {tokenType,accessToken,expiresInSeconds,refreshToken,user};
 `CategoryResponse` {id,name,slug,description,parentId,parentName,depth,sortOrder,active,createdAt,updatedAt};
-`CategoryTreeResponse` {id,name,slug,sortOrder,children[]};
+`CategoryTreeResponse` {id,name,slug,sortOrder,`imageUrl`:string|null,`imageAltText`:string|null,`bannerUrl`?:string|null,`description`?:string|null,children[]};
+  This is the ONLY category payload the storefront fetches — `listCategories`/`getCategory` are admin-side — so anything a storefront surface needs has to travel on the tree. `imageUrl` = square tile (CategoryRail, Home collections); `bannerUrl` = wide hero shown in the PLP header once a category is selected; `description` = the merchant's copy, rendered under the PLP heading AND used as that view's meta description.
 `ProductImageResponse` {id,url,altText,sortOrder,isPrimary};
 `ProductResponse` {id,name,slug,description,shortDescription,sku,price,compareAtPrice,currency,status,categoryId,categoryName,categorySlug,`brandId`?:string|null,`brandName`?:string|null,weight,sellingUnit,stockQuantity,tags:string[],images[],`variants`?:ProductVariantResponse[],`ratingAvg`:number|null,`ratingCount`:number,createdAt,updatedAt};
 `ProductSummaryResponse` {id,name,slug,sku,price,compareAtPrice,currency,status,categoryName,`brandId`?:string|null,`brandName`?:string|null,primaryImageUrl,stockQuantity,`ratingAvg`:number|null,`ratingCount`:number,`hasVariants`?:boolean};
@@ -331,6 +332,16 @@ stay in the filter rail's select, which handles arbitrary depth. Renders `null` 
 from, so the three controls cannot disagree and a shared link lands on the same view. Tapping the active tile clears it.
 Mounted on the PLP only: on a phone the filter rail is `hidden lg:block`, so this is the sole visible way to narrow the
 catalogue — Home already has a stronger 4:5 collection-tile treatment and does not need the same row twice.
+
+### `@/lib/usePageMeta` — per-view description + canonical
+`usePageMeta({description?, canonicalPath?})`. Writes `<meta name="description">` (whitespace-collapsed, trimmed at a word
+boundary to ~160 chars) and appends a `<link rel="canonical">`, restoring/removing both on unmount. Used by the PLP so a
+category-filtered view carries the category's own copy and one address.
+
+**Know what it is worth.** This is a client-rendered SPA, so these tags are written after hydration: Google executes JS
+and will generally see them, most social-preview scrapers will not and read the static tags in `index.html`. Real
+per-page SEO needs SSR/prerendering (Phase 7). The **canonical** is the higher-value half — the same goods are reachable
+under a dozen `sort`/`page`/`view` permutations, which is the duplicate-content shape crawlers punish.
 
 ### App-wide UX infrastructure (WP-1.4)
 Cross-cutting infra wired into the router (`App.tsx`) and root (`main.tsx`). Reuse these on every new page.

@@ -444,7 +444,7 @@ export default function Categories() {
           </Field>
           <ImageUploadField
             label="Category banner"
-            hint="Wide hero across the top of this category's own page. A stretched tile looks wrong here, so use a separate crop."
+            hint="Wide hero across the top of the shop page when a shopper filters to this category. A stretched tile looks wrong here, so use a separate crop."
             value={createForm.bannerUrl}
             onChange={(url) => setCreateForm((f) => ({ ...f, bannerUrl: url }))}
             error={errors.bannerUrl}
@@ -527,7 +527,7 @@ export default function Categories() {
           </Field>
           <ImageUploadField
             label="Category banner"
-            hint="Wide hero across the top of this category's own page."
+            hint="Wide hero across the top of the shop page when a shopper filters to this category."
             value={editForm.bannerUrl}
             onChange={(url) => setEditForm((f) => ({ ...f, bannerUrl: url }))}
             error={errors.bannerUrl}
