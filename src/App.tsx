@@ -50,6 +50,7 @@ const Addresses = lazy(() => import('@/pages/store/Addresses'));
 // bookings switched off.
 const Services = lazy(() => import('@/pages/store/Services'));
 const ServiceDetail = lazy(() => import('@/pages/store/ServiceDetail'));
+const BookService = lazy(() => import('@/pages/store/BookService'));
 
 
 // Admin console
@@ -138,6 +139,7 @@ export default function App() {
               and carries the chosen slot through the round trip. */}
           <Route path="/services" element={<Page fallback={<StoreListSkeleton />}><Services /></Page>} />
           <Route path="/services/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ServiceDetail /></Page>} />
+          <Route path="/book/:slug" element={<Page fallback={<FormSkeleton />}><BookService /></Page>} />
 
           {/* Customer area — requires any authenticated user */}
           <Route element={<RequireAuth />}>
