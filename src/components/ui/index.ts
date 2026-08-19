@@ -65,3 +65,7 @@ export {
   CHART_COLORS,
 } from './ThemedChart';
 export type { ChartSeries } from './ThemedChart';
+
+// ── Booking primitives (WP-BU.1) ──────────────────────────────────────
+export { DateStrip } from './DateStrip';
+export { SlotPicker } from './SlotPicker';
