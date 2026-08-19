@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Minus, Plus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
+import { Minus, Plus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/components/ui';
 import { useCart } from '@/context/CartContext';
 import type { ProductSummaryResponse } from '@/lib/types';
@@ -58,10 +58,16 @@ export default function AddToBagButton({
     }
   }
 
+  /**
+   * One geometry for every state. The add button and the stepper are the same pill — same height,
+   * radius, width and border — so the control does not jump the card's layout when it changes, and
+   * the change reads as the button *becoming* the counter rather than being replaced by it. That
+   * swap is the whole trick in the grocery apps this is modelled on.
+   */
   const shell =
-    'inline-flex h-9 items-center justify-center gap-2 rounded-full text-body-sm font-medium ' +
-    'transition duration-200 ease-emphasized focus-visible:outline-none focus-visible:ring-2 ' +
-    'focus-visible:ring-gold-400/70 disabled:cursor-not-allowed disabled:opacity-50';
+    'inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border text-body-sm ' +
+    'font-medium transition duration-200 ease-emphasized focus-visible:outline-none ' +
+    'focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:cursor-not-allowed';
 
   if (soldOut) {
     return (
@@ -69,7 +75,7 @@ export default function AddToBagButton({
         type="button"
         disabled
         onClick={swallow}
-        className={cn(shell, 'w-full border border-ink-700 text-slate-500', className)}
+        className={cn(shell, 'border-ink-700 text-slate-500 opacity-70', className)}
       >
         Sold out
       </button>
@@ -85,7 +91,7 @@ export default function AddToBagButton({
         onClick={(e) => e.stopPropagation()}
         className={cn(
           shell,
-          'w-full border border-ink-600 px-4 text-slate-200 hover:border-slate-100 hover:text-slate-100',
+          'border-ink-600 px-4 text-slate-200 hover:border-slate-100 hover:text-slate-100',
           className,
         )}
       >
@@ -104,11 +110,15 @@ export default function AddToBagButton({
         aria-label={`Add ${product.name} to bag`}
         className={cn(
           shell,
-          'w-full bg-slate-100 px-4 text-ink-950 hover:bg-white active:scale-[0.98]',
+          // Outlined in the brand gold rather than a solid slab. A filled white pill on every tile
+          // was the loudest thing in the grid — louder than the products — and a row of them read
+          // as a toolbar. An outline sits back until it is wanted, then fills on hover.
+          'border-gold-400/45 px-4 text-brand-ink hover:border-gold-400 hover:bg-gold-400/10',
+          'active:scale-[0.97] disabled:opacity-50',
           className,
         )}
       >
-        <ShoppingBag className="h-4 w-4" aria-hidden />
+        <ShoppingBag className={cn('h-4 w-4 transition-transform duration-200', busy && 'animate-pulse')} aria-hidden />
         Add to bag
       </button>
     );
@@ -116,15 +126,16 @@ export default function AddToBagButton({
 
   const atStockCeiling = line.quantity >= product.stockQuantity;
   const step =
-    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-200 transition ' +
-    'duration-200 ease-emphasized hover:bg-ink-800 hover:text-slate-100 active:scale-90 ' +
-    'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:hover:bg-transparent';
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-ink transition ' +
+    'duration-200 ease-emphasized hover:bg-gold-400/15 active:scale-90 ' +
+    'disabled:cursor-not-allowed disabled:opacity-35 disabled:active:scale-100 disabled:hover:bg-transparent';
 
   return (
     <div
       className={cn(
-        'inline-flex w-full items-center justify-between rounded-full border border-ink-600 bg-ink-850 px-0.5',
-        busy && 'opacity-60',
+        shell,
+        'justify-between border-gold-400/45 bg-gold-400/5 px-0.5',
+        busy && 'opacity-70',
         className,
       )}
     >
@@ -146,9 +157,16 @@ export default function AddToBagButton({
         <Minus className="h-4 w-4" aria-hidden />
       </button>
 
-      <span className="flex items-center gap-1.5 px-1 text-body-sm font-medium text-slate-100">
-        <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
-        <span aria-live="polite">{line.quantity} in bag</span>
+      {/* Just the number, the way a bag counter reads everywhere else. "2 in bag" with a tick was
+          three pieces of furniture for one fact, and at card width it crowded the two controls that
+          actually do something. Remounted on change so the new figure lands with a beat. */}
+      <span className="px-1 text-body-sm font-semibold tabular-nums text-brand-ink">
+        <span key={line.quantity} className="inline-block animate-pop">
+          {line.quantity}
+        </span>
+        <span className="sr-only" aria-live="polite">
+          {line.quantity} in bag
+        </span>
       </span>
 
       <button
