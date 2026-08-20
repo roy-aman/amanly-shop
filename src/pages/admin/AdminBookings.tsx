@@ -76,13 +76,19 @@ export default function AdminBookings() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<BookingStatus | ''>('');
-  const [staffId, setStaffId] = useState('');
   const [walkInOpen, setWalkInOpen] = useState(false);
-
   const setParam = (patch: Record<string, string>) => {
     const next = new URLSearchParams(searchParams);
     Object.entries(patch).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
     setSearchParams(next, { replace: true });
+  };
+
+  // In the URL rather than in state: the team page links straight to one
+  // person's diary, and that link has to arrive already filtered.
+  const staffId = searchParams.get('staffId') ?? '';
+  const setStaffId = (next: string) => {
+    setParam({ staffId: next });
+    setPage(0);
   };
 
   const staffQuery = useQuery({
@@ -129,6 +135,24 @@ export default function AdminBookings() {
     enabled: bookingsAllowed && view === 'list',
   });
 
+  const assignMutation = useMutation({
+    mutationFn: ({ id, staffProfileId }: { id: string; staffProfileId: string | null }) =>
+      adminBookings.assignStaff(id, staffProfileId),
+    onSuccess: (booking) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'bookings'] });
+      toast.success(booking.staffName ? `Assigned to ${booking.staffName}` : 'Unassigned');
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'SLOT_NO_LONGER_AVAILABLE') {
+        // Somebody already has an appointment then — the same clash rule that
+        // governs booking, applied to who does the work.
+        toast.error('They are busy then', 'That person already has an appointment at this time.');
+        return;
+      }
+      toast.error('Could not assign', e instanceof ApiError ? e.message : 'Please try again.');
+    },
+  });
+
   const walkInMutation = useMutation({
     mutationFn: (body: CreateWalkInBookingRequest) => adminBookings.createWalkIn(body),
     onSuccess: () => {
@@ -171,9 +195,36 @@ export default function AdminBookings() {
       },
       { key: 'serviceName', header: 'Service' },
       {
-        key: 'staffName',
-        header: 'With',
-        render: (b) => b.staffName ?? <span className="text-slate-500">Unassigned</span>,
+        key: 'assign',
+        header: 'Assign',
+        // Assigning from the row rather than only from the booking's own page:
+        // sorting out who is doing what is a pass down a list, not eight visits
+        // to eight pages. The server still refuses anyone already busy then.
+        render: (b) =>
+          b.status === 'CONFIRMED' ? (
+            <Select
+              aria-label={`Assign ${b.customerName}'s booking`}
+              value={b.staffProfileId ?? ''}
+              disabled={assignMutation.isPending && assignMutation.variables?.id === b.id}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                e.stopPropagation();
+                assignMutation.mutate({ id: b.id, staffProfileId: e.target.value || null });
+              }}
+              className="min-w-[9rem]"
+            >
+              <option value="">Unassigned</option>
+              {(staffQuery.data ?? [])
+                .filter((s) => s.active || s.id === b.staffProfileId)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.displayName}
+                  </option>
+                ))}
+            </Select>
+          ) : (
+            <span className="text-xs text-slate-500">—</span>
+          ),
       },
       { key: 'source', header: 'Taken', render: (b) => <BookingSourceBadge source={b.source} /> },
       { key: 'status', header: 'Status', render: (b) => <BookingStatusBadge status={b.status} /> },
@@ -183,7 +234,7 @@ export default function AdminBookings() {
         render: (b) => <span className="font-mono text-xs text-slate-400">{b.bookingNumber}</span>,
       },
     ],
-    [timezone],
+    [timezone, staffQuery.data, assignMutation],
   );
 
   if (entitlementLoading) return null;
@@ -268,14 +319,7 @@ export default function AdminBookings() {
                 }}
                 placeholder="Booking number, name or phone"
               />
-              <Select
-                aria-label="Filter by team member"
-                value={staffId}
-                onChange={(e) => {
-                  setStaffId(e.target.value);
-                  setPage(0);
-                }}
-              >
+              <Select aria-label="Filter by team member" value={staffId} onChange={(e) => setStaffId(e.target.value)}>
                 <option value="">Anyone</option>
                 {(staffQuery.data ?? []).map((s) => (
                   <option key={s.id} value={s.id}>
@@ -284,6 +328,18 @@ export default function AdminBookings() {
                 ))}
               </Select>
             </div>
+
+            {staffId && (
+              <p className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700 bg-ink-850/60 px-3 py-2 text-body-sm text-slate-300">
+                Showing only{' '}
+                <span className="font-medium text-slate-100">
+                  {(staffQuery.data ?? []).find((s) => s.id === staffId)?.displayName ?? 'one team member'}
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => setStaffId('')}>
+                  Show everyone
+                </Button>
+              </p>
+            )}
 
             <div className="mb-4 flex flex-wrap gap-2">
               <FilterChip selected={!status} onClick={() => { setStatus(''); setPage(0); }}>

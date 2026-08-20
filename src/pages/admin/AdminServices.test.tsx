@@ -127,7 +127,7 @@ describe('AdminServices', () => {
 
     renderWithProviders(<AdminServices />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete Deep tissue massage' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(removeMock).toHaveBeenCalled());

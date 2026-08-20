@@ -68,4 +68,5 @@ export type { ChartSeries } from './ThemedChart';
 
 // ── Booking primitives (WP-BU.1) ──────────────────────────────────────
 export { DateStrip } from './DateStrip';
+export { Switch } from './Switch';
 export { SlotPicker } from './SlotPicker';

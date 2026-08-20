@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderTree, Plus } from 'lucide-react';
+import { FolderTree, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { adminServiceCategories } from '@/api/services';
 import { ApiError } from '@/lib/http';
@@ -9,7 +9,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useBookingsEntitlement } from '@/lib/useBookingsGate';
 import type { ServiceCategoryResponse } from '@/lib/types';
 import {
-  Badge,
   Button,
   Card,
   ConfirmDialog,
@@ -19,6 +18,7 @@ import {
   Input,
   Modal,
   PageHeader,
+  Switch,
   type Column,
 } from '@/components/ui';
 
@@ -111,6 +111,25 @@ export default function AdminServiceCategories() {
     onError: (e) => onMutationError(e, 'Could not save the group'),
   });
 
+  /** Show/hide in place. A full replace like any other edit, so both required
+   *  values go back with only `active` changed. */
+  const toggleMutation = useMutation({
+    mutationFn: (c: ServiceCategoryResponse) =>
+      adminServiceCategories.update(c.id, {
+        name: c.name,
+        slug: c.slug,
+        sortOrder: c.sortOrder,
+        active: !c.active,
+      }),
+    onSuccess: (updated) => {
+      invalidate();
+      toast.success(updated.active ? 'Group shown' : 'Group hidden');
+    },
+    onError: (e) => onMutationError(e, 'Could not change that'),
+  });
+
+  const togglingId = toggleMutation.isPending ? toggleMutation.variables?.id : undefined;
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminServiceCategories.remove(id),
     onSuccess: () => {
@@ -162,7 +181,6 @@ export default function AdminServiceCategories() {
           <button
             type="button"
             onClick={() => openEdit(c)}
-            aria-label={`Edit ${c.name}`}
             className="rounded text-left font-medium text-slate-100 transition hover:text-gold-300"
           >
             {c.name}
@@ -173,11 +191,19 @@ export default function AdminServiceCategories() {
       { key: 'sortOrder', header: 'Order', render: (c) => <span className="tabular-nums">{c.sortOrder}</span> },
       {
         key: 'active',
-        header: 'Status',
-        render: (c) => <Badge tone={c.active ? 'green' : 'gray'}>{c.active ? 'Shown' : 'Hidden'}</Badge>,
+        header: 'Shown',
+        render: (c) => (
+          <Switch
+            checked={c.active}
+            label={`${c.active ? 'Hide' : 'Show'} ${c.name}`}
+            size="sm"
+            disabled={togglingId === c.id}
+            onChange={() => toggleMutation.mutate(c)}
+          />
+        ),
       },
     ],
-    [],
+    [togglingId],
   );
 
   if (entitlementLoading) return null;
@@ -220,15 +246,18 @@ export default function AdminServiceCategories() {
                 action={<Button onClick={openCreate}>Add group</Button>}
               />
             }
-            rowActions={
-              isAdmin
-                ? (c) => (
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(c)}>
-                      Delete
-                    </Button>
-                  )
-                : undefined
-            }
+            rowActions={(c) => (
+              <div className="flex justify-end gap-1">
+                <Button variant="ghost" size="sm" onClick={() => openEdit(c)} aria-label={`Edit ${c.name}`}>
+                  <Pencil className="h-4 w-4" aria-hidden /> Edit
+                </Button>
+                {isAdmin && (
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(c)} aria-label={`Delete ${c.name}`}>
+                    <Trash2 className="h-4 w-4 text-danger-400" aria-hidden /> Delete
+                  </Button>
+                )}
+              </div>
+            )}
           />
         )}
       </Card>
@@ -282,18 +311,12 @@ export default function AdminServiceCategories() {
                 onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))}
               />
             </Field>
-            <Field label="Shown">
-              <label className="flex items-center gap-2 text-body-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
-                  aria-label="Shown"
-                  className="h-4 w-4 rounded border-ink-600"
-                />
-                Customers can see this group
-              </label>
-            </Field>
+            <Switch
+              checked={form.active}
+              onChange={(next) => setForm((f) => ({ ...f, active: next }))}
+              label="Shown to customers"
+              description="Hidden groups keep their services; the services just appear without a heading."
+            />
           </div>
         </Modal>
       )}

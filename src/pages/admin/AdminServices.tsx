@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Sparkles } from 'lucide-react';
+import { Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 import { adminServiceCategories, adminServices } from '@/api/services';
 import { ApiError } from '@/lib/http';
@@ -15,7 +15,6 @@ import type {
   UpdateServiceOfferingRequest,
 } from '@/lib/types';
 import {
-  Badge,
   Button,
   Card,
   ConfirmDialog,
@@ -28,6 +27,7 @@ import {
   Pagination,
   SearchInput,
   Select,
+  Switch,
   Textarea,
   type Column,
 } from '@/components/ui';
@@ -180,6 +180,33 @@ export default function AdminServices() {
     onError: (e) => onMutationError(e, 'Could not update the service'),
   });
 
+  /** Flipping bookable in place. It is a full-replace PUT like any other edit,
+   *  so every field is sent back — with only `active` changed. */
+  const toggleMutation = useMutation({
+    mutationFn: (svc: AdminServiceOfferingResponse) =>
+      adminServices.update(svc.id, {
+        categoryId: svc.categoryId,
+        name: svc.name,
+        slug: svc.slug,
+        description: svc.description,
+        price: svc.price,
+        durationMinutes: svc.durationMinutes,
+        bufferMinutes: svc.bufferMinutes,
+        imageUrl: svc.imageUrl,
+        imageAltText: svc.imageAltText,
+        sortOrder: svc.sortOrder,
+        active: !svc.active,
+      }),
+    onSuccess: (updated) => {
+      invalidate();
+      toast.success(updated.active ? 'Now bookable' : 'Hidden from customers');
+    },
+    onError: (e) => onMutationError(e, 'Could not change that'),
+  });
+
+  const togglingId = toggleMutation.isPending ? toggleMutation.variables?.id : undefined;
+  const toggleActive = (svc: AdminServiceOfferingResponse) => toggleMutation.mutate(svc);
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminServices.remove(id),
     onSuccess: () => {
@@ -280,7 +307,6 @@ export default function AdminServices() {
             <button
               type="button"
               onClick={() => openEdit(s)}
-              aria-label={`Edit ${s.name}`}
               className="block max-w-full truncate rounded text-left font-medium text-slate-100 transition hover:text-gold-300"
             >
               {s.name}
@@ -305,11 +331,22 @@ export default function AdminServices() {
       },
       {
         key: 'active',
-        header: 'Status',
-        render: (s) => <Badge tone={s.active ? 'green' : 'gray'}>{s.active ? 'Bookable' : 'Hidden'}</Badge>,
+        header: 'Bookable',
+        // A switch rather than a badge: whether customers can book this is the
+        // single most-changed thing on this screen, and it was previously buried
+        // three clicks deep inside the edit form.
+        render: (s) => (
+          <Switch
+            checked={s.active}
+            label={`${s.active ? 'Hide' : 'Show'} ${s.name}`}
+            size="sm"
+            disabled={togglingId === s.id}
+            onChange={() => toggleActive(s)}
+          />
+        ),
       },
     ],
-    [],
+    [togglingId],
   );
 
   if (entitlementLoading) return null;
@@ -373,15 +410,20 @@ export default function AdminServices() {
                 action={<Button onClick={openCreate}>Add service</Button>}
               />
             }
-            rowActions={
-              isAdmin
-                ? (s) => (
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)}>
-                      Delete
-                    </Button>
-                  )
-                : undefined
-            }
+            rowActions={(s) => (
+              <div className="flex justify-end gap-1">
+                {/* Named, rather than relying on the row's title being a button —
+                    an action nobody can see is an action nobody uses. */}
+                <Button variant="ghost" size="sm" onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`}>
+                  <Pencil className="h-4 w-4" aria-hidden /> Edit
+                </Button>
+                {isAdmin && (
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)} aria-label={`Delete ${s.name}`}>
+                    <Trash2 className="h-4 w-4 text-danger-400" aria-hidden /> Delete
+                  </Button>
+                )}
+              </div>
+            )}
           />
         )}
 
@@ -494,10 +536,24 @@ export default function AdminServices() {
               </Field>
             </div>
 
+            {/* Generation offered here for the same reason it is on a category:
+                a service has no photograph of its own to fall back on, and a
+                merchant setting up at the counter rarely has one to hand. The
+                service's name and group are what the prompt is drafted from, so
+                filling those in first gives a better picture. */}
             <ImageUploadField
               label="Picture"
               value={form.imageUrl}
               onChange={(url) => set('imageUrl', url)}
+              aiSingleImage
+              aiContext={{
+                subject: 'CATEGORY',
+                categoryName:
+                  [form.name, categoriesQuery.data?.find((c) => c.id === form.categoryId)?.name]
+                    .filter(Boolean)
+                    .join(' — ') || null,
+                forCategory: true,
+              }}
             />
             <Field label="Picture description" hint="For screen readers and when the image fails to load">
               <Input

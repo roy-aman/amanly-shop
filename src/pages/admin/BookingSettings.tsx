@@ -1,9 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarCog } from 'lucide-react';
+import {
+  AlarmClock,
+  CalendarCog,
+  CalendarRange,
+  Clock3,
+  Hourglass,
+  MapPin,
+  MessageCircle,
+  Users2,
+} from 'lucide-react';
 
 import { adminBookingSettings } from '@/api/bookings';
 import { ApiError } from '@/lib/http';
+import { durationLabel } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
 import type { BookingSettingsResponse, BusinessHoursEntry, UpdateBookingSettingsRequest } from '@/lib/types';
 import {
@@ -14,19 +24,29 @@ import {
   Input,
   PageHeader,
   Select,
+  Switch,
   Textarea,
+  cn,
 } from '@/components/ui';
 import { FormSkeleton } from '@/components/RouteSkeletons';
 import { BusinessHoursEditor } from '@/components/admin/BusinessHoursEditor';
 
-/** Offered where the browser can enumerate zones; otherwise the field falls back
- *  to free text with the current value, which is better than a short hardcoded
- *  list that omits the merchant's own. */
-function supportedTimeZones(): string[] | null {
+/**
+ * The zones to offer, with the shop's own always among them.
+ *
+ * `Intl.supportedValuesOf('timeZone')` returns ICU's canonical ids, and those
+ * are not always the ones the server holds: India is stored as `Asia/Kolkata`
+ * and listed by ICU as `Asia/Calcutta`. A `<select>` whose value matches no
+ * option silently displays the FIRST one instead — which is how a shop in
+ * Kolkata came to show Africa/Abidjan, and would have moved its entire diary to
+ * West Africa on the next save. So the saved value is always inserted.
+ */
+function timeZoneOptions(current: string): string[] | null {
   const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf;
   if (typeof supported !== 'function') return null;
   try {
-    return supported('timeZone');
+    const zones = supported('timeZone');
+    return zones.includes(current) ? zones : [current, ...zones].filter(Boolean);
   } catch {
     return null;
   }
@@ -66,20 +86,46 @@ function fromSettings(s: BookingSettingsResponse): FormState {
   };
 }
 
+/** A number with the plain-English consequence beside it, since "60" means
+ *  nothing on its own and "an hour's notice" means everything. */
+function RuleTile({
+  icon,
+  label,
+  children,
+  reads,
+  error,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+  reads: string;
+  error?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-4">
+      <div className="flex items-center gap-2 text-slate-400">
+        <span className="text-slate-500">{icon}</span>
+        <span className="text-caption uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="mt-3">{children}</div>
+      <p className={cn('mt-2 text-caption', error ? 'text-danger-300' : 'text-slate-500')}>{error ?? reads}</p>
+    </div>
+  );
+}
+
 /**
  * Everything that governs the diary, on one screen.
  *
  * This is a FULL REPLACE: whatever is submitted becomes the shop's entire
- * schedule, opening hours included, and nothing that is left out survives. So
- * the form cannot exist before its data does — saving is impossible until the
- * current settings have loaded, or a save would write an empty week and shut the
- * shop.
+ * schedule, opening hours included, and nothing left out survives. So the form
+ * cannot exist before its data does — saving is impossible until the current
+ * settings have loaded, or a save would write an empty week and shut the shop.
  *
  * The screen has three states, and keeping them apart is the point. Without the
  * platform entitlement there is nothing here to change and no toggle would help,
  * so it says so and stops. Entitled but switched off is a working setup screen
- * with a banner — that is a merchant who has work to finish, not a problem. On
- * and running is the plain form.
+ * with a banner — a merchant mid-way through a job, not a problem. On and
+ * running is the plain form.
  */
 export default function BookingSettings() {
   const qc = useQueryClient();
@@ -87,7 +133,6 @@ export default function BookingSettings() {
 
   const [form, setForm] = useState<FormState | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const zones = supportedTimeZones();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'booking-settings'],
@@ -99,6 +144,8 @@ export default function BookingSettings() {
   useEffect(() => {
     if (data && form === null) setForm(fromSettings(data));
   }, [data, form]);
+
+  const zones = useMemo(() => timeZoneOptions(form?.timezone ?? ''), [form?.timezone]);
 
   const saveMutation = useMutation({
     mutationFn: (body: UpdateBookingSettingsRequest) => adminBookingSettings.update(body),
@@ -192,6 +239,9 @@ export default function BookingSettings() {
     });
   }
 
+  const lead = Number(form.minLeadTimeMinutes);
+  const openDays = form.businessHours.length;
+
   return (
     <div>
       <PageHeader
@@ -204,32 +254,60 @@ export default function BookingSettings() {
         }
       />
 
-      {!form.bookingsEnabled && (
-        <p className="mb-6 rounded-lg border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-body-sm text-warning-300">
-          Bookings are switched off, so customers cannot see your services or book anything. Set
-          everything up here, then turn them on when you are ready.
-        </p>
-      )}
-
       <div className="space-y-6">
-        <Card className="p-6">
-          <h2 className="text-h5 text-slate-100">Taking bookings</h2>
-          <label className="mt-4 flex items-center gap-3 text-body-sm text-slate-200">
-            <input
-              type="checkbox"
+        {/* ── The switch, as the first thing on the page ─────────────── */}
+        <Card
+          className={cn(
+            'p-6 transition',
+            form.bookingsEnabled ? 'border-success-500/30 bg-success-500/5' : 'border-warning-500/30 bg-warning-500/5',
+          )}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <span
+                className={cn(
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-full',
+                  form.bookingsEnabled
+                    ? 'bg-success-500/15 text-success-300'
+                    : 'bg-warning-500/15 text-warning-300',
+                )}
+              >
+                <CalendarCog className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <h2 className="text-h5 text-slate-100">
+                  {form.bookingsEnabled ? 'Taking bookings' : 'Not taking bookings'}
+                </h2>
+                <p className="mt-1 max-w-xl text-body-sm text-slate-400">
+                  {form.bookingsEnabled
+                    ? openDays > 0
+                      ? `Customers can see your services and book them, ${openDays} ${openDays === 1 ? 'day' : 'days'} a week.`
+                      : 'Customers can see your services, but every day is closed below — so nothing can actually be booked.'
+                    : 'Your services are hidden from customers. Finish setting up here, then switch this on.'}
+                </p>
+              </div>
+            </div>
+            <Switch
               checked={form.bookingsEnabled}
-              onChange={(e) => set('bookingsEnabled', e.target.checked)}
-              aria-label="Accept bookings"
-              className="h-4 w-4 rounded border-ink-600"
+              onChange={(next) => set('bookingsEnabled', next)}
+              label="Accept bookings"
             />
-            Customers can see services and book them
-          </label>
+          </div>
         </Card>
 
+        {/* ── Where and when ────────────────────────────────────────── */}
         <Card className="p-6">
-          <h2 className="text-h5 text-slate-100">Where and when</h2>
-          <div className="mt-4 space-y-4">
-            <Field label="Time zone" required error={errors.timezone} hint="Every appointment time is shown in this zone">
+          <h2 className="flex items-center gap-2 text-h5 text-slate-100">
+            <MapPin className="h-4 w-4 text-slate-500" aria-hidden /> Where and when
+          </h2>
+
+          <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <Field
+              label="Time zone"
+              required
+              error={errors.timezone}
+              hint="Every appointment time is shown in this zone, to you and to customers"
+            >
               {zones ? (
                 <Select aria-label="Time zone" value={form.timezone} onChange={(e) => set('timezone', e.target.value)}>
                   {zones.map((z) => (
@@ -251,20 +329,31 @@ export default function BookingSettings() {
                 onChange={(e) => set('businessAddress', e.target.value)}
               />
             </Field>
+          </div>
 
-            <div>
-              <h3 className="mb-2 text-body-sm font-medium text-slate-300">Opening hours</h3>
-              <BusinessHoursEditor value={form.businessHours} onChange={(next) => set('businessHours', next)} />
-            </div>
+          <div className="mt-6 border-t border-ink-700 pt-6">
+            <h3 className="mb-3 flex items-center gap-2 text-body-sm font-medium text-slate-300">
+              <CalendarRange className="h-4 w-4 text-slate-500" aria-hidden /> Opening hours
+            </h3>
+            <BusinessHoursEditor value={form.businessHours} onChange={(next) => set('businessHours', next)} />
           </div>
         </Card>
 
+        {/* ── The rules, each with what it actually means ───────────── */}
         <Card className="p-6">
-          <h2 className="text-h5 text-slate-100">How booking works</h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
+          <h2 className="flex items-center gap-2 text-h5 text-slate-100">
+            <Clock3 className="h-4 w-4 text-slate-500" aria-hidden /> How booking works
+          </h2>
+          <p className="mt-1 text-body-sm text-slate-400">
+            These shape the times customers are offered. They are applied for you — the storefront
+            never works them out for itself.
+          </p>
+
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <RuleTile
+              icon={<Clock3 className="h-4 w-4" aria-hidden />}
               label="Times offered every"
-              hint="Minutes between the start times customers see"
+              reads={`Start times ${durationLabel(Number(form.slotGranularityMinutes) || 0)} apart`}
               error={errors.slotGranularityMinutes}
             >
               <Input
@@ -275,10 +364,14 @@ export default function BookingSettings() {
                 value={form.slotGranularityMinutes}
                 onChange={(e) => set('slotGranularityMinutes', e.target.value)}
               />
-            </Field>
-            <Field
-              label="People at once"
-              hint="How many appointments can run at the same time"
+            </RuleTile>
+
+            <RuleTile
+              icon={<Users2 className="h-4 w-4" aria-hidden />}
+              label="At the same time"
+              reads={`${form.maxConcurrentBookings || '0'} appointment${
+                Number(form.maxConcurrentBookings) === 1 ? '' : 's'
+              } can overlap`}
               error={errors.maxConcurrentBookings}
             >
               <Input
@@ -289,10 +382,14 @@ export default function BookingSettings() {
                 value={form.maxConcurrentBookings}
                 onChange={(e) => set('maxConcurrentBookings', e.target.value)}
               />
-            </Field>
-            <Field
+            </RuleTile>
+
+            <RuleTile
+              icon={<Hourglass className="h-4 w-4" aria-hidden />}
               label="Shortest notice"
-              hint="Minutes ahead a customer must book"
+              reads={
+                lead === 0 ? 'Customers can book right up to the minute' : `At least ${durationLabel(lead)} ahead`
+              }
               error={errors.minLeadTimeMinutes}
             >
               <Input
@@ -303,8 +400,14 @@ export default function BookingSettings() {
                 value={form.minLeadTimeMinutes}
                 onChange={(e) => set('minLeadTimeMinutes', e.target.value)}
               />
-            </Field>
-            <Field label="Book up to" hint="Days ahead" error={errors.maxAdvanceDays}>
+            </RuleTile>
+
+            <RuleTile
+              icon={<CalendarRange className="h-4 w-4" aria-hidden />}
+              label="Book up to"
+              reads={`${form.maxAdvanceDays || '0'} days ahead`}
+              error={errors.maxAdvanceDays}
+            >
               <Input
                 aria-label="Maximum days in advance"
                 type="number"
@@ -313,10 +416,16 @@ export default function BookingSettings() {
                 value={form.maxAdvanceDays}
                 onChange={(e) => set('maxAdvanceDays', e.target.value)}
               />
-            </Field>
-            <Field
+            </RuleTile>
+
+            <RuleTile
+              icon={<AlarmClock className="h-4 w-4" aria-hidden />}
               label="Changes close"
-              hint="Hours before the appointment when customers can no longer change it online"
+              reads={
+                Number(form.cancellationCutoffHours) === 0
+                  ? 'Customers can change a booking at any time'
+                  : `No online changes within ${form.cancellationCutoffHours} h of the appointment`
+              }
               error={errors.cancellationCutoffHours}
             >
               <Input
@@ -327,17 +436,29 @@ export default function BookingSettings() {
                 value={form.cancellationCutoffHours}
                 onChange={(e) => set('cancellationCutoffHours', e.target.value)}
               />
-            </Field>
+            </RuleTile>
           </div>
         </Card>
 
+        {/* ── Reminders ─────────────────────────────────────────────── */}
         <Card className="p-6">
-          <h2 className="text-h5 text-slate-100">Reminders</h2>
+          <h2 className="flex items-center gap-2 text-h5 text-slate-100">
+            <AlarmClock className="h-4 w-4 text-slate-500" aria-hidden /> Reminders
+          </h2>
           <p className="mt-1 text-body-sm text-slate-400">
             Sent by email automatically. Leave a box empty to switch that reminder off.
           </p>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="First reminder" hint="Hours before">
+
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <RuleTile
+              icon={<AlarmClock className="h-4 w-4" aria-hidden />}
+              label="First reminder"
+              reads={
+                form.reminderHoursBeforeFirst === ''
+                  ? 'Off'
+                  : `${form.reminderHoursBeforeFirst} h before the appointment`
+              }
+            >
               <Input
                 aria-label="First reminder hours before"
                 type="number"
@@ -346,8 +467,18 @@ export default function BookingSettings() {
                 value={form.reminderHoursBeforeFirst}
                 onChange={(e) => set('reminderHoursBeforeFirst', e.target.value)}
               />
-            </Field>
-            <Field label="Second reminder" hint="Hours before" error={errors.reminderHoursBeforeSecond}>
+            </RuleTile>
+
+            <RuleTile
+              icon={<AlarmClock className="h-4 w-4" aria-hidden />}
+              label="Second reminder"
+              reads={
+                form.reminderHoursBeforeSecond === ''
+                  ? 'Off'
+                  : `${form.reminderHoursBeforeSecond} h before the appointment`
+              }
+              error={errors.reminderHoursBeforeSecond}
+            >
               <Input
                 aria-label="Second reminder hours before"
                 type="number"
@@ -356,11 +487,13 @@ export default function BookingSettings() {
                 value={form.reminderHoursBeforeSecond}
                 onChange={(e) => set('reminderHoursBeforeSecond', e.target.value)}
               />
-            </Field>
+            </RuleTile>
           </div>
 
           <div className="mt-6 border-t border-ink-700 pt-6">
-            <h3 className="text-body-sm font-medium text-slate-300">WhatsApp</h3>
+            <h3 className="flex items-center gap-2 text-body-sm font-medium text-slate-300">
+              <MessageCircle className="h-4 w-4 text-slate-500" aria-hidden /> WhatsApp
+            </h3>
             {/* Stated plainly: without approved template names nothing is sent,
                 and silence is otherwise indistinguishable from a broken feature. */}
             <p className="mt-1 text-caption text-slate-500">

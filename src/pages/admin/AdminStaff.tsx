@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, UserRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CalendarClock, Pencil, Plus, Trash2, UserRound } from 'lucide-react';
 
 import { adminStaffProfiles } from '@/api/staff';
+import { adminBookings } from '@/api/bookings';
 import { adminUsers } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import { useToast } from '@/context/ToastContext';
@@ -22,6 +24,7 @@ import {
   Modal,
   PageHeader,
   Select,
+  Switch,
   Textarea,
   type Column,
 } from '@/components/ui';
@@ -61,6 +64,7 @@ const EMPTY_FORM: FormState = {
 export default function AdminStaff() {
   const qc = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const { bookingsAllowed, loading: entitlementLoading } = useBookingsEntitlement();
 
@@ -83,6 +87,40 @@ export default function AdminStaff() {
     enabled: bookingsAllowed && formOpen,
     staleTime: 5 * 60_000,
   });
+
+  /**
+   * How many appointments each person has still to come.
+   *
+   * One small request per person rather than one big one: the diary endpoint
+   * filters by a single staff id, and asking for every future booking to count
+   * them here would pull the whole diary into the browser to derive a handful of
+   * numbers. `size: 1` means the server does the counting — only `totalElements`
+   * is read.
+   */
+  const staff = data ?? [];
+  const upcomingQueries = useQueries({
+    queries: staff.map((profile) => ({
+      queryKey: ['admin', 'bookings', 'upcoming-count', profile.id],
+      queryFn: () =>
+        adminBookings.list({
+          staffId: profile.id,
+          status: 'CONFIRMED' as const,
+          from: new Date().toISOString(),
+          size: 1,
+        }),
+      enabled: bookingsAllowed,
+      staleTime: 60_000,
+    })),
+  });
+
+  const upcomingByStaff = useMemo(() => {
+    const counts: Record<string, number | undefined> = {};
+    staff.forEach((profile, i) => {
+      counts[profile.id] = upcomingQueries[i]?.data?.totalElements;
+    });
+    return counts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff, upcomingQueries.map((q) => q.data?.totalElements).join(',')]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'staff'] });
@@ -130,6 +168,27 @@ export default function AdminStaff() {
     },
     onError: (e) => onMutationError(e, 'Could not save the profile'),
   });
+
+  /** Bookable on and off in place, without opening the form. */
+  const toggleMutation = useMutation({
+    mutationFn: (profile: StaffProfileResponse) =>
+      adminStaffProfiles.update(profile.id, {
+        userId: profile.userId,
+        displayName: profile.displayName,
+        title: profile.title,
+        bio: profile.bio,
+        photoUrl: profile.photoUrl,
+        sortOrder: profile.sortOrder,
+        active: !profile.active,
+      }),
+    onSuccess: (updated) => {
+      invalidate();
+      toast.success(updated.active ? 'Back on the team list' : 'Hidden from customers');
+    },
+    onError: (e) => onMutationError(e, 'Could not change that'),
+  });
+
+  const togglingId = toggleMutation.isPending ? toggleMutation.variables?.id : undefined;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => adminStaffProfiles.remove(id),
@@ -195,7 +254,6 @@ export default function AdminStaff() {
               <button
                 type="button"
                 onClick={() => openEdit(s)}
-                aria-label={`Edit ${s.displayName}`}
                 className="block max-w-full truncate rounded text-left font-medium text-slate-100 transition hover:text-gold-300"
               >
                 {s.displayName}
@@ -216,12 +274,37 @@ export default function AdminStaff() {
           ),
       },
       {
+        key: 'upcoming',
+        header: 'Coming up',
+        // The number that makes this a working screen rather than a directory:
+        // who is busy, and who has nothing booked.
+        render: (s) => {
+          const count = upcomingByStaff[s.id];
+          if (count == null) return <span className="text-xs text-slate-600">—</span>;
+          return count === 0 ? (
+            <span className="text-xs text-slate-500">Nothing booked</span>
+          ) : (
+            <span className="tabular-nums text-slate-200">
+              {count} appointment{count === 1 ? '' : 's'}
+            </span>
+          );
+        },
+      },
+      {
         key: 'active',
-        header: 'Status',
-        render: (s) => <Badge tone={s.active ? 'green' : 'gray'}>{s.active ? 'Bookable' : 'Hidden'}</Badge>,
+        header: 'Bookable',
+        render: (s) => (
+          <Switch
+            checked={s.active}
+            label={`${s.active ? 'Hide' : 'Show'} ${s.displayName}`}
+            size="sm"
+            disabled={togglingId === s.id}
+            onChange={() => toggleMutation.mutate(s)}
+          />
+        ),
       },
     ],
-    [],
+    [togglingId, upcomingByStaff],
   );
 
   if (entitlementLoading) return null;
@@ -253,7 +336,7 @@ export default function AdminStaff() {
         ) : (
           <DataTable
             columns={columns}
-            data={data ?? []}
+            data={staff}
             getRowKey={(s) => s.id}
             loading={isLoading}
             empty={
@@ -264,15 +347,33 @@ export default function AdminStaff() {
                 action={<Button onClick={openCreate}>Add someone</Button>}
               />
             }
-            rowActions={
-              isAdmin
-                ? (s) => (
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)}>
-                      Delete
-                    </Button>
-                  )
-                : undefined
-            }
+            rowActions={(s) => (
+              <div className="flex justify-end gap-1">
+                {/* Straight to that person's diary, pre-filtered — the question
+                    a manager opens this page with. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/admin/bookings?view=list&staffId=${s.id}`)}
+                  aria-label={`See ${s.displayName}'s bookings`}
+                >
+                  <CalendarClock className="h-4 w-4" aria-hidden /> Bookings
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => openEdit(s)} aria-label={`Edit ${s.displayName}`}>
+                  <Pencil className="h-4 w-4" aria-hidden /> Edit
+                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeleteTarget(s)}
+                    aria-label={`Delete ${s.displayName}`}
+                  >
+                    <Trash2 className="h-4 w-4 text-danger-400" aria-hidden /> Delete
+                  </Button>
+                )}
+              </div>
+            )}
           />
         )}
       </Card>
@@ -338,18 +439,14 @@ export default function AdminStaff() {
                   onChange={(e) => set('sortOrder', e.target.value)}
                 />
               </Field>
-              <Field label="Bookable">
-                <label className="flex items-center gap-2 text-body-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={form.active}
-                    onChange={(e) => set('active', e.target.checked)}
-                    aria-label="Bookable"
-                    className="h-4 w-4 rounded border-ink-600"
-                  />
-                  Customers can ask for them
-                </label>
-              </Field>
+              <div className="self-end pb-2">
+                <Switch
+                  checked={form.active}
+                  onChange={(next) => set('active', next)}
+                  label="Bookable"
+                  description="Customers can ask for them by name"
+                />
+              </div>
             </div>
           </div>
         </Modal>

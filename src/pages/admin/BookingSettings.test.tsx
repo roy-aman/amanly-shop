@@ -88,7 +88,7 @@ describe('BookingSettings', () => {
     // with empty times would be a different thing to the server.
     renderWithProviders(<BookingSettings />);
 
-    await userEvent.click(await screen.findByLabelText('Open on Monday'));
+    await userEvent.click(await screen.findByRole('switch', { name: 'Open on Monday' }));
     await clickSave();
 
     await waitFor(() => expect(updateMock).toHaveBeenCalled());
@@ -97,13 +97,15 @@ describe('BookingSettings', () => {
     ]);
   });
 
-  it('adds a day back with usable hours rather than two empty boxes', async () => {
+  it('adds a day back with the week’s own hours, not a guess', async () => {
+    // Copying the rhythm already set beats defaulting to nine-to-five: a shop
+    // that works 09:00–18:00 should not retype it for every day it opens.
     renderWithProviders(<BookingSettings />);
 
-    await userEvent.click(await screen.findByLabelText('Open on Wednesday'));
+    await userEvent.click(await screen.findByRole('switch', { name: 'Open on Wednesday' }));
 
     expect(screen.getByLabelText('Wednesday opening time')).toHaveValue('09:00');
-    expect(screen.getByLabelText('Wednesday closing time')).toHaveValue('17:00');
+    expect(screen.getByLabelText('Wednesday closing time')).toHaveValue('18:00');
   });
 
   it('warns when every day has been switched off', async () => {
@@ -111,7 +113,9 @@ describe('BookingSettings', () => {
 
     renderWithProviders(<BookingSettings />);
 
-    expect(await screen.findByText(/every day is closed/i)).toBeInTheDocument();
+    // Said twice on purpose — once at the switch, where the consequence lands,
+    // and once under the week, where the cause is.
+    expect((await screen.findAllByText(/every day is closed/i)).length).toBeGreaterThan(0);
   });
 
   it('refuses a second reminder that is further out than the first', async () => {
@@ -126,6 +130,30 @@ describe('BookingSettings', () => {
 
     expect(await screen.findByText(/closer to the appointment/i)).toBeInTheDocument();
     expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the shop’s own zone selectable even when ICU spells it differently', async () => {
+    // The bug this pins cost a shop its diary: Intl lists Asia/Calcutta, the
+    // server stores Asia/Kolkata, and a <select> whose value matches no option
+    // silently shows the FIRST one — Africa/Abidjan. Saving would then have
+    // moved every appointment to West Africa without anybody touching the field.
+    renderWithProviders(<BookingSettings />);
+
+    const select = (await screen.findByLabelText('Time zone')) as HTMLSelectElement;
+    expect(select.value).toBe('Asia/Kolkata');
+    expect([...select.options].some((o) => o.value === 'Asia/Kolkata')).toBe(true);
+
+    await clickSave();
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(updateMock.mock.calls[0][0].timezone).toBe('Asia/Kolkata');
+  });
+
+  it('reads a rule back in plain English, not just as a number', async () => {
+    // "60" means nothing on its own; "At least 1 hr ahead" is the actual rule.
+    renderWithProviders(<BookingSettings />);
+
+    expect(await screen.findByText(/at least 1 hr ahead/i)).toBeInTheDocument();
+    expect(screen.getByText(/start times 30 min apart/i)).toBeInTheDocument();
   });
 
   it('says the store has no such plan, distinctly from bookings being off', async () => {
@@ -144,7 +172,8 @@ describe('BookingSettings', () => {
 
     renderWithProviders(<BookingSettings />);
 
-    expect(await screen.findByText(/bookings are switched off/i)).toBeInTheDocument();
+    expect(await screen.findByText('Not taking bookings')).toBeInTheDocument();
+    expect(screen.getByText(/hidden from customers/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Save changes' }).length).toBeGreaterThan(0);
   });
 });
