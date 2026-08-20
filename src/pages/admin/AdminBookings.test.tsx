@@ -22,6 +22,9 @@ vi.mock('@/api/admin', () => ({ adminStore: { get: vi.fn() } }));
 vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), push: vi.fn() }),
 }));
+// The diary now tells a staff member their view is narrowed, so the page reads
+// the signed-in role.
+vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true }) }));
 
 const listMock = vi.mocked(adminBookings.list);
 const storeMock = vi.mocked(adminStore.get);

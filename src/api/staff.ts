@@ -1,18 +1,21 @@
-import { request } from '@/lib/http';
+import { buildQuery, request } from '@/lib/http';
 import type { PublicStaffResponse, SaveStaffProfileRequest, StaffProfileResponse } from '@/lib/types';
 
 const A = '/api/v1/admin/staff-profiles';
 
 /**
- * Everyone who takes appointments (public, unpaged, already ordered).
+ * Who takes appointments (public, unpaged, already ordered).
  *
- * Nothing connects a staff member to the services they can perform, so this is
- * the whole team every time. A picker must therefore offer "anyone available"
- * as the default rather than implying the list has been filtered for the chosen
- * service.
+ * Pass `serviceId` to get only the people who work in that service's group. The
+ * narrowing is the server's to do, not a filter applied to a full list the
+ * storefront should not have been handed.
+ *
+ * A service with no group, or a group nobody has been assigned to, answers with
+ * the whole team — an empty picker would read as a service that cannot be
+ * booked. So "anyone available" stays the right default either way.
  */
-export function listStaff(): Promise<PublicStaffResponse[]> {
-  return request('GET', '/api/v1/staff');
+export function listStaff(serviceId?: string): Promise<PublicStaffResponse[]> {
+  return request('GET', `/api/v1/staff${buildQuery({ serviceId })}`);
 }
 
 /** Team management (ADMIN, STAFF). Deletes are ADMIN only. */

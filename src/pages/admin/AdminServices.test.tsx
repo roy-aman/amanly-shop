@@ -18,8 +18,8 @@ vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), push: vi.fn() }),
 }));
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true }) }));
-vi.mock('@/components/admin/ImageUploadField', () => ({
-  ImageUploadField: ({ label }: { label: string }) => <div>{label}</div>,
+vi.mock('@/components/admin/ServiceGalleryEditor', () => ({
+  ServiceGalleryEditor: () => <div>gallery</div>,
 }));
 
 const listMock = vi.mocked(adminServices.list);
@@ -119,6 +119,57 @@ describe('AdminServices', () => {
       active: true,
       sortOrder: 0,
     });
+  });
+
+  it('sends null for a rule the service does not override, never zero', async () => {
+    // The distinction the whole per-service model rests on: null means "follow
+    // the shop", 0 means "no notice required". An empty box is the former, and
+    // coercing it to a number would silently pin the service to zero notice.
+    updateMock.mockResolvedValue(service());
+
+    renderWithProviders(<AdminServices />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Deep tissue massage' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    const body = updateMock.mock.calls[0][1];
+    expect(body.minLeadTimeMinutes).toBeNull();
+    expect(body.maxAdvanceDays).toBeNull();
+    expect(body.maxConcurrentBookings).toBeNull();
+    expect(body.cancellationCutoffHours).toBeNull();
+  });
+
+  it('keeps an override that was already set', async () => {
+    updateMock.mockResolvedValue(service());
+    listMock.mockResolvedValue(page([service({ minLeadTimeMinutes: 1440, maxConcurrentBookings: 1 })]));
+
+    renderWithProviders(<AdminServices />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Deep tissue massage' }));
+    expect(screen.getByLabelText('Notice in minutes for this service')).toHaveValue(1440);
+    await userEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(updateMock.mock.calls[0][1].minLeadTimeMinutes).toBe(1440);
+    expect(updateMock.mock.calls[0][1].maxConcurrentBookings).toBe(1);
+  });
+
+  it('carries an older single image into the gallery rather than dropping it', async () => {
+    // A service saved before galleries existed has only imageUrl. Saving it must
+    // not wipe the picture just because the new editor started empty.
+    updateMock.mockResolvedValue(service());
+    listMock.mockResolvedValue(page([service({ imageUrl: 'https://cdn.example.com/old.jpg', images: [] })]));
+
+    renderWithProviders(<AdminServices />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Deep tissue massage' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(updateMock.mock.calls[0][1].images).toEqual([
+      { url: 'https://cdn.example.com/old.jpg', altText: null },
+    ]);
   });
 
   it('tells the merchant to switch a booked service off rather than delete it', async () => {

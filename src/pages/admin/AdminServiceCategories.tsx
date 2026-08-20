@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FolderTree, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { adminServiceCategories } from '@/api/services';
+import { adminStaffProfiles } from '@/api/staff';
 import { ApiError } from '@/lib/http';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +16,7 @@ import {
   DataTable,
   EmptyState,
   Field,
+  FilterChip,
   Input,
   Modal,
   PageHeader,
@@ -39,9 +41,11 @@ interface FormState {
   slug: string;
   sortOrder: string;
   active: boolean;
+  /** Empty means anyone on the team — see the note on the picker. */
+  staffProfileIds: string[];
 }
 
-const EMPTY_FORM: FormState = { name: '', slug: '', sortOrder: '0', active: true };
+const EMPTY_FORM: FormState = { name: '', slug: '', sortOrder: '0', active: true, staffProfileIds: [] };
 
 /**
  * How the service menu is divided up.
@@ -67,6 +71,13 @@ export default function AdminServiceCategories() {
     queryKey: ['admin', 'service-categories'],
     queryFn: adminServiceCategories.list,
     enabled: bookingsAllowed,
+  });
+
+  const staffQuery = useQuery({
+    queryKey: ['admin', 'staff'],
+    queryFn: adminStaffProfiles.list,
+    staleTime: 5 * 60_000,
+    enabled: bookingsAllowed && formOpen,
   });
 
   const invalidate = () => {
@@ -97,6 +108,7 @@ export default function AdminServiceCategories() {
         slug: form.slug.trim(),
         sortOrder: Number(form.sortOrder) || 0,
         active: form.active,
+        staffProfileIds: form.staffProfileIds,
       };
       // Update replaces the row wholesale, so both values go every time.
       return editTarget
@@ -120,6 +132,9 @@ export default function AdminServiceCategories() {
         slug: c.slug,
         sortOrder: c.sortOrder,
         active: !c.active,
+        // Sent back untouched: this is a full replace, and omitting it would
+        // quietly unassign the whole team on a show/hide.
+        staffProfileIds: c.staffProfileIds ?? [],
       }),
     onSuccess: (updated) => {
       invalidate();
@@ -151,7 +166,13 @@ export default function AdminServiceCategories() {
   function openEdit(c: ServiceCategoryResponse) {
     setErrors({});
     setEditTarget(c);
-    setForm({ name: c.name, slug: c.slug, sortOrder: String(c.sortOrder), active: c.active });
+    setForm({
+      name: c.name,
+      slug: c.slug,
+      sortOrder: String(c.sortOrder),
+      active: c.active,
+      staffProfileIds: c.staffProfileIds ?? [],
+    });
     setSlugTouched(true);
     setFormOpen(true);
   }
@@ -193,6 +214,7 @@ export default function AdminServiceCategories() {
         key: 'active',
         header: 'Shown',
         render: (c) => (
+          <span onClick={(e) => e.stopPropagation()}>
           <Switch
             checked={c.active}
             label={`${c.active ? 'Hide' : 'Show'} ${c.name}`}
@@ -200,6 +222,7 @@ export default function AdminServiceCategories() {
             disabled={togglingId === c.id}
             onChange={() => toggleMutation.mutate(c)}
           />
+          </span>
         ),
       },
     ],
@@ -237,6 +260,7 @@ export default function AdminServiceCategories() {
             columns={columns}
             data={data ?? []}
             getRowKey={(c) => c.id}
+            onRowClick={openEdit}
             loading={isLoading}
             empty={
               <EmptyState
@@ -303,6 +327,44 @@ export default function AdminServiceCategories() {
                 }}
               />
             </Field>
+            <div>
+              <h3 className="text-body-sm font-medium text-slate-300">Who works in this group</h3>
+              {/* Empty means everyone, and that is stated rather than implied: the
+                  opposite reading — nobody selected, nobody available — would make
+                  a group look unbookable the moment it was created. */}
+              <p className="mt-1 text-caption text-slate-500">
+                {form.staffProfileIds.length === 0
+                  ? 'Nobody picked, so customers can ask for anyone on the team.'
+                  : `Customers booking these services can ask for ${form.staffProfileIds.length} of the team.`}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(staffQuery.data ?? []).filter((person) => person.active).map((person) => {
+                  const picked = form.staffProfileIds.includes(person.id);
+                  return (
+                    <FilterChip
+                      key={person.id}
+                      selected={picked}
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          staffProfileIds: picked
+                            ? f.staffProfileIds.filter((id) => id !== person.id)
+                            : [...f.staffProfileIds, person.id],
+                        }))
+                      }
+                    >
+                      {person.displayName}
+                    </FilterChip>
+                  );
+                })}
+                {(staffQuery.data ?? []).length === 0 && (
+                  <p className="text-caption text-slate-500">
+                    No team members yet — add some under Team and they will appear here.
+                  </p>
+                )}
+              </div>
+            </div>
+
             <Field label="Order in the menu" hint="Lower numbers come first">
               <Input
                 aria-label="Sort order"

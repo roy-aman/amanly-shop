@@ -73,11 +73,13 @@ export default function BookService() {
   const service = serviceQuery.data;
   useDocumentTitle(service ? `Book ${service.name}` : 'Book');
 
+  // Scoped to whoever works in this service's group. A service with no group, or
+  // a group nobody has been assigned to, still answers with the whole team.
   const staffQuery = useQuery({
-    queryKey: ['staff'],
-    queryFn: listStaff,
+    queryKey: ['staff', service?.id ?? 'all'],
+    queryFn: () => listStaff(service?.id),
     staleTime: 5 * 60_000,
-    enabled,
+    enabled: enabled && !!service?.id,
   });
 
   // ── Wizard state, mirrored to the URL so it survives a sign-in ──────────

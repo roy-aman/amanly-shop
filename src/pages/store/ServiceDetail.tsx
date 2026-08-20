@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Clock, ImageOff, MapPin } from 'lucide-react';
+import { Clock, MapPin } from 'lucide-react';
 
 import { getBusinessHours, getService } from '@/api/services';
 import { listStaff } from '@/api/staff';
@@ -11,6 +11,7 @@ import { usePageMeta } from '@/lib/usePageMeta';
 import { Card, ImageWithFallback, LinkButton, RatingStars } from '@/components/ui';
 import { ProductDetailSkeleton } from '@/components/RouteSkeletons';
 import ServiceReviews from '@/components/ServiceReviews';
+import { ServiceGallery } from '@/components/ServiceGallery';
 import NotFound from '@/pages/NotFound';
 
 /** Monday-first, ISO order — the same order the backend numbers them in. */
@@ -46,10 +47,10 @@ export default function ServiceDetail() {
   });
 
   const staffQuery = useQuery({
-    queryKey: ['staff'],
-    queryFn: listStaff,
+    queryKey: ['staff', serviceQuery.data?.id ?? 'all'],
+    queryFn: () => listStaff(serviceQuery.data?.id),
     staleTime: 5 * 60_000,
-    enabled,
+    enabled: enabled && !!serviceQuery.data?.id,
   });
 
   const service = serviceQuery.data;
@@ -80,21 +81,12 @@ export default function ServiceDetail() {
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div>
-          <div className="overflow-hidden rounded-2xl bg-ink-850">
-            <div className="aspect-[16/9] w-full">
-              {service.imageUrl ? (
-                <ImageWithFallback
-                  src={service.imageUrl}
-                  alt={service.imageAltText ?? service.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-600">
-                  <ImageOff className="h-10 w-10" aria-hidden />
-                </div>
-              )}
-            </div>
-          </div>
+          <ServiceGallery
+            images={service.images ?? []}
+            fallbackUrl={service.imageUrl}
+            fallbackAlt={service.imageAltText}
+            name={service.name}
+          />
 
           <div className="mt-8">
             {service.categoryName && (
@@ -114,9 +106,10 @@ export default function ServiceDetail() {
           {staff.length > 0 && (
             <section className="mt-10">
               <h2 className="text-h4 text-slate-100">Who you might see</h2>
-              {/* No claim that these people perform THIS service: nothing in the
-                  API links staff to services, so implying a filtered list would
-                  be inventing a promise the shop never made. */}
+              {/* These are the people who work in this service's group — the
+                  server narrows the list, so the page is not implying a filter it
+                  did not apply. A service with no group shows the whole team,
+                  which is still true rather than merely unfiltered. */}
               <p className="mt-1 text-body-sm text-slate-400">
                 You can ask for someone in particular when you book, or leave it to us.
               </p>

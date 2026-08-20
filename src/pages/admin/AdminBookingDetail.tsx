@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, Lock } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Download, Lock } from 'lucide-react';
 
 import { adminBookings } from '@/api/bookings';
 import { getAvailability } from '@/api/services';
@@ -264,13 +264,16 @@ export default function AdminBookingDetail() {
           <Card className="p-6">
             <h2 className="text-h5 text-slate-100">Calendar</h2>
             <div className="mt-3 flex flex-col gap-2">
+              {/* Styled as a control rather than as prose. It was a text link and
+                  read as a caption, so the .ics button looked like the only way to
+                  get an appointment into a calendar. */}
               <a
                 href={booking.googleCalendarUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rc-link text-body-sm"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-ink-600 px-4 py-2 text-body-sm font-medium text-slate-200 transition hover:border-slate-100"
               >
-                Open in Google Calendar
+                <CalendarPlus className="h-4 w-4" aria-hidden /> Add to Google Calendar
               </a>
               <Button
                 variant="outline"

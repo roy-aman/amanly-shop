@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Download, Plus } from 'lucide-react';
 
 import { adminBookings } from '@/api/bookings';
 import { adminServices, getAvailability, getBusinessHours } from '@/api/services';
@@ -16,6 +16,7 @@ import {
   zonedWallClockToInstant,
 } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
+import { useAuth } from '@/context/AuthContext';
 import { useBookingsEntitlement } from '@/lib/useBookingsGate';
 import type { AdminBookingResponse, AvailabilitySlot, BookingStatus, CreateWalkInBookingRequest } from '@/lib/types';
 import {
@@ -69,6 +70,7 @@ export default function AdminBookings() {
   const qc = useQueryClient();
   const toast = useToast();
   const { bookingsAllowed, loading: entitlementLoading, timezone } = useBookingsEntitlement();
+  const { isAdmin } = useAuth();
 
   const view = searchParams.get('view') === 'list' ? 'list' : 'today';
   const date = searchParams.get('date') ?? zonedToday(timezone);
@@ -226,6 +228,37 @@ export default function AdminBookings() {
             <span className="text-xs text-slate-500">—</span>
           ),
       },
+      {
+        key: 'calendar',
+        header: 'Calendar',
+        // Reachable from the list, not only from inside each booking. Staff put
+        // their day into their own calendar one row at a time.
+        render: (b) => (
+          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={b.googleCalendarUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Add ${b.customerName} to Google Calendar`}
+              className="rounded-lg border border-ink-600 p-1.5 text-slate-300 transition hover:border-slate-100 hover:text-slate-100"
+            >
+              <CalendarPlus className="h-4 w-4" aria-hidden />
+            </a>
+            <button
+              type="button"
+              aria-label={`Download ${b.customerName}'s appointment`}
+              onClick={() =>
+                adminBookings
+                  .downloadIcs(b.id, b.bookingNumber)
+                  .catch(() => toast.error('Download failed', 'The calendar file could not be produced.'))
+              }
+              className="rounded-lg border border-ink-600 p-1.5 text-slate-300 transition hover:border-slate-100 hover:text-slate-100"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        ),
+      },
       { key: 'source', header: 'Taken', render: (b) => <BookingSourceBadge source={b.source} /> },
       { key: 'status', header: 'Status', render: (b) => <BookingStatusBadge status={b.status} /> },
       {
@@ -234,7 +267,7 @@ export default function AdminBookings() {
         render: (b) => <span className="font-mono text-xs text-slate-400">{b.bookingNumber}</span>,
       },
     ],
-    [timezone, staffQuery.data, assignMutation],
+    [timezone, staffQuery.data, assignMutation, toast],
   );
 
   if (entitlementLoading) return null;
@@ -252,9 +285,18 @@ export default function AdminBookings() {
 
   return (
     <div>
+      {/* The server narrows a staff member's diary to their own work; saying so
+          stops a thinner-than-expected day reading as data loss. */}
+      {!isAdmin && (
+        <p className="mb-4 rounded-lg border border-ink-700 bg-ink-850/60 px-4 py-2.5 text-body-sm text-slate-400">
+          You are seeing appointments assigned to you, plus any nobody has taken yet. If this looks
+          empty, ask an admin to link your account to your team profile.
+        </p>
+      )}
+
       <PageHeader
         title="Diary"
-        subtitle="Everything booked, and what today looks like."
+        subtitle={isAdmin ? 'Everything booked, and what today looks like.' : 'Your appointments.'}
         action={
           <Button onClick={() => setWalkInOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden /> Take a booking

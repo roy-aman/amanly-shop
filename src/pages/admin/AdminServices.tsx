@@ -8,10 +8,11 @@ import { durationLabel, money } from '@/lib/format';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import { useBookingsEntitlement } from '@/lib/useBookingsGate';
-import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { ServiceGalleryEditor } from '@/components/admin/ServiceGalleryEditor';
 import type {
   AdminServiceOfferingResponse,
   CreateServiceOfferingRequest,
+  ServiceImageRequest,
   UpdateServiceOfferingRequest,
 } from '@/lib/types';
 import {
@@ -53,10 +54,15 @@ interface FormState {
   price: string;
   durationMinutes: string;
   bufferMinutes: string;
-  imageUrl: string;
-  imageAltText: string;
+  images: ServiceImageRequest[];
   active: boolean;
   sortOrder: string;
+  /** Empty string means "inherit the store's" — kept apart from "0", which is a
+   *  real value for notice and cut-off. */
+  minLeadTimeMinutes: string;
+  maxAdvanceDays: string;
+  maxConcurrentBookings: string;
+  cancellationCutoffHours: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -67,10 +73,13 @@ const EMPTY_FORM: FormState = {
   price: '',
   durationMinutes: '60',
   bufferMinutes: '0',
-  imageUrl: '',
-  imageAltText: '',
+  images: [],
   active: true,
   sortOrder: '0',
+  minLeadTimeMinutes: '',
+  maxAdvanceDays: '',
+  maxConcurrentBookings: '',
+  cancellationCutoffHours: '',
 };
 
 function fromService(s: AdminServiceOfferingResponse): FormState {
@@ -82,11 +91,27 @@ function fromService(s: AdminServiceOfferingResponse): FormState {
     price: String(s.price),
     durationMinutes: String(s.durationMinutes),
     bufferMinutes: String(s.bufferMinutes),
-    imageUrl: s.imageUrl ?? '',
-    imageAltText: s.imageAltText ?? '',
+    // An older payload carries only the single image; treat it as a gallery of one
+    // so the editor has something to show and saving does not silently drop it.
+    images:
+      s.images && s.images.length > 0
+        ? s.images.map((image) => ({ url: image.url, altText: image.altText ?? '' }))
+        : s.imageUrl
+          ? [{ url: s.imageUrl, altText: s.imageAltText ?? '' }]
+          : [],
     active: s.active,
     sortOrder: String(s.sortOrder),
+    minLeadTimeMinutes: s.minLeadTimeMinutes == null ? '' : String(s.minLeadTimeMinutes),
+    maxAdvanceDays: s.maxAdvanceDays == null ? '' : String(s.maxAdvanceDays),
+    maxConcurrentBookings: s.maxConcurrentBookings == null ? '' : String(s.maxConcurrentBookings),
+    cancellationCutoffHours:
+      s.cancellationCutoffHours == null ? '' : String(s.cancellationCutoffHours),
   };
+}
+
+/** Blank stays blank: null tells the server to inherit, where 0 would be a rule. */
+function optionalNumber(value: string): number | null {
+  return value.trim() === '' ? null : Number(value);
 }
 
 /**
@@ -272,8 +297,13 @@ export default function AdminServices() {
       description: form.description.trim() || null,
       price: Number(form.price),
       durationMinutes: Number(form.durationMinutes),
-      imageUrl: form.imageUrl.trim() || null,
-      imageAltText: form.imageAltText.trim() || null,
+      // The gallery is the source of truth; the server mirrors its first entry
+      // into imageUrl for the thumbnail, so neither is sent by hand.
+      images: form.images.map((image) => ({ url: image.url, altText: image.altText?.trim() || null })),
+      minLeadTimeMinutes: optionalNumber(form.minLeadTimeMinutes),
+      maxAdvanceDays: optionalNumber(form.maxAdvanceDays),
+      maxConcurrentBookings: optionalNumber(form.maxConcurrentBookings),
+      cancellationCutoffHours: optionalNumber(form.cancellationCutoffHours),
     };
     if (editTarget) {
       // A full replace: the server keeps nothing it is not sent, so every field
@@ -336,6 +366,7 @@ export default function AdminServices() {
         // single most-changed thing on this screen, and it was previously buried
         // three clicks deep inside the edit form.
         render: (s) => (
+          <span onClick={(e) => e.stopPropagation()}>
           <Switch
             checked={s.active}
             label={`${s.active ? 'Hide' : 'Show'} ${s.name}`}
@@ -343,6 +374,7 @@ export default function AdminServices() {
             disabled={togglingId === s.id}
             onChange={() => toggleActive(s)}
           />
+          </span>
         ),
       },
     ],
@@ -401,6 +433,7 @@ export default function AdminServices() {
             columns={columns}
             data={services}
             getRowKey={(s) => s.id}
+            onRowClick={openEdit}
             loading={isLoading}
             empty={
               <EmptyState
@@ -541,27 +574,15 @@ export default function AdminServices() {
                 merchant setting up at the counter rarely has one to hand. The
                 service's name and group are what the prompt is drafted from, so
                 filling those in first gives a better picture. */}
-            <ImageUploadField
-              label="Picture"
-              value={form.imageUrl}
-              onChange={(url) => set('imageUrl', url)}
-              aiSingleImage
-              aiContext={{
-                subject: 'CATEGORY',
-                categoryName:
-                  [form.name, categoriesQuery.data?.find((c) => c.id === form.categoryId)?.name]
-                    .filter(Boolean)
-                    .join(' — ') || null,
-                forCategory: true,
-              }}
-            />
-            <Field label="Picture description" hint="For screen readers and when the image fails to load">
-              <Input
-                aria-label="Image alt text"
-                value={form.imageAltText}
-                onChange={(e) => set('imageAltText', e.target.value)}
+            <div>
+              <h3 className="mb-2 text-body-sm font-medium text-slate-300">Pictures</h3>
+              <ServiceGalleryEditor
+                value={form.images}
+                onChange={(next) => set('images', next)}
+                serviceName={form.name}
+                categoryName={categoriesQuery.data?.find((c) => c.id === form.categoryId)?.name}
               />
-            </Field>
+            </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Order in the menu" hint="Lower numbers come first">
@@ -572,18 +593,75 @@ export default function AdminServices() {
                   onChange={(e) => set('sortOrder', e.target.value)}
                 />
               </Field>
-              <Field label="Bookable">
-                <label className="flex items-center gap-2 text-body-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={form.active}
-                    onChange={(e) => set('active', e.target.checked)}
-                    aria-label="Bookable"
-                    className="h-4 w-4 rounded border-ink-600"
+              <div className="self-end pb-2">
+                <Switch
+                  checked={form.active}
+                  onChange={(next) => set('active', next)}
+                  label="Bookable"
+                  description="Customers can book this"
+                />
+              </div>
+            </div>
+
+            {/* Rules that differ from the shop's. Empty means this service simply
+                follows the store, so a merchant who never opens this section is
+                not quietly pinned to today's numbers. */}
+            <div className="rounded-xl border border-ink-700 p-4">
+              <h3 className="text-body-sm font-medium text-slate-300">Booking rules for this service</h3>
+              <p className="mt-1 text-caption text-slate-500">
+                Leave a box empty to follow the shop's own setting. Fill one in only where this
+                service is different — a treatment that needs a day's notice, or a room there is only
+                one of.
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Shortest notice" hint="Minutes. Empty = same as the shop">
+                  <Input
+                    aria-label="Notice in minutes for this service"
+                    type="number"
+                    min={0}
+                    max={10080}
+                    placeholder="Same as shop"
+                    value={form.minLeadTimeMinutes}
+                    onChange={(e) => set('minLeadTimeMinutes', e.target.value)}
                   />
-                  Customers can book this
-                </label>
-              </Field>
+                </Field>
+                <Field label="Book up to" hint="Days ahead. Empty = same as the shop">
+                  <Input
+                    aria-label="Days ahead for this service"
+                    type="number"
+                    min={1}
+                    max={365}
+                    placeholder="Same as shop"
+                    value={form.maxAdvanceDays}
+                    onChange={(e) => set('maxAdvanceDays', e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="At the same time"
+                  hint="How many of THIS service can overlap. The shop's own limit still applies"
+                >
+                  <Input
+                    aria-label="Concurrent bookings for this service"
+                    type="number"
+                    min={1}
+                    max={100}
+                    placeholder="No extra limit"
+                    value={form.maxConcurrentBookings}
+                    onChange={(e) => set('maxConcurrentBookings', e.target.value)}
+                  />
+                </Field>
+                <Field label="Changes close" hint="Hours before. Empty = same as the shop">
+                  <Input
+                    aria-label="Cancellation cutoff for this service"
+                    type="number"
+                    min={0}
+                    max={336}
+                    placeholder="Same as shop"
+                    value={form.cancellationCutoffHours}
+                    onChange={(e) => set('cancellationCutoffHours', e.target.value)}
+                  />
+                </Field>
+              </div>
             </div>
           </div>
         </Modal>

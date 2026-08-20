@@ -1393,8 +1393,12 @@ export interface ServiceOfferingResponse {
   price: number;
   currency: string;
   durationMinutes: number;
+  /** The first gallery image, repeated so a list can draw a thumbnail without
+   *  reading the gallery. */
   imageUrl: string | null;
   imageAltText: string | null;
+  /** Every picture, in the merchant's order. Optional: an older backend sends none. */
+  images?: ServiceImageResponse[];
   /** Live average over APPROVED reviews, 1dp. `null` when there are none — show
    *  nothing rather than an empty five-star row. */
   ratingAvg: number | null;
@@ -1417,8 +1421,36 @@ export interface AdminServiceOfferingResponse {
   bufferMinutes: number;
   imageUrl: string | null;
   imageAltText: string | null;
+  images?: ServiceImageResponse[];
   active: boolean;
   sortOrder: number;
+
+  /**
+   * Per-service rule overrides. **null means inherit the store's setting** — not
+   * "no limit" — so a form must keep null and a number apart rather than
+   * treating an empty box as zero.
+   *
+   * `maxConcurrentBookings` is the odd one: it is an ADDITIONAL ceiling rather
+   * than a replacement, so a service can be scarcer than the shop but never more
+   * plentiful. One laser machine in a two-chair salon.
+   */
+  minLeadTimeMinutes?: number | null;
+  maxAdvanceDays?: number | null;
+  maxConcurrentBookings?: number | null;
+  cancellationCutoffHours?: number | null;
+}
+
+/** One picture of a service. Position is the array's own order — the first is the
+ *  thumbnail shown wherever only one fits. */
+export interface ServiceImageResponse {
+  id: string;
+  url: string;
+  altText: string | null;
+}
+
+export interface ServiceImageRequest {
+  url: string;
+  altText?: string | null;
 }
 
 /** Service categories are a FLAT list, not the product category tree. */
@@ -1428,6 +1460,10 @@ export interface ServiceCategoryResponse {
   slug: string;
   sortOrder: number;
   active: boolean;
+  /** Who works in this group. **Empty means anyone** — a group nobody has been
+   *  assigned to still offers the whole team, because an empty picker reads as a
+   *  service that cannot be booked. */
+  staffProfileIds?: string[];
 }
 
 export interface CreateServiceCategoryRequest {
@@ -1435,6 +1471,7 @@ export interface CreateServiceCategoryRequest {
   slug: string;
   sortOrder?: number;
   active?: boolean;
+  staffProfileIds?: string[] | null;
 }
 
 /** Update is a full replace: `sortOrder` and `active` are required, so the edit
@@ -1444,6 +1481,8 @@ export interface UpdateServiceCategoryRequest {
   slug: string;
   sortOrder: number;
   active: boolean;
+  /** Full replace, like the rest of this payload. */
+  staffProfileIds?: string[] | null;
 }
 
 export interface CreateServiceOfferingRequest {
@@ -1460,6 +1499,12 @@ export interface CreateServiceOfferingRequest {
   imageAltText?: string | null;
   active?: boolean;
   sortOrder?: number;
+  minLeadTimeMinutes?: number | null;
+  maxAdvanceDays?: number | null;
+  maxConcurrentBookings?: number | null;
+  cancellationCutoffHours?: number | null;
+  /** The gallery in display order; the first becomes the thumbnail. */
+  images?: ServiceImageRequest[] | null;
 }
 
 /** Full replace — unlike the create form, `bufferMinutes`, `active` and
@@ -1476,6 +1521,12 @@ export interface UpdateServiceOfferingRequest {
   imageAltText?: string | null;
   active: boolean;
   sortOrder: number;
+  minLeadTimeMinutes?: number | null;
+  maxAdvanceDays?: number | null;
+  maxConcurrentBookings?: number | null;
+  cancellationCutoffHours?: number | null;
+  /** Null leaves the existing pictures alone; an empty array clears them. */
+  images?: ServiceImageRequest[] | null;
 }
 
 /** A practitioner as a customer sees them. Nothing links staff to services in

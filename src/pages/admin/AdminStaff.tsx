@@ -294,6 +294,7 @@ export default function AdminStaff() {
         key: 'active',
         header: 'Bookable',
         render: (s) => (
+          <span onClick={(e) => e.stopPropagation()}>
           <Switch
             checked={s.active}
             label={`${s.active ? 'Hide' : 'Show'} ${s.displayName}`}
@@ -301,6 +302,7 @@ export default function AdminStaff() {
             disabled={togglingId === s.id}
             onChange={() => toggleMutation.mutate(s)}
           />
+          </span>
         ),
       },
     ],
@@ -338,6 +340,7 @@ export default function AdminStaff() {
             columns={columns}
             data={staff}
             getRowKey={(s) => s.id}
+            onRowClick={openEdit}
             loading={isLoading}
             empty={
               <EmptyState
