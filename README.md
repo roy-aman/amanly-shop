@@ -21,10 +21,26 @@ npm run dev
 ```
 
 Vite serves on `:5173` and proxies `/api`, `/oauth2` and `/login/oauth2` to a backend on
-`localhost:8080` (see `vite.config.ts`), so the browser stays same-origin and no CORS setup is
+`localhost:8088` (see `vite.config.ts`), so the browser stays same-origin and no CORS setup is
 needed locally. Run the backend separately from its own repository.
 
-If your backend listens elsewhere, point the proxy at it — no code change:
+To run the frontend against local backend:
+
+```bash
+npm run dev
+```
+
+To run the same frontend against the production backend through the local Vite proxy:
+
+```bash
+npm run prod
+```
+
+If your backend listens elsewhere, point the proxy at it with a command override:
+
+```powershell
+$env:API_PROXY_TARGET='http://localhost:8088'; npm run dev
+```
 
 ```bash
 API_PROXY_TARGET=http://localhost:8088 npm run dev
@@ -38,8 +54,12 @@ send `X-Store-Slug`; that header is ignored in production and must never be a pr
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Dev server with API proxy |
+| `npm run dev` | Dev server with `/api` proxied to local backend (`.env.development`) |
+| `npm run prod` | Dev server with `/api` proxied to production backend (`.env.production`) |
+| `npm run dev:local` | Alias for `npm run dev` |
+| `npm run dev:prod` | Alias for `npm run prod` |
 | `npm run build` | Typecheck (`tsc`) then production build into `dist/` |
+| `npm run build:prod` | Alias for `npm run build` |
 | `npm run typecheck` | Types only, no emit |
 | `npm test` | Vitest run |
 | `npm run test:watch` | Vitest in watch mode |
@@ -48,11 +68,13 @@ send `X-Store-Slug`; that header is ignored in production and must never be a pr
 
 | Variable | When | Meaning |
 | --- | --- | --- |
+| `API_PROXY_TARGET` | local Vite dev server | Backend origin Vite proxies `/api`, `/oauth2`, and `/login/oauth2` to. Loaded from `.env.development` or `.env.production` based on the npm script. |
 | `API_UPSTREAM` | runtime (Caddy) | Address Caddy proxies `/api/*` to, e.g. `http://backend.railway.internal:8080`. |
 | `VITE_API_BASE_URL` | build (Vite) | Escape hatch only. Leave unset. See the warning below. |
 
-Leave both **unset** for local development — the Vite proxy already forwards `/api` to
-`localhost:8080`, and an empty API base is what `apiUrl()` in `src/lib/http.ts` falls back to.
+Leave `VITE_API_BASE_URL` **unset** for normal local development and production deployment. The
+Vite/Caddy proxy forwards `/api` to the selected backend, and an empty API base is what `apiUrl()`
+in `src/lib/http.ts` falls back to.
 
 Only `src/lib/http.ts` knows about the API origin. Every module under `src/api/` passes
 root-relative paths like `/api/v1/products` through `request()`, which resolves them — so adding a
