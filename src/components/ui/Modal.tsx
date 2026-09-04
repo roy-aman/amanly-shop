@@ -40,8 +40,11 @@ export function Modal({
   if (!open) return null;
   const width = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' }[size];
   return (
-    <div className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <div className="absolute inset-0" onClick={dismissible ? onClose : undefined} aria-hidden />
+    <div
+      className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+      onClick={dismissible ? onClose : undefined}
+    >
+      <div className="absolute inset-0" aria-hidden />
       {/* Settles in place rather than dropping in — a dialog that scales up from
           the centre reads as the page focusing, not as a new page arriving. */}
       <div
@@ -49,10 +52,12 @@ export function Modal({
           'relative z-10 my-auto flex max-h-[calc(100vh-2rem)] w-full flex-col animate-scale-in rounded-2xl border border-ink-700 bg-ink-900 shadow-lift',
           width,
         )}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-ink-700 px-5 py-4">
           <h2 className="text-base font-semibold text-slate-100">{title}</h2>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-full p-1.5 text-slate-500 transition duration-200 ease-emphasized hover:bg-ink-800 hover:text-slate-200 active:scale-90"
             aria-label="Close"

@@ -6,8 +6,8 @@ import { MemoryRouter } from 'react-router-dom';
 import Checkout from './Checkout';
 import { createTestQueryClient } from '@/test/utils';
 import { getPublicStore } from '@/api/store';
-import { getCart } from '@/api/cart';
-import { placeOrder } from '@/api/orders';
+import { getCart, addToCart } from '@/api/cart';
+import { placeOrder, cancelOrder } from '@/api/orders';
 import { validateCoupon } from '@/api/coupons';
 import { listAddresses } from '@/api/addresses';
 import type {
@@ -19,8 +19,8 @@ import type {
 } from '@/lib/types';
 
 vi.mock('@/api/store', () => ({ getPublicStore: vi.fn() }));
-vi.mock('@/api/cart', () => ({ getCart: vi.fn() }));
-vi.mock('@/api/orders', () => ({ placeOrder: vi.fn(), verifyRazorpayPayment: vi.fn() }));
+vi.mock('@/api/cart', () => ({ getCart: vi.fn(), addToCart: vi.fn() }));
+vi.mock('@/api/orders', () => ({ placeOrder: vi.fn(), verifyRazorpayPayment: vi.fn(), cancelOrder: vi.fn() }));
 vi.mock('@/api/coupons', () => ({ validateCoupon: vi.fn() }));
 vi.mock('@/api/addresses', () => ({ listAddresses: vi.fn(), addAddress: vi.fn() }));
 vi.mock('@/lib/razorpay', () => ({ loadRazorpay: vi.fn() }));
@@ -42,6 +42,8 @@ vi.mock('react-router-dom', async (orig) => {
 const storeMock = vi.mocked(getPublicStore);
 const cartMock = vi.mocked(getCart);
 const placeMock = vi.mocked(placeOrder);
+const cancelMock = vi.mocked(cancelOrder);
+const addToCartMock = vi.mocked(addToCart);
 const addressesMock = vi.mocked(listAddresses);
 const validateCouponMock = vi.mocked(validateCoupon);
 
@@ -227,6 +229,7 @@ describe('Checkout (WP-2.5)', () => {
         },
         notes: null,
         paymentMethod: 'CASH',
+        deliveryMethod: 'DELIVERY',
       }),
     );
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/orders/o1'));
@@ -268,5 +271,61 @@ describe('Checkout (WP-2.5)', () => {
     expect(await screen.findByText(/coupon was removed/i)).toBeInTheDocument();
     expect(screen.queryByText(/Discount \(/i)).not.toBeInTheDocument();
     await waitFor(() => expect(localStorage.getItem('rc-applied-coupon')).toBeNull());
+  });
+
+  it('closing Manual UPI QR pop-up via cross button cancels order, restores cart and leaves user on review page', async () => {
+    storeMock.mockResolvedValue(store({ manualUpiEnabled: true, codEnabled: true, onlinePaymentEnabled: false }));
+    cartMock.mockResolvedValue(cart());
+    addressesMock.mockResolvedValue([address()]);
+
+    const user = userEvent.setup();
+    renderCheckout();
+
+    await screen.findByText(/1 King St/);
+    await user.click(screen.getByRole('button', { name: /Continue to review/i }));
+
+    await screen.findByText('Review & place order');
+    await user.click(screen.getByRole('radio', { name: /UPI \(scan to pay\)/i }));
+
+    placeMock.mockResolvedValue(codOrder({
+      id: 'order-999',
+      orderNumber: 'ORD-999',
+      paymentMethod: 'MANUAL_UPI',
+      items: [{ id: 'it-1', productId: 'prod-1', productName: 'Signet Ring', sku: 'SR-1', unitPrice: 100, quantity: 1, subtotal: 100 }],
+      manualUpiPayment: {
+        token: 'AMA-999',
+        vpa: 'store@upi',
+        qrDataUri: 'data:image/png;base64,qr',
+        amount: 100,
+        currency: 'USD',
+      },
+    }));
+
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    // QR pop-up appears
+    expect(await screen.findByAltText(/Scan to pay via UPI/i)).toBeInTheDocument();
+
+    // Clicking outside / backdrop does NOT close it
+    const heading = screen.getByRole('heading', { name: 'Pay via UPI' });
+    const backdrop = heading.closest('.fixed');
+    if (backdrop) {
+      (backdrop as HTMLElement).click();
+    }
+    expect(screen.getByAltText(/Scan to pay via UPI/i)).toBeInTheDocument();
+
+    // Clicking cross button closes it, cancels the order, restores cart, stays on Review step
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    await user.click(closeButton);
+
+    await waitFor(() => {
+      expect(cancelMock).toHaveBeenCalledWith('order-999');
+      expect(addToCartMock).toHaveBeenCalledWith('prod-1', 1, undefined);
+    });
+
+    // Modal is closed, Review & place order is still visible
+    expect(screen.queryByAltText(/Scan to pay via UPI/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Review & place order')).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('/orders/'));
   });
 });

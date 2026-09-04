@@ -53,4 +53,22 @@ describe('Modal', () => {
     );
     expect(screen.queryByText('Body')).not.toBeInTheDocument();
   });
+
+  it('does not dismiss on backdrop click when dismissible is false', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open onClose={onClose} title="Non-dismissible" dismissible={false}>
+        <p>Body</p>
+      </Modal>,
+    );
+    const heading = screen.getByRole('heading', { name: 'Non-dismissible' });
+    const backdrop = heading.closest('.fixed');
+    expect(backdrop).not.toBeNull();
+    (backdrop as HTMLElement).click();
+    expect(onClose).not.toHaveBeenCalled();
+
+    const closeBtn = screen.getByRole('button', { name: 'Close' });
+    closeBtn.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

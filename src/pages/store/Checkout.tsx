@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CreditCard, MapPin, Plus, QrCode, Store as StoreIcon, Tag, Truck, Wallet } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
-import { getCart } from '@/api/cart';
+import { addToCart, getCart } from '@/api/cart';
 import { cancelOrder, placeOrder, verifyRazorpayPayment } from '@/api/orders';
 import { validateCoupon } from '@/api/coupons';
 import { addAddress, listAddresses } from '@/api/addresses';
@@ -185,6 +185,7 @@ export default function Checkout() {
   const [manualUpiShowMarkDone, setManualUpiShowMarkDone] = useState(false);
   const [manualUpiConfirming, setManualUpiConfirming] = useState(false);
   const [manualUpiDone, setManualUpiDone] = useState(false);
+  const [restoringCart, setRestoringCart] = useState(false);
 
   // The QR shows immediately; "Mark payment done" takes 5s to appear below it, same as
   // reopening the pop-up later from the order page.
@@ -213,27 +214,49 @@ export default function Checkout() {
 
   async function closeManualUpiModal() {
     if (!manualUpiOrder) return;
-    const orderId = manualUpiOrder.id;
+    const orderToClose = manualUpiOrder;
     const wasConfirmed = manualUpiDone;
-    setManualUpiOrder(null);
-    setManualUpiConfirming(false);
-    setManualUpiDone(false);
 
     if (wasConfirmed) {
+      setManualUpiOrder(null);
+      setManualUpiConfirming(false);
+      setManualUpiDone(false);
+      clearStoredCoupon();
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ['cart'] });
       toast.success('Order placed!', 'Thank you — your order has been received.');
-      navigate(`/orders/${orderId}`);
+      navigate(`/orders/${orderToClose.id}`);
       return;
     }
 
-    // Closed via the X before confirming payment — the customer never actually committed to
-    // this order, so cancel it rather than leaving a phantom PENDING one sitting unpaid.
+    // Closed via the X before confirming payment:
+    // 1. Cancel the order on server so it is NOT placed
+    // 2. Restore items back to the user's cart in the database
+    // 3. User remains at the review page only
+    setManualUpiConfirming(false);
+    setManualUpiDone(false);
+    setManualUpiOrder(null);
+    setSubmitting(false);
+    setRestoringCart(true);
+
     try {
-      await cancelOrder(orderId);
+      await cancelOrder(orderToClose.id);
+      for (const it of orderToClose.items) {
+        try {
+          await addToCart(it.productId, it.quantity, it.variantId);
+        } catch {
+          // ignore individual add failure
+        }
+      }
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ['cart'] });
+      toast.info('Order not placed', 'Payment was not confirmed. You can review your order and try again.');
     } catch {
-      // best-effort — if cancellation fails the order simply stays pending
+      // best-effort
+    } finally {
+      setRestoringCart(false);
+      setStep(1);
     }
-    await refresh();
-    toast.info('Order not placed', "You closed the payment window before confirming — nothing was charged.");
   }
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId) ?? null;
@@ -293,10 +316,10 @@ export default function Checkout() {
 
   // Redirect to /cart if the cart is empty.
   useEffect(() => {
-    if (cartQuery.isSuccess && (!cart || cart.items.length === 0)) {
+    if (cartQuery.isSuccess && (!cart || cart.items.length === 0) && !manualUpiOrder && !restoringCart) {
       navigate('/cart', { replace: true });
     }
-  }, [cartQuery.isSuccess, cart, navigate]);
+  }, [cartQuery.isSuccess, cart, navigate, manualUpiOrder, restoringCart]);
 
   // Move keyboard focus to the active step heading when the step changes.
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -407,8 +430,6 @@ export default function Checkout() {
       const order = await placeOrder(body);
 
       if (!order.paymentAction) {
-        clearStoredCoupon();
-        await refresh();
         if (order.manualUpiPayment) {
           // Order exists server-side (the token and QR are tied to it), but the customer doesn't
           // see the order summary until they've scanned, paid and confirmed — see
@@ -417,6 +438,9 @@ export default function Checkout() {
           setSubmitting(false);
           return;
         }
+        clearStoredCoupon();
+        await refresh();
+        await queryClient.invalidateQueries({ queryKey: ['cart'] });
         toast.success('Order placed!', 'Thank you — your order has been received.');
         navigate(`/orders/${order.id}`);
         return;
