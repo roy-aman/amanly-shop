@@ -328,4 +328,47 @@ describe('Checkout (WP-2.5)', () => {
     expect(screen.getByText('Review & place order')).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('/orders/'));
   });
+
+  it('when order is placed with Manual UPI and user marks payment done, navigates to the order details page', async () => {
+    storeMock.mockResolvedValue(store({ manualUpiEnabled: true, codEnabled: true, onlinePaymentEnabled: false }));
+    cartMock.mockResolvedValue(cart());
+    addressesMock.mockResolvedValue([address()]);
+
+    const user = userEvent.setup();
+    renderCheckout();
+
+    await screen.findByText(/1 King St/);
+    await user.click(screen.getByRole('button', { name: /Continue to review/i }));
+
+    await screen.findByText('Review & place order');
+    await user.click(screen.getByRole('radio', { name: /UPI \(scan to pay\)/i }));
+
+    placeMock.mockResolvedValue(codOrder({
+      id: 'order-123',
+      orderNumber: 'ORD-123',
+      paymentMethod: 'MANUAL_UPI',
+      items: [{ id: 'it-1', productId: 'prod-1', productName: 'Signet Ring', sku: 'SR-1', unitPrice: 100, quantity: 1, subtotal: 100 }],
+      manualUpiPayment: {
+        token: 'AMA-123',
+        vpa: 'store@upi',
+        qrDataUri: 'data:image/png;base64,qr',
+        amount: 100,
+        currency: 'USD',
+      },
+    }));
+
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    // QR pop-up appears
+    expect(await screen.findByAltText(/Scan to pay via UPI/i)).toBeInTheDocument();
+
+    // Mark payment done button is clicked
+    const markDoneBtn = screen.getByRole('button', { name: /Mark payment done/i });
+    await user.click(markDoneBtn);
+
+    // Navigates directly to order details page
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/orders/order-123');
+    }, { timeout: 3000 });
+  });
 });

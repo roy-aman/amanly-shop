@@ -10,7 +10,7 @@ import { addAddress, listAddresses } from '@/api/addresses';
 import { loadRazorpay } from '@/lib/razorpay';
 import { clearStoredCoupon, getStoredCoupon } from '@/lib/couponStorage';
 import { ApiError } from '@/lib/http';
-import { formatDateTime, money, orderRef } from '@/lib/format';
+import { money } from '@/lib/format';
 import { estimateCartTotals } from '@/lib/totals';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type {
@@ -177,64 +177,42 @@ export default function Checkout() {
   // Failure-recovery banner after a cancelled/failed online payment.
   const [paymentIssue, setPaymentIssue] = useState<string | null>(null);
 
-  // Manual UPI: the order is placed for real up front (the token and QR are tied to it), but we
-  // hold the customer here on a pop-up — QR, then "Mark payment done", then a confirming pause —
-  // before sending them on to the order summary, so placing the order doesn't feel done until
-  // they've actually paid.
+  // Manual UPI: customer scans QR to pay. When payment is marked done, the order flow
+  // completes and navigates directly to the order details page.
   const [manualUpiOrder, setManualUpiOrder] = useState<OrderResponse | null>(null);
-  const [manualUpiShowMarkDone, setManualUpiShowMarkDone] = useState(false);
   const [manualUpiConfirming, setManualUpiConfirming] = useState(false);
-  const [manualUpiDone, setManualUpiDone] = useState(false);
   const [restoringCart, setRestoringCart] = useState(false);
-
-  // The QR shows immediately; "Mark payment done" takes 5s to appear below it, same as
-  // reopening the pop-up later from the order page.
-  useEffect(() => {
-    if (!manualUpiOrder) {
-      setManualUpiShowMarkDone(false);
-      return;
-    }
-    const timer = setTimeout(() => setManualUpiShowMarkDone(true), 5000);
-    return () => clearTimeout(timer);
-  }, [manualUpiOrder]);
 
   function finishManualUpiOrder() {
     if (!manualUpiOrder) return;
+    const orderToOpen = manualUpiOrder;
     setManualUpiConfirming(true);
-    setTimeout(() => {
+    try {
+      localStorage.setItem(`rc-manual-upi-done-${orderToOpen.id}`, '1');
+    } catch {
+      // best-effort
+    }
+    // Brief confirming pause to give feedback, then take user directly to order details page
+    setTimeout(async () => {
       setManualUpiConfirming(false);
-      setManualUpiDone(true);
-      try {
-        localStorage.setItem(`rc-manual-upi-done-${manualUpiOrder.id}`, '1');
-      } catch {
-        // best-effort — worst case the "Pay via UPI" button reappears on the order page
-      }
-    }, 5000);
+      setManualUpiOrder(null);
+      clearStoredCoupon();
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: ['cart'] });
+      toast.success('Order placed!', 'Thank you — your order has been received.');
+      navigate(`/orders/${orderToOpen.id}`);
+    }, 1000);
   }
 
   async function closeManualUpiModal() {
     if (!manualUpiOrder) return;
     const orderToClose = manualUpiOrder;
-    const wasConfirmed = manualUpiDone;
-
-    if (wasConfirmed) {
-      setManualUpiOrder(null);
-      setManualUpiConfirming(false);
-      setManualUpiDone(false);
-      clearStoredCoupon();
-      await refresh();
-      await queryClient.invalidateQueries({ queryKey: ['cart'] });
-      toast.success('Order placed!', 'Thank you — your order has been received.');
-      navigate(`/orders/${orderToClose.id}`);
-      return;
-    }
 
     // Closed via the X before confirming payment:
     // 1. Cancel the order on server so it is NOT placed
     // 2. Restore items back to the user's cart in the database
     // 3. User remains at the review page only
     setManualUpiConfirming(false);
-    setManualUpiDone(false);
     setManualUpiOrder(null);
     setSubmitting(false);
     setRestoringCart(true);
@@ -918,74 +896,36 @@ export default function Checkout() {
         <Modal
           open
           onClose={closeManualUpiModal}
-          title={manualUpiDone ? 'Order placed' : 'Pay via UPI'}
+          title="Pay via UPI"
           size="sm"
           dismissible={false}
         >
-          {manualUpiDone ? (
-            <div className="flex flex-col items-center gap-4 py-2 text-center">
-              <dl className="w-full divide-y divide-ink-700 text-body-sm">
-                <div className="flex items-center justify-between py-2">
-                  <dt className="text-slate-400">Order ID</dt>
-                  <dd className="tabular-nums text-slate-100">{orderRef(manualUpiOrder)}</dd>
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <dt className="text-slate-400">Ordered on</dt>
-                  <dd className="text-slate-100">{formatDateTime(manualUpiOrder.createdAt)}</dd>
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <dt className="text-slate-400">Amount</dt>
-                  <dd className="text-slate-100">
-                    {money(manualUpiOrder.manualUpiPayment.amount, manualUpiOrder.manualUpiPayment.currency)}
-                  </dd>
-                </div>
-              </dl>
-              <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
-                <p className="text-overline uppercase text-slate-400">Your payment token</p>
-                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-slate-100">
-                  {firstNameOf(manualUpiOrder)
-                    ? `Payment from ${firstNameOf(manualUpiOrder)}: ${manualUpiOrder.manualUpiPayment.token}`
-                    : manualUpiOrder.manualUpiPayment.token}
-                </p>
-              </div>
-              <p className="max-w-sm text-caption text-slate-400">
-                For pickup, quote this token to staff — for delivery, keep it as your reference.
-                We&apos;ll email you once payment is confirmed.
+          <div className="flex flex-col items-center gap-4 py-2 text-center">
+            <img
+              src={manualUpiOrder.manualUpiPayment.qrDataUri}
+              alt="Scan to pay via UPI"
+              className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
+            />
+            <div>
+              <p className="text-h3 font-display text-slate-100">
+                {money(manualUpiOrder.manualUpiPayment.amount, manualUpiOrder.manualUpiPayment.currency)}
               </p>
-              <Button onClick={closeManualUpiModal} fullWidth>
-                View order
-              </Button>
+              <p className="mt-1 text-body-sm text-slate-400">to {manualUpiOrder.manualUpiPayment.vpa}</p>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-4 py-2 text-center">
-              <img
-                src={manualUpiOrder.manualUpiPayment.qrDataUri}
-                alt="Scan to pay via UPI"
-                className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
-              />
-              <div>
-                <p className="text-h3 font-display text-slate-100">
-                  {money(manualUpiOrder.manualUpiPayment.amount, manualUpiOrder.manualUpiPayment.currency)}
-                </p>
-                <p className="mt-1 text-body-sm text-slate-400">to {manualUpiOrder.manualUpiPayment.vpa}</p>
+            {manualUpiConfirming ? (
+              <div className="flex items-center gap-2 text-body-sm text-slate-400">
+                <Spinner className="h-4 w-4" />
+                Confirming your payment…
               </div>
-              {manualUpiConfirming ? (
-                <div className="flex items-center gap-2 text-body-sm text-slate-400">
-                  <Spinner className="h-4 w-4" />
-                  Confirming your payment…
-                </div>
-              ) : manualUpiShowMarkDone ? (
-                <Button onClick={finishManualUpiOrder}>Mark payment done</Button>
-              ) : (
-                <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
-              )}
-              <p className="max-w-sm text-caption text-slate-400">
-                {manualUpiConfirming || manualUpiShowMarkDone
-                  ? "Once you've paid, tap Mark payment done to get your token."
-                  : 'Scan the QR with any UPI app to pay.'}
-              </p>
-            </div>
-          )}
+            ) : (
+              <Button onClick={finishManualUpiOrder}>Mark payment done</Button>
+            )}
+            <p className="max-w-sm text-caption text-slate-400">
+              {manualUpiConfirming
+                ? 'Confirming payment — you will be redirected to your order details shortly.'
+                : "Scan the QR with any UPI app to pay. Once you've paid, tap Mark payment done."}
+            </p>
+          </div>
         </Modal>
       )}
     </div>
