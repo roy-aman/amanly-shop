@@ -60,7 +60,7 @@ export default function WishlistButton({
       title={label}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-full transition duration-200 ease-emphasized',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70',
+        'focus:outline-none focus-visible:outline-none',
         'active:scale-90 disabled:opacity-50 disabled:active:scale-100',
         variant === 'overlay'
           ? 'h-9 w-9 bg-ink-950/80 text-slate-300 backdrop-blur hover:scale-110 hover:bg-ink-950 hover:text-slate-100'

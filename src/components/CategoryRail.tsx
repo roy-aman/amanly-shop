@@ -96,7 +96,7 @@ function CategoryTile({
         type="button"
         onClick={onClick}
         aria-pressed={active}
-        className="group flex w-[4.5rem] flex-col items-center gap-2 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+        className="group flex w-[4.5rem] flex-col items-center gap-2 rounded-2xl focus:outline-none focus-visible:outline-none"
       >
         <span
           className={cn(

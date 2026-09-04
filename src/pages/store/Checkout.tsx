@@ -509,7 +509,7 @@ export default function Checkout() {
         {/* ── Step content ─────────────────────────────────────────────── */}
         <div className="space-y-6">
           {step === 0 && (
-            <section className="space-y-5 rounded-2xl border border-ink-700 bg-ink-900 p-6">
+            <section className="space-y-5 rounded-2xl border border-ink-700 bg-ink-900 p-6 shadow-card">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 {deliveryMethod === 'PICKUP' ? 'Pickup details' : 'Delivery address'}
               </h2>
@@ -683,7 +683,7 @@ export default function Checkout() {
           )}
 
           {step === 1 && (
-            <section className="space-y-6 rounded-2xl border border-ink-700 bg-ink-900 p-6">
+            <section className="space-y-6 rounded-2xl border border-ink-700 bg-ink-900 p-6 shadow-card">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Review &amp; place order
               </h2>

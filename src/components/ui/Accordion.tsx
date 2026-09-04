@@ -61,7 +61,7 @@ export function AccordionItem({
           className={cn(
             'group flex flex-1 items-center justify-between gap-4 px-5 py-4 text-left text-sm font-medium text-slate-200 transition',
             'hover:bg-ink-800/60',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950',
+            'focus:outline-none focus-visible:outline-none',
           )}
         >
           {title}

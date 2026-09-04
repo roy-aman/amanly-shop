@@ -309,7 +309,7 @@ export default function Cart() {
               <div key={item.cartItemId} className="flex gap-5 py-6 first:pt-0">
                 <Link
                   to={`/products/${item.productSlug}`}
-                  className="shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                  className="shrink-0 focus:outline-none focus-visible:outline-none"
                   aria-label={item.productName}
                 >
                   <ImageWithFallback alt={item.productName} wrapperClassName="h-28 w-24 bg-ink-850" />
@@ -397,7 +397,7 @@ export default function Cart() {
         {/* The one place a filled panel earns its keep: the totals need to read
             as a single settled block, and it stays in view while items scroll. */}
         <aside className="lg:sticky lg:top-28 lg:self-start">
-          <div className="bg-ink-850 p-6">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900 p-6 shadow-card">
             <h2 className="text-overline uppercase text-slate-500">Summary</h2>
 
             <dl className="mt-5 space-y-3 text-body-sm">
@@ -454,7 +454,7 @@ export default function Cart() {
                   <button
                     type="button"
                     onClick={removeCoupon}
-                    className="rounded p-1.5 text-success-300 transition hover:bg-success-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+                    className="rounded p-1.5 text-success-300 transition hover:bg-success-500/15 focus:outline-none focus-visible:outline-none"
                     aria-label={`Remove coupon ${appliedCoupon.code}`}
                   >
                     <X className="h-4 w-4" />

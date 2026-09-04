@@ -31,7 +31,7 @@ export function SummarySection({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn('overflow-hidden rounded-2xl border border-ink-700 bg-ink-900', className)}>
+    <section className={cn('overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 shadow-card', className)}>
       <div className="flex items-center justify-between gap-3 border-b border-ink-700 px-5 py-3.5">
         <h2 className="text-overline uppercase tracking-[0.14em] text-slate-500">{title}</h2>
         {action}

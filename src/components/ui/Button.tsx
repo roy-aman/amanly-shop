@@ -39,7 +39,8 @@ export const BUTTON_SIZES: Record<ButtonSize, string> = {
  */
 const BUTTON_BASE =
   'inline-flex select-none items-center justify-center gap-2 rounded-full ' +
-  'transition duration-200 ease-emphasized active:scale-[0.97]';
+  'transition duration-200 ease-emphasized active:scale-[0.97] ' +
+  'focus:outline-none focus-visible:outline-none';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;

@@ -51,7 +51,7 @@ export function TabsTrigger({ value, className, children }: { value: string; cla
         // gold in the console — a selected tab is state, and on white gold is not
         // a state anyone can see.
         'data-[state=active]:border-primary data-[state=active]:text-slate-100',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 rounded-t',
+        'focus:outline-none focus-visible:outline-none',
         className,
       )}
     >
@@ -65,7 +65,7 @@ export function TabsContent({ value, className, children }: { value: string; cla
     <RadixTabs.Content
       value={value}
       className={cn(
-        'mt-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 rounded',
+        'mt-4 focus:outline-none focus-visible:outline-none',
         className,
       )}
     >

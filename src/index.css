@@ -220,14 +220,27 @@
      single most "dark SaaS dashboard" signal on the page, and premium retail
      reads as an uninterrupted ground in either palette. Now that a shopper can
      turn dark on, `.dark` alone would have leaked this onto the storefront. */
-  .dark.theme-console body::before {
+  /* Ambient depth lighting so frosted glass surfaces have a luminous texture to refract */
+  body::before {
     content: '';
     position: fixed;
     inset: 0;
     z-index: -1;
     background:
-      radial-gradient(1100px 600px at 15% -10%, rgba(212, 175, 55, 0.08), transparent 60%),
-      radial-gradient(900px 500px at 110% 10%, rgba(212, 175, 55, 0.04), transparent 55%);
+      radial-gradient(1200px 600px at 15% -10%, rgba(212, 175, 55, 0.03), transparent 60%),
+      radial-gradient(900px 500px at 95% 15%, rgba(0, 0, 0, 0.02), transparent 55%);
+    pointer-events: none;
+  }
+
+  .dark body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(1200px 700px at 20% -10%, rgba(212, 175, 55, 0.05), transparent 65%),
+      radial-gradient(1000px 600px at 85% 15%, rgba(255, 255, 255, 0.02), transparent 60%),
+      radial-gradient(900px 500px at 50% 105%, rgba(212, 175, 55, 0.03), transparent 60%);
     pointer-events: none;
   }
 
@@ -238,8 +251,38 @@
     @apply text-slate-100;
   }
 
+  /* Remove any harsh tap/click highlight borders or lingering focus outlines */
+  *,
+  *::before,
+  *::after {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  *:focus,
   *:focus-visible {
-    @apply outline-none ring-2 ring-gold-400/70 ring-offset-2 ring-offset-ink-950;
+    outline: none !important;
+  }
+
+  /* Ensure clickable elements (links, buttons, tabs, cards) never show lingering highlighter borders on click */
+  a,
+  button,
+  [role="button"],
+  [role="tab"],
+  [tabindex] {
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  a:focus,
+  a:focus-visible,
+  button:focus,
+  button:focus-visible,
+  [role="button"]:focus,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus,
+  [role="tab"]:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
   }
 
   /* Honour the OS setting: strip motion, keep every state change instant and
@@ -300,7 +343,16 @@
   }
 
   .rc-card {
-    @apply rounded-2xl border border-ink-700/70 bg-ink-900/70 shadow-card;
+    @apply rounded-2xl border border-ink-700 bg-ink-900 shadow-card;
+  }
+
+  /* Glassmorphism utilities for subtle, premium translucency without loss of readability */
+  .rc-glass {
+    @apply bg-ink-900/80 backdrop-blur-xl border border-ink-700/70 shadow-card;
+  }
+
+  .rc-glass-panel {
+    @apply bg-ink-900/90 backdrop-blur-2xl border border-ink-700/80 shadow-lift;
   }
 
   /* ── Interaction utilities ───────────────────────────────────────────

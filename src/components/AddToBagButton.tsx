@@ -67,7 +67,7 @@ export default function AddToBagButton({
   const shell =
     'inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border text-body-sm ' +
     'font-medium transition duration-200 ease-emphasized focus-visible:outline-none ' +
-    'focus-visible:ring-2 focus-visible:ring-gold-400/70 disabled:cursor-not-allowed';
+    'focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed';
 
   if (soldOut) {
     return (

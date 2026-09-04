@@ -55,7 +55,7 @@ export default function ServiceCard({ service }: { service: ServiceOfferingRespo
               name, the same idiom the product grid uses. */}
           <Link
             to={`/services/${service.slug}`}
-            className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70"
+            className="after:absolute after:inset-0 after:content-[''] focus:outline-none focus-visible:outline-none"
           >
             {service.name}
           </Link>
