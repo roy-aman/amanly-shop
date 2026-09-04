@@ -9,7 +9,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { OrderTotals } from '@/components/OrderTotals';
 import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
 import { useToast } from '@/context/ToastContext';
-import { Button, EmptyState, LinkButton, Modal } from '@/components/ui';
+import { Button, EmptyState, LinkButton, Modal, Spinner } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 
@@ -34,21 +34,24 @@ export default function OrderDetail() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  const [showMarkDone, setShowMarkDone] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [tokenRevealed, setTokenRevealed] = useState(false);
 
-  // Give the customer a few seconds with just the QR before offering "I've paid" — the
-  // token is a receipt for a payment that's supposedly already happened, not something to
-  // rush to before scanning.
+  // Reset back to the QR every time the pop-up is reopened.
   useEffect(() => {
     if (!qrOpen) {
-      setShowMarkDone(false);
+      setConfirming(false);
       setTokenRevealed(false);
-      return;
     }
-    const timer = setTimeout(() => setShowMarkDone(true), 5000);
-    return () => clearTimeout(timer);
   }, [qrOpen]);
+
+  function handleMarkPaymentDone() {
+    setConfirming(true);
+    setTimeout(() => {
+      setConfirming(false);
+      setTokenRevealed(true);
+    }, 5000);
+  }
 
   const orderQuery = useQuery({
     queryKey: ['order', id],
@@ -154,31 +157,20 @@ export default function OrderDetail() {
             <span className="inline-flex items-center gap-2">
               {titleCase(order.paymentMethod)}
               <PaymentStatusBadge status={order.paymentStatus} />
+              {order.manualUpiPayment && (
+                <button
+                  type="button"
+                  onClick={() => setQrOpen(true)}
+                  className="rounded text-body-sm text-primary underline-offset-4 transition hover:underline"
+                >
+                  Pay via UPI
+                </button>
+              )}
             </span>
           </InfoRow>
           <InfoRow label="Last updated">{formatDateTime(order.updatedAt)}</InfoRow>
         </dl>
       </SummarySection>
-
-      {order.manualUpiPayment && (
-        <SummarySection title="Pay via UPI">
-          <div className="flex items-start gap-3.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
-              <QrCode className="h-5 w-5" aria-hidden />
-            </div>
-            <div className="min-w-0 flex-1 text-body-sm text-slate-400">
-              <p className="font-medium text-slate-100">
-                {money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}
-                {firstName && <> — token for {firstName}</>}
-              </p>
-              <p>Awaiting payment. Scan the QR to pay, or quote your token to staff.</p>
-            </div>
-            <Button size="sm" onClick={() => setQrOpen(true)} className="shrink-0">
-              Show QR to pay
-            </Button>
-          </div>
-        </SummarySection>
-      )}
 
       {!order.manualUpiPayment && order.manualUpiToken && (
         <SummarySection title="Manual UPI payment">
@@ -262,19 +254,29 @@ export default function OrderDetail() {
       </Modal>
 
       {order.manualUpiPayment && (
-        <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Pay via UPI" size="sm">
-          <div className="flex flex-col items-center gap-4 py-2 text-center">
-            <img
-              src={order.manualUpiPayment.qrDataUri}
-              alt="Scan to pay via UPI"
-              className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
-            />
-            <div>
-              <p className="text-h3 font-display text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</p>
-              <p className="mt-1 text-body-sm text-slate-400">to {order.manualUpiPayment.vpa}</p>
-            </div>
-            {tokenRevealed ? (
-              <div className="rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
+        <Modal
+          open={qrOpen}
+          onClose={() => setQrOpen(false)}
+          title={tokenRevealed ? 'Payment token' : 'Pay via UPI'}
+          size="sm"
+        >
+          {tokenRevealed ? (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <dl className="w-full divide-y divide-ink-700 text-body-sm">
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-400">Order ID</dt>
+                  <dd className="tabular-nums text-slate-100">{orderRef(order)}</dd>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-400">Ordered on</dt>
+                  <dd className="text-slate-100">{formatDateTime(order.createdAt)}</dd>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-400">Amount</dt>
+                  <dd className="text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</dd>
+                </div>
+              </dl>
+              <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
                 <p className="text-overline uppercase text-slate-400">
                   {firstName ? `Token for ${firstName}` : 'Your payment token'}
                 </p>
@@ -282,18 +284,36 @@ export default function OrderDetail() {
                   {firstName ? tokenBody(order.manualUpiPayment.token) : order.manualUpiPayment.token}
                 </p>
               </div>
-            ) : showMarkDone ? (
-              <Button onClick={() => setTokenRevealed(true)}>Mark payment done</Button>
-            ) : (
-              <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
-            )}
-            <p className="max-w-sm text-caption text-slate-400">
-              {tokenRevealed
-                ? 'For pickup, quote this token to staff — for delivery, keep it as your reference. ' +
-                  "We'll email you once payment is confirmed."
-                : "Once you've paid, tap Mark payment done to get your token."}
-            </p>
-          </div>
+              <p className="max-w-sm text-caption text-slate-400">
+                For pickup, quote this token to staff — for delivery, keep it as your reference.
+                We&apos;ll email you once payment is confirmed.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <img
+                src={order.manualUpiPayment.qrDataUri}
+                alt="Scan to pay via UPI"
+                className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
+              />
+              <div>
+                <p className="text-h3 font-display text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</p>
+                <p className="mt-1 text-body-sm text-slate-400">to {order.manualUpiPayment.vpa}</p>
+              </div>
+              {confirming ? (
+                <div className="flex items-center gap-2 text-body-sm text-slate-400">
+                  <Spinner className="h-4 w-4" />
+                  Confirming your payment…
+                </div>
+              ) : (
+                <Button onClick={handleMarkPaymentDone}>Mark payment done</Button>
+              )}
+              <p className="max-w-sm text-caption text-slate-400">
+                Scan the QR with any UPI app and pay the amount above. Once you&apos;ve paid, tap Mark
+                payment done to get your token.
+              </p>
+            </div>
+          )}
         </Modal>
       )}
     </div>
