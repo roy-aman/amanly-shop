@@ -130,7 +130,6 @@ export default function OrderDetail() {
   const a = order.shippingAddress;
   const canCancel = order.status === 'PENDING' || order.status === 'PROCESSING';
   const itemCount = order.items.reduce((n, it) => n + it.quantity, 0);
-  const firstName = a.name?.trim().split(/\s+/)[0];
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -214,7 +213,7 @@ export default function OrderDetail() {
             </div>
             <div className="text-body-sm text-slate-400">
               <p className="font-medium text-slate-100">
-                {firstName ? `Payment from ${firstName}: ${order.manualUpiToken}` : `Token: ${order.manualUpiToken}`}
+                Token: <span className="font-mono">{order.manualUpiToken}</span>
               </p>
               <p>
                 {order.paymentStatus === 'PAID'
@@ -313,10 +312,8 @@ export default function OrderDetail() {
               </dl>
               <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
                 <p className="text-overline uppercase text-slate-400">Your payment token</p>
-                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-slate-100">
-                  {firstName
-                    ? `Payment from ${firstName}: ${order.manualUpiPayment.token}`
-                    : order.manualUpiPayment.token}
+                <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-wide text-slate-100">
+                  {order.manualUpiPayment.token}
                 </p>
               </div>
               <p className="max-w-sm text-caption text-slate-400">
