@@ -105,8 +105,8 @@ function CategoryTile({
             // The selected tile is ringed rather than filled: a filled swatch would fight whatever
             // photograph is inside it, and half these tiles are photographs.
             active
-              ? 'ring-2 ring-brand ring-offset-2 ring-offset-ink-950'
-              : 'group-hover:ring-2 group-hover:ring-ink-600 group-hover:ring-offset-2 group-hover:ring-offset-ink-950',
+              ? 'border-2 border-primary shadow-sm'
+              : 'border border-transparent hover:border-ink-700',
           )}
         >
           {imageUrl ? (

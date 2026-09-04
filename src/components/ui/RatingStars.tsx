@@ -114,7 +114,7 @@ export function RatingInput({
               aria-hidden
               className={cn(
                 dim,
-                'rounded transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-gold-400/70 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-ink-950',
+                'rounded transition-colors focus:outline-none focus-visible:outline-none',
                 filled ? 'fill-slate-100 text-slate-100' : 'fill-transparent text-ink-500',
               )}
             />

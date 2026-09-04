@@ -46,7 +46,7 @@ export function Switch({
       onClick={() => onChange(!checked)}
       className={cn(
         'relative inline-flex shrink-0 items-center rounded-full border transition duration-200 ease-emphasized',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/70',
+        'focus:outline-none focus-visible:outline-none',
         track,
         checked ? 'border-primary bg-primary' : 'border-ink-600 bg-ink-800',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',

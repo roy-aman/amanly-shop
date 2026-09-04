@@ -70,7 +70,7 @@ export function QuantityStepper({
         }}
         className={cn(
           'w-12 border-x border-ink-600 bg-transparent text-center text-sm font-medium text-slate-100',
-          'focus:outline-none focus:ring-1 focus:ring-inset focus:ring-gold-400/50',
+          'focus:outline-none focus-visible:outline-none',
           '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
           size === 'sm' ? 'h-8' : 'h-10',
         )}
