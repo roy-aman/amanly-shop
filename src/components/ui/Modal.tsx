@@ -25,6 +25,7 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  dismissible = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -32,12 +33,15 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  // Set false for a flow with a real consequence attached to closing (e.g. cancelling an order)
+  // that must not be triggered by an accidental backdrop click — only the explicit X.
+  dismissible?: boolean;
 }) {
   if (!open) return null;
   const width = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' }[size];
   return (
     <div className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <div className="absolute inset-0" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0" onClick={dismissible ? onClose : undefined} aria-hidden />
       {/* Settles in place rather than dropping in — a dialog that scales up from
           the centre reads as the page focusing, not as a new page arriving. */}
       <div

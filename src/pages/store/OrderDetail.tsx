@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Clock, MapPin, PackageX, QrCode, Store as StoreIcon } from 'lucide-react';
-import { getOrder, cancelOrder } from '@/api/orders';
+import { getOrder, cancelOrder, enableManualUpiForOrder } from '@/api/orders';
 import { ApiError } from '@/lib/http';
 import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
@@ -28,15 +28,49 @@ export default function OrderDetail() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [showMarkDone, setShowMarkDone] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [tokenRevealed, setTokenRevealed] = useState(false);
+  const [enablingUpi, setEnablingUpi] = useState(false);
 
-  // Reset back to the QR every time the pop-up is reopened.
+  async function handlePayViaUpi() {
+    if (order?.manualUpiPayment) {
+      setQrOpen(true);
+      return;
+    }
+    if (!order) return;
+    setEnablingUpi(true);
+    try {
+      const updated = await enableManualUpiForOrder(order.id);
+      queryClient.setQueryData(['order', id], updated);
+      setQrOpen(true);
+    } catch (e) {
+      toast.error('Could not initiate UPI payment', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setEnablingUpi(false);
+    }
+  }
+  // Marking payment done doesn't touch the backend (see handleMarkPaymentDone) — persist it
+  // locally so the "Pay via UPI" trigger stays hidden after a reload, not just within the modal.
+  const [markedDone, setMarkedDone] = useState(() => {
+    try {
+      return id ? localStorage.getItem(`rc-manual-upi-done-${id}`) === '1' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  // The QR shows immediately; "Mark payment done" takes 5s to appear below it — enough time to
+  // actually scan and pay before the button to confirm it shows up.
   useEffect(() => {
     if (!qrOpen) {
       setConfirming(false);
       setTokenRevealed(false);
+      setShowMarkDone(false);
+      return;
     }
+    const timer = setTimeout(() => setShowMarkDone(true), 5000);
+    return () => clearTimeout(timer);
   }, [qrOpen]);
 
   function handleMarkPaymentDone() {
@@ -44,6 +78,12 @@ export default function OrderDetail() {
     setTimeout(() => {
       setConfirming(false);
       setTokenRevealed(true);
+      setMarkedDone(true);
+      try {
+        localStorage.setItem(`rc-manual-upi-done-${id}`, '1');
+      } catch {
+        // best-effort — worst case the "Pay via UPI" button reappears after a reload
+      }
     }, 5000);
   }
 
@@ -157,16 +197,16 @@ export default function OrderDetail() {
         </dl>
       </SummarySection>
 
-      {order.manualUpiPayment && (
+      {(order.manualUpiPayment || order.manualUpiPayAvailable) && !markedDone && order.status !== 'CANCELLED' && (
         <SummarySection title="Pay via UPI" bodyClassName="px-5 py-3">
-          <Button onClick={() => setQrOpen(true)} fullWidth>
+          <Button onClick={handlePayViaUpi} loading={enablingUpi} fullWidth>
             <QrCode className="h-4 w-4" aria-hidden />
-            Show QR to pay
+            Pay via UPI
           </Button>
         </SummarySection>
       )}
 
-      {!order.manualUpiPayment && order.manualUpiToken && (
+      {(!order.manualUpiPayment || markedDone) && order.manualUpiToken && (
         <SummarySection title="Manual UPI payment">
           <div className="flex items-start gap-3.5">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
@@ -253,6 +293,7 @@ export default function OrderDetail() {
           onClose={() => setQrOpen(false)}
           title={tokenRevealed ? 'Payment token' : 'Pay via UPI'}
           size="sm"
+          dismissible={false}
         >
           {tokenRevealed ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
@@ -299,12 +340,15 @@ export default function OrderDetail() {
                   <Spinner className="h-4 w-4" />
                   Confirming your payment…
                 </div>
-              ) : (
+              ) : showMarkDone ? (
                 <Button onClick={handleMarkPaymentDone}>Mark payment done</Button>
+              ) : (
+                <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
               )}
               <p className="max-w-sm text-caption text-slate-400">
-                Scan the QR with any UPI app and pay the amount above. Once you&apos;ve paid, tap Mark
-                payment done to get your token.
+                {confirming || showMarkDone
+                  ? "Once you've paid, tap Mark payment done to get your token."
+                  : 'Scan the QR with any UPI app to pay.'}
               </p>
             </div>
           )}

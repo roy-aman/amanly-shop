@@ -540,6 +540,10 @@ export interface OrderResponse {
   /** The Manual UPI token for this order, persistent once generated regardless of payment status —
    *  what the customer quotes to staff and what staff cross-check. Null for every other method. */
   manualUpiToken?: string | null;
+  /** True when this is an unpaid COD order whose store has Manual UPI configured and it hasn't
+   *  opted in yet (manualUpiPayment/manualUpiToken are still null) — call enableManualUpiForOrder
+   *  to generate one and let the customer pay early via UPI instead of at the door. */
+  manualUpiPayAvailable?: boolean;
   createdAt: string;
   updatedAt: string;
 }

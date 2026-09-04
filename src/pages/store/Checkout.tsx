@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CreditCard, MapPin, Plus, QrCode, Store as StoreIcon, Tag, Truck, Wallet } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
 import { getCart } from '@/api/cart';
-import { placeOrder, verifyRazorpayPayment } from '@/api/orders';
+import { cancelOrder, placeOrder, verifyRazorpayPayment } from '@/api/orders';
 import { validateCoupon } from '@/api/coupons';
 import { addAddress, listAddresses } from '@/api/addresses';
 import { loadRazorpay } from '@/lib/razorpay';
@@ -182,8 +182,20 @@ export default function Checkout() {
   // before sending them on to the order summary, so placing the order doesn't feel done until
   // they've actually paid.
   const [manualUpiOrder, setManualUpiOrder] = useState<OrderResponse | null>(null);
+  const [manualUpiShowMarkDone, setManualUpiShowMarkDone] = useState(false);
   const [manualUpiConfirming, setManualUpiConfirming] = useState(false);
   const [manualUpiDone, setManualUpiDone] = useState(false);
+
+  // The QR shows immediately; "Mark payment done" takes 5s to appear below it, same as
+  // reopening the pop-up later from the order page.
+  useEffect(() => {
+    if (!manualUpiOrder) {
+      setManualUpiShowMarkDone(false);
+      return;
+    }
+    const timer = setTimeout(() => setManualUpiShowMarkDone(true), 5000);
+    return () => clearTimeout(timer);
+  }, [manualUpiOrder]);
 
   function finishManualUpiOrder() {
     if (!manualUpiOrder) return;
@@ -191,23 +203,37 @@ export default function Checkout() {
     setTimeout(() => {
       setManualUpiConfirming(false);
       setManualUpiDone(true);
+      try {
+        localStorage.setItem(`rc-manual-upi-done-${manualUpiOrder.id}`, '1');
+      } catch {
+        // best-effort — worst case the "Pay via UPI" button reappears on the order page
+      }
     }, 5000);
   }
 
-  function closeManualUpiModal() {
+  async function closeManualUpiModal() {
     if (!manualUpiOrder) return;
     const orderId = manualUpiOrder.id;
     const wasConfirmed = manualUpiDone;
     setManualUpiOrder(null);
     setManualUpiConfirming(false);
     setManualUpiDone(false);
-    toast.success(
-      wasConfirmed ? 'Order placed!' : 'Order placed — pay via UPI to confirm',
-      wasConfirmed
-        ? 'Thank you — your order has been received.'
-        : "You'll find your token and QR on the order page any time.",
-    );
-    navigate(`/orders/${orderId}`);
+
+    if (wasConfirmed) {
+      toast.success('Order placed!', 'Thank you — your order has been received.');
+      navigate(`/orders/${orderId}`);
+      return;
+    }
+
+    // Closed via the X before confirming payment — the customer never actually committed to
+    // this order, so cancel it rather than leaving a phantom PENDING one sitting unpaid.
+    try {
+      await cancelOrder(orderId);
+    } catch {
+      // best-effort — if cancellation fails the order simply stays pending
+    }
+    await refresh();
+    toast.info('Order not placed', "You closed the payment window before confirming — nothing was charged.");
   }
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId) ?? null;
@@ -870,6 +896,7 @@ export default function Checkout() {
           onClose={closeManualUpiModal}
           title={manualUpiDone ? 'Order placed' : 'Pay via UPI'}
           size="sm"
+          dismissible={false}
         >
           {manualUpiDone ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
@@ -923,12 +950,15 @@ export default function Checkout() {
                   <Spinner className="h-4 w-4" />
                   Confirming your payment…
                 </div>
-              ) : (
+              ) : manualUpiShowMarkDone ? (
                 <Button onClick={finishManualUpiOrder}>Mark payment done</Button>
+              ) : (
+                <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
               )}
               <p className="max-w-sm text-caption text-slate-400">
-                Scan the QR with any UPI app and pay the amount above. Once you&apos;ve paid, tap Mark
-                payment done to get your token.
+                {manualUpiConfirming || manualUpiShowMarkDone
+                  ? "Once you've paid, tap Mark payment done to get your token."
+                  : 'Scan the QR with any UPI app to pay.'}
               </p>
             </div>
           )}

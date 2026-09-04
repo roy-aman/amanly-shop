@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/utils';
 import OrderDetail from './OrderDetail';
-import { getOrder } from '@/api/orders';
+import { getOrder, enableManualUpiForOrder } from '@/api/orders';
 import type { OrderResponse } from '@/lib/types';
 
-vi.mock('@/api/orders', () => ({ getOrder: vi.fn(), cancelOrder: vi.fn() }));
+vi.mock('@/api/orders', () => ({ getOrder: vi.fn(), cancelOrder: vi.fn(), enableManualUpiForOrder: vi.fn() }));
 vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), push: vi.fn() }),
 }));
 
 const getOrderMock = vi.mocked(getOrder);
+const enableManualUpiMock = vi.mocked(enableManualUpiForOrder);
 
 function order(overrides: Partial<OrderResponse> = {}): OrderResponse {
   return {
@@ -143,5 +144,43 @@ describe('OrderDetail receipt layout', () => {
 
     expect(await screen.findAllByText('ORD-Y2PJYKCT')).toHaveLength(2);
     expect(screen.getByRole('link', { name: /back to orders/i })).toHaveAttribute('href', '/orders');
+  });
+});
+
+
+describe('OrderDetail Manual UPI for COD orders', () => {
+  it('renders "Pay via UPI" option for a COD order when manualUpiPayAvailable is true', async () => {
+    getOrderMock.mockResolvedValue(order({ paymentMethod: 'CASH', manualUpiPayAvailable: true }));
+    renderWithProviders(<OrderDetail />);
+
+    const payBtn = await screen.findByRole('button', { name: /pay via upi/i });
+    expect(payBtn).toBeInTheDocument();
+  });
+
+  it('calls enableManualUpiForOrder when Pay via UPI is clicked on a COD order', async () => {
+    const codOrder = order({ paymentMethod: 'CASH', manualUpiPayAvailable: true });
+    getOrderMock.mockResolvedValue(codOrder);
+    enableManualUpiMock.mockResolvedValue({
+      ...codOrder,
+      manualUpiPayment: {
+        token: 'AMA-12345',
+        vpa: 'store@upi',
+        qrDataUri: 'data:image/png;base64,mockqr',
+        amount: 85,
+        currency: 'USD',
+      },
+      manualUpiToken: 'AMA-12345',
+      manualUpiPayAvailable: false,
+    });
+
+    renderWithProviders(<OrderDetail />);
+
+    const payBtn = await screen.findByRole('button', { name: /pay via upi/i });
+    fireEvent.click(payBtn);
+
+    await waitFor(() => {
+      expect(enableManualUpiMock).toHaveBeenCalledWith('order-123');
+    });
+    expect(await screen.findByAltText(/scan to pay via upi/i)).toBeInTheDocument();
   });
 });
