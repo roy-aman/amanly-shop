@@ -143,10 +143,10 @@ describe('Checkout (WP-2.5)', () => {
     renderCheckout();
 
     await screen.findByText('Delivery address');
-    await user.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    await user.click(screen.getByRole('button', { name: 'Continue to review' }));
 
-    // Stays on the Address step — Payment heading never appears.
-    expect(screen.queryByText('Payment method')).not.toBeInTheDocument();
+    // Stays on the Address step — Review heading never appears.
+    expect(screen.queryByText('Review & place order')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(/address/i);
   });
 
@@ -157,26 +157,44 @@ describe('Checkout (WP-2.5)', () => {
 
     await screen.findByText('Delivery address');
     await user.click(await screen.findByRole('radio', { name: /Home/i }));
-    await user.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    await user.click(screen.getByRole('button', { name: 'Continue to review' }));
 
     await screen.findByText('Payment method');
     expect(screen.getByText('Cash on Delivery')).toBeInTheDocument();
     expect(screen.queryByText('UPI / Online payment')).not.toBeInTheDocument();
-    expect(screen.getByText(/Online payment is currently unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/is the only payment method available/i)).toBeInTheDocument();
+    // COD is the only option, so it's selected by default.
+    expect(screen.getByRole('radio', { name: /Cash on Delivery/i })).toBeChecked();
   });
 
-  it('payment methods reflect the store flags — online only', async () => {
+  it('payment methods reflect the store flags — online only, and defaults to it', async () => {
     storeMock.mockResolvedValue(store({ codEnabled: false, onlinePaymentEnabled: true }));
     const user = userEvent.setup();
     renderCheckout();
 
     await screen.findByText('Delivery address');
     await user.click(await screen.findByRole('radio', { name: /Home/i }));
-    await user.click(screen.getByRole('button', { name: 'Continue to payment' }));
+    await user.click(screen.getByRole('button', { name: 'Continue to review' }));
 
     await screen.findByText('Payment method');
     expect(screen.getByText('UPI / Online payment')).toBeInTheDocument();
     expect(screen.queryByText('Cash on Delivery')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /UPI \/ Online payment/i })).toBeChecked();
+  });
+
+  it('defaults to the online gateway over Manual UPI over COD when all three are enabled', async () => {
+    storeMock.mockResolvedValue(store({ codEnabled: true, onlinePaymentEnabled: true, manualUpiEnabled: true }));
+    const user = userEvent.setup();
+    renderCheckout();
+
+    await screen.findByText('Delivery address');
+    await user.click(await screen.findByRole('radio', { name: /Home/i }));
+    await user.click(screen.getByRole('button', { name: 'Continue to review' }));
+
+    await screen.findByText('Payment method');
+    expect(screen.getByRole('radio', { name: /UPI \/ Online payment/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /UPI \(scan to pay\)/i })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: /Cash on Delivery/i })).not.toBeChecked();
   });
 
   it('COD happy path: Place order calls placeOrder with the mapped shippingAddress and navigates', async () => {
@@ -187,12 +205,12 @@ describe('Checkout (WP-2.5)', () => {
 
     await screen.findByText('Delivery address');
     await user.click(await screen.findByRole('radio', { name: /Home/i }));
-    await user.click(screen.getByRole('button', { name: 'Continue to payment' }));
-
-    await screen.findByText('Payment method');
     await user.click(screen.getByRole('button', { name: 'Continue to review' }));
 
+    // Both COD and online are enabled by the default store fixture, so online is
+    // preselected — pick Cash on Delivery explicitly to exercise the COD path.
     await screen.findByText('Review & place order');
+    await user.click(screen.getByRole('radio', { name: /Cash on Delivery/i }));
     await user.click(screen.getByRole('button', { name: 'Place order' }));
 
     await waitFor(() =>
@@ -226,10 +244,9 @@ describe('Checkout (WP-2.5)', () => {
     await waitFor(() => expect(validateCouponMock).toHaveBeenCalledWith('SAVE10', 200));
 
     await user.click(await screen.findByRole('radio', { name: /Home/i }));
-    await user.click(screen.getByRole('button', { name: 'Continue to payment' }));
-    await screen.findByText('Payment method');
     await user.click(screen.getByRole('button', { name: 'Continue to review' }));
     await screen.findByText('Review & place order');
+    await user.click(screen.getByRole('radio', { name: /Cash on Delivery/i }));
     await user.click(screen.getByRole('button', { name: 'Place order' }));
 
     await waitFor(() =>

@@ -10,13 +10,14 @@ import { addAddress, listAddresses } from '@/api/addresses';
 import { loadRazorpay } from '@/lib/razorpay';
 import { clearStoredCoupon, getStoredCoupon } from '@/lib/couponStorage';
 import { ApiError } from '@/lib/http';
-import { money } from '@/lib/format';
+import { formatDateTime, money, orderRef } from '@/lib/format';
 import { estimateCartTotals } from '@/lib/totals';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type {
   AddressRequest,
   AddressResponse,
   DeliveryMethod,
+  OrderResponse,
   PaymentMethod,
   PlaceOrderRequest,
   ShippingDetails,
@@ -30,7 +31,9 @@ import {
   Field,
   Input,
   LinkButton,
+  Modal,
   PageLoader,
+  Spinner,
   Stepper,
   Textarea,
   type Step,
@@ -44,8 +47,7 @@ interface RazorpayHandlerResponse {
 
 const STEPS: Step[] = [
   { label: 'Address', description: 'Where to deliver' },
-  { label: 'Payment', description: 'How you pay' },
-  { label: 'Review', description: 'Confirm & place' },
+  { label: 'Review', description: 'Pay & confirm' },
 ];
 
 // Inline "add new address" form — mirrors the Addresses.tsx add UX so the two
@@ -110,6 +112,10 @@ function formatAddress(a: AddressResponse): string {
   return [a.addressLine1, a.addressLine2, a.city, a.state, a.postalCode, a.country].filter(Boolean).join(', ');
 }
 
+function firstNameOf(order: OrderResponse): string | undefined {
+  return order.shippingAddress.name?.trim().split(/\s+/)[0];
+}
+
 export default function Checkout() {
   useDocumentTitle('Checkout');
   const navigate = useNavigate();
@@ -171,6 +177,39 @@ export default function Checkout() {
   // Failure-recovery banner after a cancelled/failed online payment.
   const [paymentIssue, setPaymentIssue] = useState<string | null>(null);
 
+  // Manual UPI: the order is placed for real up front (the token and QR are tied to it), but we
+  // hold the customer here on a pop-up — QR, then "Mark payment done", then a confirming pause —
+  // before sending them on to the order summary, so placing the order doesn't feel done until
+  // they've actually paid.
+  const [manualUpiOrder, setManualUpiOrder] = useState<OrderResponse | null>(null);
+  const [manualUpiConfirming, setManualUpiConfirming] = useState(false);
+  const [manualUpiDone, setManualUpiDone] = useState(false);
+
+  function finishManualUpiOrder() {
+    if (!manualUpiOrder) return;
+    setManualUpiConfirming(true);
+    setTimeout(() => {
+      setManualUpiConfirming(false);
+      setManualUpiDone(true);
+    }, 5000);
+  }
+
+  function closeManualUpiModal() {
+    if (!manualUpiOrder) return;
+    const orderId = manualUpiOrder.id;
+    const wasConfirmed = manualUpiDone;
+    setManualUpiOrder(null);
+    setManualUpiConfirming(false);
+    setManualUpiDone(false);
+    toast.success(
+      wasConfirmed ? 'Order placed!' : 'Order placed — pay via UPI to confirm',
+      wasConfirmed
+        ? 'Thank you — your order has been received.'
+        : "You'll find your token and QR on the order page any time.",
+    );
+    navigate(`/orders/${orderId}`);
+  }
+
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId) ?? null;
 
   // Pre-placement estimate from the store's published rules; null while they are
@@ -185,10 +224,10 @@ export default function Checkout() {
   const onlineEnabled = !!store?.onlinePaymentEnabled;
   const manualUpiEnabled = !!store?.manualUpiEnabled;
   const pickupEnabled = !!store?.pickupEnabled;
+  // Priority order — also the default-selection order below: a real payment gateway beats a
+  // manually-verified UPI scan, which beats paying nothing up front.
   const methods = useMemo(() => {
     const opts: { value: PaymentMethod; label: string; desc: string; icon: typeof Wallet }[] = [];
-    if (codEnabled)
-      opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
     if (onlineEnabled)
       opts.push({ value: 'UPI', label: 'UPI / Online payment', desc: 'Pay securely now via UPI, cards & more', icon: CreditCard });
     if (manualUpiEnabled)
@@ -198,6 +237,8 @@ export default function Checkout() {
         desc: 'Scan a QR, pay us directly, then quote your token at pickup/delivery',
         icon: QrCode,
       });
+    if (codEnabled)
+      opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
     // No flag on → fall back to COD so a store is never un-checkoutable.
     if (opts.length === 0)
       opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
@@ -211,10 +252,18 @@ export default function Checkout() {
     setSelectedAddressId(def.id);
   }, [savedAddresses, selectedAddressId]);
 
-  // Keep the payment method valid for the available options (preselect the first).
+  // Default to the highest-priority available method (see `methods` above) until the shopper
+  // actually picks one themselves — after that their choice sticks even as store data settles.
+  const paymentMethodTouched = useRef(false);
   useEffect(() => {
-    if (!methods.some((m) => m.value === paymentMethod)) setPaymentMethod(methods[0].value);
+    if (paymentMethodTouched.current) return;
+    if (methods.length && methods[0].value !== paymentMethod) setPaymentMethod(methods[0].value);
   }, [methods, paymentMethod]);
+
+  function choosePaymentMethod(value: PaymentMethod) {
+    paymentMethodTouched.current = true;
+    setPaymentMethod(value);
+  }
 
   // Redirect to /cart if the cart is empty.
   useEffect(() => {
@@ -275,7 +324,7 @@ export default function Checkout() {
   // The add form is shown on demand, or forced open when there is nothing to pick.
   const showAddForm = addingAddress || savedAddresses.length === 0;
 
-  function goToPayment() {
+  function goToReview() {
     if (deliveryMethod === 'PICKUP') {
       if (!pickupName.trim()) {
         setAddressError('Please tell us who is picking up the order.');
@@ -332,15 +381,17 @@ export default function Checkout() {
       const order = await placeOrder(body);
 
       if (!order.paymentAction) {
-        // COD or Manual UPI — order complete (a Manual UPI order stays unpaid until staff verify,
-        // but there is no further client step: no widget to open, nothing to await here).
         clearStoredCoupon();
-        if (order.manualUpiPayment) {
-          toast.success('Scan to pay', 'Your order is placed — scan the QR to complete payment.');
-        } else {
-          toast.success('Order placed!', 'Thank you — your order has been received.');
-        }
         await refresh();
+        if (order.manualUpiPayment) {
+          // Order exists server-side (the token and QR are tied to it), but the customer doesn't
+          // see the order summary until they've scanned, paid and confirmed — see
+          // finishManualUpiOrder / the pop-up below.
+          setManualUpiOrder(order);
+          setSubmitting(false);
+          return;
+        }
+        toast.success('Order placed!', 'Thank you — your order has been received.');
         navigate(`/orders/${order.id}`);
         return;
       }
@@ -604,48 +655,6 @@ export default function Checkout() {
           )}
 
           {step === 1 && (
-            <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-6">
-              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
-                Payment method
-              </h2>
-              <div className="space-y-2" role="radiogroup" aria-label="Payment method">
-                {methods.map((m) => {
-                  const Icon = m.icon;
-                  const active = paymentMethod === m.value;
-                  return (
-                    <label
-                      key={m.value}
-                      className={
-                        'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ' +
-                        (active ? 'border-primary bg-ink-850' : 'border-ink-600 hover:border-slate-100')
-                      }
-                    >
-                      <span className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="payment"
-                          value={m.value}
-                          checked={active}
-                          onChange={() => setPaymentMethod(m.value)}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        <Icon className="h-5 w-5 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-100">{m.label}</span>
-                      </span>
-                      <span className="text-xs text-slate-500">{m.desc}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {!onlineEnabled && (
-                <p className="text-xs text-slate-500">
-                  Online payment is currently unavailable for this store — orders are placed as Cash on Delivery.
-                </p>
-              )}
-            </section>
-          )}
-
-          {step === 2 && (
             <section className="space-y-6 rounded-2xl border border-ink-700 bg-ink-900 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
                 Review &amp; place order
@@ -686,16 +695,42 @@ export default function Checkout() {
                 )}
               </section>
 
-              <section className="space-y-1 border-t border-ink-600 pt-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-200">Payment</h3>
-                  <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
-                    Change
-                  </Button>
+              <section className="space-y-3 border-t border-ink-600 pt-5">
+                <h3 className="text-sm font-semibold text-slate-200">Payment method</h3>
+                <div className="space-y-2" role="radiogroup" aria-label="Payment method">
+                  {methods.map((m) => {
+                    const Icon = m.icon;
+                    const active = paymentMethod === m.value;
+                    return (
+                      <label
+                        key={m.value}
+                        className={
+                          'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ' +
+                          (active ? 'border-primary bg-ink-850' : 'border-ink-600 hover:border-slate-100')
+                        }
+                      >
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="payment"
+                            value={m.value}
+                            checked={active}
+                            onChange={() => choosePaymentMethod(m.value)}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          <Icon className="h-5 w-5 text-slate-400" />
+                          <span className="text-sm font-medium text-slate-100">{m.label}</span>
+                        </span>
+                        <span className="text-xs text-slate-500">{m.desc}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-                <p className="text-sm text-slate-400">
-                  {methods.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}
-                </p>
+                {methods.length === 1 && (
+                  <p className="text-xs text-slate-500">
+                    {methods[0].label} is the only payment method available for this store.
+                  </p>
+                )}
               </section>
 
               <section className="border-t border-ink-600 pt-5">
@@ -740,9 +775,8 @@ export default function Checkout() {
               </Button>
             )}
 
-            {step === 0 && <Button onClick={goToPayment}>Continue to payment</Button>}
-            {step === 1 && <Button onClick={() => setStep(2)}>Continue to review</Button>}
-            {step === 2 && (
+            {step === 0 && <Button onClick={goToReview}>Continue to review</Button>}
+            {step === 1 && (
               <Button onClick={handlePlaceOrder} loading={submitting} size="xl">
                 Place order
               </Button>
@@ -829,6 +863,77 @@ export default function Checkout() {
           </SummarySection>
         </aside>
       </div>
+
+      {manualUpiOrder && manualUpiOrder.manualUpiPayment && (
+        <Modal
+          open
+          onClose={closeManualUpiModal}
+          title={manualUpiDone ? 'Order placed' : 'Pay via UPI'}
+          size="sm"
+        >
+          {manualUpiDone ? (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <dl className="w-full divide-y divide-ink-700 text-body-sm">
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-400">Order ID</dt>
+                  <dd className="tabular-nums text-slate-100">{orderRef(manualUpiOrder)}</dd>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-400">Ordered on</dt>
+                  <dd className="text-slate-100">{formatDateTime(manualUpiOrder.createdAt)}</dd>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-400">Amount</dt>
+                  <dd className="text-slate-100">
+                    {money(manualUpiOrder.manualUpiPayment.amount, manualUpiOrder.manualUpiPayment.currency)}
+                  </dd>
+                </div>
+              </dl>
+              <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
+                <p className="text-overline uppercase text-slate-400">Your payment token</p>
+                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-slate-100">
+                  {firstNameOf(manualUpiOrder)
+                    ? `Payment from ${firstNameOf(manualUpiOrder)}: ${manualUpiOrder.manualUpiPayment.token}`
+                    : manualUpiOrder.manualUpiPayment.token}
+                </p>
+              </div>
+              <p className="max-w-sm text-caption text-slate-400">
+                For pickup, quote this token to staff — for delivery, keep it as your reference.
+                We&apos;ll email you once payment is confirmed.
+              </p>
+              <Button onClick={closeManualUpiModal} fullWidth>
+                View order
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <img
+                src={manualUpiOrder.manualUpiPayment.qrDataUri}
+                alt="Scan to pay via UPI"
+                className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
+              />
+              <div>
+                <p className="text-h3 font-display text-slate-100">
+                  {money(manualUpiOrder.manualUpiPayment.amount, manualUpiOrder.manualUpiPayment.currency)}
+                </p>
+                <p className="mt-1 text-body-sm text-slate-400">to {manualUpiOrder.manualUpiPayment.vpa}</p>
+              </div>
+              {manualUpiConfirming ? (
+                <div className="flex items-center gap-2 text-body-sm text-slate-400">
+                  <Spinner className="h-4 w-4" />
+                  Confirming your payment…
+                </div>
+              ) : (
+                <Button onClick={finishManualUpiOrder}>Mark payment done</Button>
+              )}
+              <p className="max-w-sm text-caption text-slate-400">
+                Scan the QR with any UPI app and pay the amount above. Once you&apos;ve paid, tap Mark
+                payment done to get your token.
+              </p>
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
