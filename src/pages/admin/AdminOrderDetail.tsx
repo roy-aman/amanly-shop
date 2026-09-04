@@ -144,20 +144,26 @@ export default function AdminOrderDetail() {
             )}
           </Card>
 
-          {/* Shipping */}
+          {/* Shipping / pickup */}
           <Card className="p-5">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
-              <MapPin className="h-4 w-4 text-gold-400" /> Shipping address
+              <MapPin className="h-4 w-4 text-gold-400" /> {order.deliveryMethod === 'PICKUP' ? 'Pickup' : 'Shipping address'}
             </h2>
             <div className="space-y-0.5 text-sm text-slate-300">
               <p className="font-medium text-slate-100">{addr.name}</p>
               {addr.phone && <p className="text-slate-400">{addr.phone}</p>}
-              <p>{addr.addressLine1}</p>
-              {addr.addressLine2 && <p>{addr.addressLine2}</p>}
-              <p>
-                {[addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ')}
-              </p>
-              <p>{addr.country}</p>
+              {order.deliveryMethod === 'PICKUP' ? (
+                <p className="text-slate-400">Collecting in person — no delivery.</p>
+              ) : (
+                <>
+                  <p>{addr.addressLine1}</p>
+                  {addr.addressLine2 && <p>{addr.addressLine2}</p>}
+                  <p>
+                    {[addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ')}
+                  </p>
+                  <p>{addr.country}</p>
+                </>
+              )}
             </div>
           </Card>
         </div>
@@ -235,6 +241,15 @@ export default function AdminOrderDetail() {
             <p className="mb-4 flex items-center gap-2 text-xs text-slate-500">
               Current: <PaymentStatusBadge status={order.paymentStatus} />
             </p>
+            {order.manualUpiToken && (
+              <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-3">
+                <p className="text-xs uppercase text-slate-400">Manual UPI token — check this matches what the customer quoted</p>
+                <p className="mt-1 font-mono text-lg tabular-nums text-slate-100">{order.manualUpiToken}</p>
+                {order.manualUpiPayment && (
+                  <p className="mt-1 text-xs text-slate-500">Expected in your UPI app: {order.manualUpiPayment.vpa}</p>
+                )}
+              </div>
+            )}
             {order.paymentStatus === 'PENDING' || order.paymentStatus === 'FAILED' ? (
               <Button
                 variant="primary"

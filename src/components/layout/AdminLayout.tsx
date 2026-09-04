@@ -30,7 +30,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { getPublicStore } from '@/api/store';
 import { titleCase } from '@/lib/format';
-import { useBookingsEntitlement } from '@/lib/useBookingsGate';
+import { useConsoleFeatures, type StoreFeature } from '@/lib/features';
+import { useLexicon, type LexiconKey } from '@/lib/lexicon';
 import { useDarkTheme } from '@/lib/useDarkTheme';
 import { BRAND_NAME } from '@/lib/brand';
 import {
@@ -48,98 +49,147 @@ import {
 
 interface NavItem {
   to: string;
-  label: string;
+  /** Lexicon key, not a word. See the note on NavGroup. */
+  label: LexiconKey;
   icon: ComponentType<{ className?: string }>;
   adminOnly?: boolean;
   end?: boolean;
 }
 
 interface NavGroup {
-  label: string;
+  label: LexiconKey;
   items: NavItem[];
   /**
-   * A whole group that only exists for stores the platform has entitled.
+   * The section this group belongs to — one grant per top-level group.
    *
    * Different from `adminOnly`, which is about who is looking: this is about
-   * what the shop has bought. A store without the entitlement gets a console
-   * that never mentions bookings at all — no group, no empty screens, and no
-   * links to endpoints that would answer 403.
+   * what the platform has granted this shop. A store without the grant gets a
+   * console that never mentions the group at all — no heading, no empty
+   * screens, and no links to endpoints that would answer 403.
+   *
+   * Every group has one. Nothing here is unconditional except Settings, which
+   * is deliberately not in this list: a store must always be able to reach its
+   * own settings, or withdrawing a section could leave a merchant unable to
+   * configure their way back to anything.
    */
-  entitlement?: 'bookings';
+  feature: StoreFeature;
 }
 
+/*
+ * Labels are LEXICON KEYS rather than words.
+ *
+ * Every console on the platform ships this same navigation; what a shop calls
+ * the things in it is data. A bakery's staff open "Cakes", not "Inventory", and
+ * a parlour's open "Appointments" rather than "Diary" — and they change that
+ * themselves, in settings, without waiting for a release. A hardcoded string
+ * here would need a developer to undo.
+ */
+
 const NAV_GROUPS: NavGroup[] = [
-  { label: 'Overview', items: [{ to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true }] },
   {
-    label: 'Catalog',
+    label: 'nav.overview',
+    feature: 'OVERVIEW',
+    items: [{ to: '/admin', label: 'nav.dashboard', icon: LayoutDashboard, end: true }],
+  },
+  {
+    label: 'nav.catalog',
+    feature: 'CATALOG',
     items: [
-      { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
-      { to: '/admin/categories', label: 'Categories', icon: FolderTree },
-      { to: '/admin/brands', label: 'Brands', icon: Tags },
-      { to: '/admin/banners', label: 'Banners', icon: GalleryHorizontalEnd },
-      { to: '/admin/reviews', label: 'Reviews', icon: MessagesSquare },
+      { to: '/admin/inventory', label: 'nav.inventory', icon: Boxes },
+      { to: '/admin/categories', label: 'nav.categories', icon: FolderTree },
+      { to: '/admin/brands', label: 'nav.brands', icon: Tags },
+      { to: '/admin/banners', label: 'nav.banners', icon: GalleryHorizontalEnd },
+      { to: '/admin/reviews', label: 'nav.reviews', icon: MessagesSquare },
     ],
   },
   {
-    label: 'Sales',
+    label: 'nav.sales',
+    feature: 'SALES',
     items: [
-      { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
-      { to: '/admin/deliverables', label: 'Deliverables', icon: Truck },
-      { to: '/admin/coupons', label: 'Coupons', icon: TicketPercent },
+      { to: '/admin/orders', label: 'nav.orders', icon: ShoppingBag },
+      { to: '/admin/deliverables', label: 'nav.deliverables', icon: Truck },
+      { to: '/admin/coupons', label: 'nav.coupons', icon: TicketPercent },
     ],
   },
   {
-    label: 'Bookings',
-    entitlement: 'bookings',
+    label: 'nav.bookings',
+    feature: 'BOOKINGS',
     items: [
-      { to: '/admin/bookings', label: 'Diary', icon: CalendarClock },
-      { to: '/admin/services', label: 'Services', icon: Sparkles },
-      { to: '/admin/service-categories', label: 'Service groups', icon: FolderTree },
-      { to: '/admin/staff', label: 'Team', icon: UserRound },
-      { to: '/admin/service-reviews', label: 'Service reviews', icon: MessagesSquare },
+      { to: '/admin/bookings', label: 'nav.diary', icon: CalendarClock },
+      { to: '/admin/services', label: 'nav.services', icon: Sparkles },
+      { to: '/admin/service-categories', label: 'nav.serviceGroups', icon: FolderTree },
+      { to: '/admin/staff', label: 'nav.team', icon: UserRound },
+      { to: '/admin/service-reviews', label: 'nav.serviceReviews', icon: MessagesSquare },
       // The settings that govern the diary are the merchant's own, not counter
       // staff's: opening hours and how far ahead people may book.
-      { to: '/admin/booking-settings', label: 'Booking setup', icon: CalendarCog, adminOnly: true },
+      { to: '/admin/booking-settings', label: 'nav.bookingSetup', icon: CalendarCog, adminOnly: true },
     ],
   },
-  { label: 'People', items: [{ to: '/admin/users', label: 'Users', icon: Users, adminOnly: true }] },
-  { label: 'Insights', items: [{ to: '/admin/reports', label: 'Reports', icon: BarChart3 }] },
   {
-    label: 'System',
+    label: 'nav.people',
+    feature: 'PEOPLE',
+    items: [{ to: '/admin/users', label: 'nav.users', icon: Users, adminOnly: true }],
+  },
+  {
+    label: 'nav.insights',
+    feature: 'INSIGHTS',
+    items: [{ to: '/admin/reports', label: 'nav.reports', icon: BarChart3 }],
+  },
+  {
+    label: 'nav.system',
+    feature: 'SYSTEM',
     items: [
       // Not adminOnly: the backend allows STAFF, and printing a poster for the
       // window is counter work rather than an owner's job.
-      { to: '/admin/qr-code', label: 'Store QR code', icon: QrCode },
-      { to: '/admin/settings', label: 'Settings', icon: Settings, adminOnly: true },
+      { to: '/admin/qr-code', label: 'nav.storeQr', icon: QrCode },
     ],
   },
 ];
 
-const COLLAPSE_KEY = 'rc-admin-sidebar-collapsed';
-
-const CRUMB_LABELS: Record<string, string> = {
-  orders: 'Orders',
-  deliverables: 'Deliverables',
-  coupons: 'Coupons',
-  inventory: 'Inventory',
-  categories: 'Categories',
-  brands: 'Brands',
-  banners: 'Banners',
-  reviews: 'Reviews',
-  reports: 'Reports',
-  users: 'Users',
-  settings: 'Settings',
-  'qr-code': 'Store QR code',
-  bookings: 'Diary',
-  services: 'Services',
-  'service-categories': 'Service groups',
-  staff: 'Team',
-  'service-reviews': 'Service reviews',
-  'booking-settings': 'Booking setup',
-  new: 'New',
+/**
+ * Settings, kept out of the grantable groups and pinned to the foot of the nav.
+ *
+ * It is the one console page no grant can take away. An operator who withdrew
+ * System would otherwise leave the merchant with no way to reach payment
+ * settings, opening copy, or the rename form that decides what every other
+ * label in this sidebar says.
+ */
+const SETTINGS_ITEM: NavItem = {
+  to: '/admin/settings',
+  label: 'nav.settings',
+  icon: Settings,
+  adminOnly: true,
 };
 
-function buildCrumbs(pathname: string): Crumb[] {
+const COLLAPSE_KEY = 'rc-admin-sidebar-collapsed';
+
+/**
+ * Path segment to the lexicon key naming it, so a breadcrumb says what the nav
+ * says. A trail reading Admin › Inventory while the sidebar says Cakes is the
+ * kind of small inconsistency that makes software feel like someone else's.
+ */
+const CRUMB_KEYS: Record<string, LexiconKey> = {
+  orders: 'nav.orders',
+  deliverables: 'nav.deliverables',
+  coupons: 'nav.coupons',
+  inventory: 'nav.inventory',
+  categories: 'nav.categories',
+  brands: 'nav.brands',
+  banners: 'nav.banners',
+  reviews: 'nav.reviews',
+  reports: 'nav.reports',
+  users: 'nav.users',
+  settings: 'nav.settings',
+  'qr-code': 'nav.storeQr',
+  bookings: 'nav.diary',
+  services: 'nav.services',
+  'service-categories': 'nav.serviceGroups',
+  staff: 'nav.team',
+  'service-reviews': 'nav.serviceReviews',
+  'booking-settings': 'nav.bookingSetup',
+};
+
+function buildCrumbs(pathname: string, t: (key: LexiconKey) => string): Crumb[] {
   const parts = pathname.split('/').filter(Boolean); // e.g. ['admin','orders','12']
   const crumbs: Crumb[] = [];
   let acc = '';
@@ -152,11 +202,15 @@ function buildCrumbs(pathname: string): Crumb[] {
     // characters of hex in a breadcrumb is noise rather than a reference.
     else if (/^\d+$/.test(seg)) label = `#${seg}`;
     else if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(seg)) label = `#${seg.slice(0, 8)}`;
-    else label = CRUMB_LABELS[seg] ?? titleCase(seg);
+    else if (seg === 'new') label = 'New';
+    else {
+      const key = CRUMB_KEYS[seg];
+      label = key ? t(key) : titleCase(seg);
+    }
     crumbs.push({ label, to: isLast ? undefined : acc });
   });
-  // On the bare /admin route, surface it as the current "Dashboard" page.
-  if (crumbs.length === 1) return [{ label: 'Dashboard' }];
+  // On the bare /admin route, surface it as the current dashboard page.
+  if (crumbs.length === 1) return [{ label: t('nav.dashboard') }];
   return crumbs;
 }
 
@@ -166,7 +220,8 @@ export default function AdminLayout() {
   useDarkTheme();
 
   const { user, isAdmin, showsPlatformConsole, logout } = useAuth();
-  const { bookingsAllowed } = useBookingsEntitlement();
+  const { has: hasFeature } = useConsoleFeatures();
+  const { t } = useLexicon();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -182,19 +237,30 @@ export default function AdminLayout() {
   const { data: store } = useQuery({ queryKey: ['public-store'], queryFn: getPublicStore, staleTime: 5 * 60_000 });
   const storeName = store?.name || BRAND_NAME;
 
-  const crumbs = useMemo(() => buildCrumbs(location.pathname), [location.pathname]);
+  const crumbs = useMemo(() => buildCrumbs(location.pathname, t), [location.pathname, t]);
 
-  // Groups the current user is allowed to see (empty groups dropped). The
-  // entitlement filter runs first and fails closed: while the store settings are
-  // loading, or if that request errored, the bookings group stays hidden rather
-  // than offering screens the server would refuse.
-  const groups = useMemo(
-    () =>
-      NAV_GROUPS.filter((g) => !g.entitlement || (g.entitlement === 'bookings' && bookingsAllowed))
-        .map((g) => ({ ...g, items: g.items.filter((it) => !it.adminOnly || isAdmin) }))
-        .filter((g) => g.items.length > 0),
-    [isAdmin, bookingsAllowed],
-  );
+  // Groups this store has been granted, filtered to what this user may see
+  // (empty groups dropped). The grant filter runs first: a section the platform
+  // has not given this shop is never mentioned, rather than shown as a link to
+  // screens the server would refuse.
+  //
+  // Settings is appended afterwards rather than living in NAV_GROUPS, because it
+  // is the one page no grant governs — see SETTINGS_ITEM.
+  const groups = useMemo(() => {
+    const granted = NAV_GROUPS.filter((g) => hasFeature(g.feature))
+      .map((g) => ({ ...g, items: g.items.filter((it) => !it.adminOnly || isAdmin) }))
+      .filter((g) => g.items.length > 0);
+
+    if (!isAdmin) return granted;
+
+    // Joins the System group when the shop has one, so the sidebar does not grow
+    // a heading with a single item in it for the sake of one link.
+    const system = granted.find((g) => g.feature === 'SYSTEM');
+    if (system) {
+      return granted.map((g) => (g === system ? { ...g, items: [...g.items, SETTINGS_ITEM] } : g));
+    }
+    return [...granted, { label: 'nav.system' as LexiconKey, feature: 'SYSTEM' as StoreFeature, items: [SETTINGS_ITEM] }];
+  }, [isAdmin, hasFeature]);
 
   function toggleCollapsed() {
     setCollapsed((c) => {
@@ -223,7 +289,7 @@ export default function AdminLayout() {
             {compact ? (
               <div className="mx-2 my-2 border-t border-ink-800" aria-hidden />
             ) : (
-              <p className="px-3 text-overline uppercase text-slate-500">{group.label}</p>
+              <p className="px-3 text-overline uppercase text-slate-500">{t(group.label)}</p>
             )}
             {group.items.map((item) => {
               const link = (
@@ -243,11 +309,11 @@ export default function AdminLayout() {
                   }
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
-                  {!compact && item.label}
+                  {!compact && t(item.label)}
                 </NavLink>
               );
               return compact ? (
-                <Tooltip key={item.to} content={item.label} side="right">
+                <Tooltip key={item.to} content={t(item.label)} side="right">
                   {link}
                 </Tooltip>
               ) : (

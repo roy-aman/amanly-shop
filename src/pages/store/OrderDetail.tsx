@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Clock, MapPin, PackageX } from 'lucide-react';
+import { ChevronLeft, Clock, MapPin, PackageX, QrCode, Store as StoreIcon } from 'lucide-react';
 import { getOrder, cancelOrder } from '@/api/orders';
 import { ApiError } from '@/lib/http';
 import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
@@ -137,18 +137,71 @@ export default function OrderDetail() {
         </dl>
       </SummarySection>
 
-      <SummarySection title="Delivery address">
+      {order.manualUpiPayment && (
+        <SummarySection title="Pay via UPI">
+          <div className="flex flex-col items-center gap-4 py-2 text-center">
+            <img
+              src={order.manualUpiPayment.qrDataUri}
+              alt="Scan to pay via UPI"
+              className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
+            />
+            <div>
+              <p className="text-h3 font-display text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</p>
+              <p className="mt-1 text-body-sm text-slate-400">to {order.manualUpiPayment.vpa}</p>
+            </div>
+            <div className="rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
+              <p className="text-overline uppercase text-slate-400">Your payment token</p>
+              <p className="mt-1 font-display text-h3 tabular-nums text-slate-100">{order.manualUpiPayment.token}</p>
+            </div>
+            <p className="max-w-sm text-caption text-slate-400">
+              Scan the QR with any UPI app and pay the amount above. For pickup, quote this token to
+              staff — for delivery, keep it as your reference. We&apos;ll email you once payment is
+              confirmed.
+            </p>
+          </div>
+        </SummarySection>
+      )}
+
+      {!order.manualUpiPayment && order.manualUpiToken && (
+        <SummarySection title="Manual UPI payment">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
+              <QrCode className="h-5 w-5" aria-hidden />
+            </div>
+            <div className="text-body-sm text-slate-400">
+              <p className="font-medium text-slate-100">Token: {order.manualUpiToken}</p>
+              <p>
+                {order.paymentStatus === 'PAID'
+                  ? 'Payment confirmed.'
+                  : 'Awaiting store confirmation — quote this token if asked.'}
+              </p>
+            </div>
+          </div>
+        </SummarySection>
+      )}
+
+      <SummarySection title={order.deliveryMethod === 'PICKUP' ? 'Pickup' : 'Delivery address'}>
         <div className="flex items-start gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
-            <MapPin className="h-5 w-5" aria-hidden />
+            {order.deliveryMethod === 'PICKUP' ? (
+              <StoreIcon className="h-5 w-5" aria-hidden />
+            ) : (
+              <MapPin className="h-5 w-5" aria-hidden />
+            )}
           </div>
           <address className="min-w-0 space-y-0.5 text-body-sm not-italic text-slate-400">
             <p className="font-medium text-slate-100">{a.name}</p>
             {a.phone && <p>{a.phone}</p>}
-            <p>{a.addressLine1}</p>
-            {a.addressLine2 && <p>{a.addressLine2}</p>}
-            <p>{[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}</p>
-            <p>{a.country}</p>
+            {order.deliveryMethod === 'PICKUP' ? (
+              <p>Collected in person — no delivery.</p>
+            ) : (
+              <>
+                <p>{a.addressLine1}</p>
+                {a.addressLine2 && <p>{a.addressLine2}</p>}
+                <p>{[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}</p>
+                <p>{a.country}</p>
+              </>
+            )}
           </address>
         </div>
       </SummarySection>

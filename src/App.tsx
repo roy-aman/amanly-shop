@@ -4,6 +4,7 @@ import StoreLayout from '@/components/layout/StoreLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
 import PlatformLayout from '@/components/layout/PlatformLayout';
 import { RequireAdmin, RequireAuth, RequirePlatformAdmin, RequireStaff } from '@/components/guards';
+import { RequireConsoleFeature, RequireFeature } from '@/components/RequireFeature';
 import ScrollToTop from '@/components/ScrollToTop';
 import NotFound from '@/pages/NotFound';
 import { RouteTitle } from '@/lib/useDocumentTitle';
@@ -144,28 +145,51 @@ export default function App() {
         {/* Storefront */}
         <Route element={<StoreLayout />}>
           <Route index element={<Page title="" fallback={<StoreListSkeleton />}><Home /></Page>} />
-          <Route path="/products" element={<Page title="Shop" fallback={<StoreListSkeleton />}><Products /></Page>} />
-          <Route path="/products/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ProductDetail /></Page>} />
+
+          {/* Catalogue. Gated on the route rather than only on the nav: a shop
+              that has not been granted a catalogue must 404 a bookmarked
+              product link too, or the "absence" is only cosmetic. */}
+          <Route element={<RequireFeature feature="CATALOG" />}>
+            <Route path="/products" element={<Page title="Shop" fallback={<StoreListSkeleton />}><Products /></Page>} />
+            <Route path="/products/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ProductDetail /></Page>} />
+          </Route>
 
           {/* Services. Browsing and choosing a time stay public: asking someone to
               sign in before they know whether you have a Thursday evening free is
               how a booking flow loses people. The wizard prompts at the last step
               and carries the chosen slot through the round trip. */}
-          <Route path="/services" element={<Page fallback={<StoreListSkeleton />}><Services /></Page>} />
-          <Route path="/services/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ServiceDetail /></Page>} />
-          <Route path="/book/:slug" element={<Page fallback={<FormSkeleton />}><BookService /></Page>} />
+          <Route element={<RequireFeature feature="BOOKINGS" />}>
+            <Route path="/services" element={<Page fallback={<StoreListSkeleton />}><Services /></Page>} />
+            <Route path="/services/:slug" element={<Page fallback={<ProductDetailSkeleton />}><ServiceDetail /></Page>} />
+            <Route path="/book/:slug" element={<Page fallback={<FormSkeleton />}><BookService /></Page>} />
+          </Route>
 
           {/* Customer area — requires any authenticated user */}
           <Route element={<RequireAuth />}>
-            <Route path="/cart" element={<Page title="Cart" fallback={<ListSkeleton />}><Cart /></Page>} />
-            <Route path="/checkout" element={<Page title="Checkout" fallback={<FormSkeleton />}><Checkout /></Page>} />
-            <Route path="/orders" element={<Page title="My orders" fallback={<ListSkeleton />}><Orders /></Page>} />
-            <Route path="/orders/:id" element={<Page fallback={<DetailSkeleton />}><OrderDetail /></Page>} />
+            {/* The transaction path. One grant covers cart, checkout and order
+                history: a shop that can take an order can show it, and there is
+                no arrangement in which those come apart. */}
+            <Route element={<RequireFeature feature="SALES" />}>
+              <Route path="/cart" element={<Page title="Cart" fallback={<ListSkeleton />}><Cart /></Page>} />
+              <Route path="/checkout" element={<Page title="Checkout" fallback={<FormSkeleton />}><Checkout /></Page>} />
+              <Route path="/orders" element={<Page title="My orders" fallback={<ListSkeleton />}><Orders /></Page>} />
+              <Route path="/orders/:id" element={<Page fallback={<DetailSkeleton />}><OrderDetail /></Page>} />
+            </Route>
+
             <Route path="/account" element={<Page title="Account" fallback={<FormSkeleton />}><Account /></Page>} />
-            <Route path="/account/wishlist" element={<Page title="Wishlist" fallback={<StoreListSkeleton />}><Wishlist /></Page>} />
             <Route path="/account/addresses" element={<Page title="Addresses" fallback={<FormSkeleton />}><Addresses /></Page>} />
-            <Route path="/account/bookings" element={<Page title="My bookings" fallback={<ListSkeleton />}><MyBookings /></Page>} />
-            <Route path="/account/bookings/:id" element={<Page fallback={<DetailSkeleton />}><MyBookingDetail /></Page>} />
+
+            {/* The wishlist is part of the catalogue: it is a list of things to
+                buy, and it has nothing to point at without one. */}
+            <Route element={<RequireFeature feature="CATALOG" />}>
+              <Route path="/account/wishlist" element={<Page title="Wishlist" fallback={<StoreListSkeleton />}><Wishlist /></Page>} />
+            </Route>
+
+            <Route element={<RequireFeature feature="BOOKINGS" />}>
+              <Route path="/account/bookings" element={<Page title="My bookings" fallback={<ListSkeleton />}><MyBookings /></Page>} />
+              <Route path="/account/bookings/:id" element={<Page fallback={<DetailSkeleton />}><MyBookingDetail /></Page>} />
+            </Route>
+
             {/* Name and password moved into the profile page. Kept as a redirect rather than
                 deleted so an existing bookmark or emailed link lands somewhere useful. */}
             <Route path="/account/settings" element={<Navigate to="/account" replace />} />
@@ -179,38 +203,69 @@ export default function App() {
             covers the lazy-loaded admin pages. */}
         <Route path="/admin" element={<RequireStaff />}>
           <Route element={<AdminLayout />}>
-            <Route index element={<Page title="Admin" fallback={<DashboardSkeleton />}><Dashboard /></Page>} />
-            <Route path="orders" element={<Page title="Orders" fallback={<ListSkeleton />}><AdminOrders /></Page>} />
-            <Route path="orders/:id" element={<Page fallback={<DetailSkeleton />}><AdminOrderDetail /></Page>} />
-            <Route path="deliverables" element={<Page title="Deliverables" fallback={<ListSkeleton />}><Deliverables /></Page>} />
-            <Route path="coupons" element={<Page title="Coupons" fallback={<ListSkeleton />}><AdminCoupons /></Page>} />
-            <Route path="inventory" element={<Page title="Inventory" fallback={<ListSkeleton />}><Inventory /></Page>} />
-            <Route path="inventory/imports" element={<Page title="Import history" fallback={<ListSkeleton />}><ProductImports /></Page>} />
-            <Route path="inventory/new" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
-            <Route path="inventory/:id" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
-            <Route path="categories" element={<Page title="Categories" fallback={<ListSkeleton />}><Categories /></Page>} />
-            <Route path="brands" element={<Page title="Brands" fallback={<ListSkeleton />}><Brands /></Page>} />
-            <Route path="banners" element={<Page title="Banners" fallback={<ListSkeleton />}><Banners /></Page>} />
-            <Route path="reviews" element={<Page title="Reviews" fallback={<ListSkeleton />}><AdminReviews /></Page>} />
-            <Route path="reports" element={<Page title="Reports" fallback={<DashboardSkeleton />}><Reports /></Page>} />
+            {/* Every console route below ships in every store. Which of them a
+                given shop can reach is the platform's grant, read at runtime —
+                see components/RequireFeature. Withdrawing a section hides it on
+                the next load and deletes nothing behind it. */}
+            <Route element={<RequireConsoleFeature feature="OVERVIEW" />}>
+              <Route index element={<Page title="Admin" fallback={<DashboardSkeleton />}><Dashboard /></Page>} />
+            </Route>
+
+            <Route element={<RequireConsoleFeature feature="SALES" />}>
+              <Route path="orders" element={<Page title="Orders" fallback={<ListSkeleton />}><AdminOrders /></Page>} />
+              <Route path="orders/:id" element={<Page fallback={<DetailSkeleton />}><AdminOrderDetail /></Page>} />
+              <Route path="deliverables" element={<Page title="Deliverables" fallback={<ListSkeleton />}><Deliverables /></Page>} />
+              <Route path="coupons" element={<Page title="Coupons" fallback={<ListSkeleton />}><AdminCoupons /></Page>} />
+            </Route>
+
+            <Route element={<RequireConsoleFeature feature="CATALOG" />}>
+              <Route path="inventory" element={<Page title="Inventory" fallback={<ListSkeleton />}><Inventory /></Page>} />
+              <Route path="inventory/imports" element={<Page title="Import history" fallback={<ListSkeleton />}><ProductImports /></Page>} />
+              <Route path="inventory/new" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
+              <Route path="inventory/:id" element={<Page fallback={<FormSkeleton />}><ProductForm /></Page>} />
+              <Route path="categories" element={<Page title="Categories" fallback={<ListSkeleton />}><Categories /></Page>} />
+              <Route path="brands" element={<Page title="Brands" fallback={<ListSkeleton />}><Brands /></Page>} />
+              <Route path="banners" element={<Page title="Banners" fallback={<ListSkeleton />}><Banners /></Page>} />
+              <Route path="reviews" element={<Page title="Reviews" fallback={<ListSkeleton />}><AdminReviews /></Page>} />
+            </Route>
+
+            <Route element={<RequireConsoleFeature feature="INSIGHTS" />}>
+              <Route path="reports" element={<Page title="Reports" fallback={<DashboardSkeleton />}><Reports /></Page>} />
+            </Route>
+
             {/* STAFF too, not ADMIN-only: the backend allows both, and printing
                 a poster for the shop window is counter work. */}
-            <Route path="qr-code" element={<Page title="Store QR code" fallback={<FormSkeleton />}><StoreQrCode /></Page>} />
-            <Route path="services" element={<Page title="Services" fallback={<ListSkeleton action />}><AdminServices /></Page>} />
-            <Route path="service-categories" element={<Page title="Service groups" fallback={<ListSkeleton action />}><AdminServiceCategories /></Page>} />
-            <Route path="staff" element={<Page title="Team" fallback={<ListSkeleton action />}><AdminStaff /></Page>} />
-            <Route path="bookings" element={<Page title="Diary" fallback={<ListSkeleton action />}><AdminBookings /></Page>} />
-            <Route path="bookings/:id" element={<Page fallback={<DetailSkeleton />}><AdminBookingDetail /></Page>} />
-            <Route path="service-reviews" element={<Page title="Service reviews" fallback={<ListSkeleton />}><AdminServiceReviews /></Page>} />
+            <Route element={<RequireConsoleFeature feature="SYSTEM" />}>
+              <Route path="qr-code" element={<Page title="Store QR code" fallback={<FormSkeleton />}><StoreQrCode /></Page>} />
+            </Route>
+
+            <Route element={<RequireConsoleFeature feature="BOOKINGS" />}>
+              <Route path="services" element={<Page title="Services" fallback={<ListSkeleton action />}><AdminServices /></Page>} />
+              <Route path="service-categories" element={<Page title="Service groups" fallback={<ListSkeleton action />}><AdminServiceCategories /></Page>} />
+              <Route path="staff" element={<Page title="Team" fallback={<ListSkeleton action />}><AdminStaff /></Page>} />
+              <Route path="bookings" element={<Page title="Diary" fallback={<ListSkeleton action />}><AdminBookings /></Page>} />
+              <Route path="bookings/:id" element={<Page fallback={<DetailSkeleton />}><AdminBookingDetail /></Page>} />
+              <Route path="service-reviews" element={<Page title="Service reviews" fallback={<ListSkeleton />}><AdminServiceReviews /></Page>} />
+            </Route>
 
             {/* ADMIN-only sections */}
             <Route element={<RequireAdmin />}>
-              <Route path="users" element={<Page title="Users" fallback={<ListSkeleton />}><AdminUsers /></Page>} />
-              <Route path="users/:id" element={<Page fallback={<DetailSkeleton />}><AdminUserDetail /></Page>} />
+              <Route element={<RequireConsoleFeature feature="PEOPLE" />}>
+                <Route path="users" element={<Page title="Users" fallback={<ListSkeleton />}><AdminUsers /></Page>} />
+                <Route path="users/:id" element={<Page fallback={<DetailSkeleton />}><AdminUserDetail /></Page>} />
+              </Route>
+
+              {/* Settings is deliberately UNGATED. A store must always be able to
+                  reach its own settings, or an operator withdrawing a section
+                  could leave a merchant unable to configure their way back to
+                  anything — including the page where they rename their nouns. */}
               <Route path="settings" element={<Page title="Settings" fallback={<FormSkeleton />}><AdminSettings /></Page>} />
+
               {/* ADMIN-only to match the server: opening hours and how far ahead
                   people may book are the owner's decisions, not the counter's. */}
-              <Route path="booking-settings" element={<Page title="Booking setup" fallback={<FormSkeleton />}><BookingSettings /></Page>} />
+              <Route element={<RequireConsoleFeature feature="BOOKINGS" />}>
+                <Route path="booking-settings" element={<Page title="Booking setup" fallback={<FormSkeleton />}><BookingSettings /></Page>} />
+              </Route>
             </Route>
 
             {/* Admin 404 — renders inside AdminLayout chrome. */}

@@ -15,8 +15,12 @@ export type AuthProvider = 'LOCAL' | 'GOOGLE';
 export type ProductStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 export type OrderStatus = 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
 export type OrderPaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
-export type PaymentMethod = 'CASH' | 'UPI' | 'RAZORPAY';
+/** MANUAL_UPI: the customer pays the store's own UPI id directly and quotes a token to staff, who
+ *  verify receipt themselves and mark the order paid — no gateway, no automatic verification. */
+export type PaymentMethod = 'CASH' | 'UPI' | 'RAZORPAY' | 'MANUAL_UPI';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+/** DELIVERY (default, full address required) or PICKUP (collect in person, no address needed). */
+export type DeliveryMethod = 'DELIVERY' | 'PICKUP';
 
 // ── Error envelope ────────────────────────────────────────────────────
 export interface FieldViolation {
@@ -433,15 +437,19 @@ export interface CartResponse {
 }
 
 // ── Orders ────────────────────────────────────────────────────────────
+/**
+ * Also doubles as the pickup contact for a PICKUP order: only `name` (and, where given, `phone`)
+ * is meaningful then — the address fields are null, not a blank address.
+ */
 export interface ShippingDetails {
   name: string;
   phone: string | null;
-  addressLine1: string;
+  addressLine1: string | null;
   addressLine2: string | null;
-  city: string;
+  city: string | null;
   state: string | null;
-  postalCode: string;
-  country: string;
+  postalCode: string | null;
+  country: string | null;
 }
 export type ShippingAddressRequest = ShippingDetails;
 
@@ -472,6 +480,18 @@ export interface PaymentAction {
   razorpayKeyId: string;
   razorpayOrderId: string;
   amountMinor: number;
+  currency: string;
+}
+
+/** What the customer needs to pay via Manual UPI and quote to store staff. */
+export interface ManualUpiPayment {
+  /** Shown to the customer and quoted to staff at pickup/delivery. */
+  token: string;
+  /** The store's UPI id the QR pays into. */
+  vpa: string;
+  /** data:image/png;base64,... — render directly in an <img>. */
+  qrDataUri: string;
+  amount: number;
   currency: string;
 }
 
@@ -506,10 +526,20 @@ export interface OrderResponse {
   /** Coupon code applied at placement; null when none was used (WP-3.4). */
   couponCode: string | null;
   currency: string;
+  /** Optional so pre-pickup cached payloads still type-check; absent reads as 'DELIVERY'. */
+  deliveryMethod?: DeliveryMethod;
   shippingAddress: ShippingDetails;
   notes: string | null;
   items: OrderItemResponse[];
   paymentAction: PaymentAction | null;
+  /** Present on every read of a MANUAL_UPI order while `paymentStatus` is not 'PAID' — including
+   *  the placement-time "scan to pay" screen and any later visit before it's confirmed, so a
+   *  customer who navigates away can always come back to something payable. Null once paid, and
+   *  for every other method; use `manualUpiToken` for the persistent token after that. */
+  manualUpiPayment?: ManualUpiPayment | null;
+  /** The Manual UPI token for this order, persistent once generated regardless of payment status —
+   *  what the customer quotes to staff and what staff cross-check. Null for every other method. */
+  manualUpiToken?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -530,6 +560,7 @@ export interface OrderSummaryResponse {
 }
 
 export interface PlaceOrderRequest {
+  /** For PICKUP only `name`/`phone` are required — the address fields may be omitted. */
   shippingAddress: ShippingAddressRequest;
   notes?: string | null;
   paymentMethod?: PaymentMethod;
@@ -537,6 +568,9 @@ export interface PlaceOrderRequest {
    *  against the server cart; an invalid coupon REJECTS the order (never silently
    *  dropped), so only send a code the preview reported valid. */
   couponCode?: string | null;
+  /** Defaults to 'DELIVERY'. 'PICKUP' requires the store to have pickup enabled and charges no
+   *  shipping; 'DELIVERY' requires a full shippingAddress. */
+  deliveryMethod?: DeliveryMethod;
 }
 
 export interface RazorpayVerifyRequest {
@@ -563,6 +597,11 @@ export interface PublicStoreResponse {
   currency: string;
   codEnabled: boolean;
   onlinePaymentEnabled: boolean;
+  /** True when this store offers Manual UPI (entitled AND switched on AND a VPA is configured).
+   *  Optional/undefined reads as off, the same convention as `bookingsEnabled`. */
+  manualUpiEnabled?: boolean;
+  /** True when the customer may choose in-person pickup instead of shipping. */
+  pickupEnabled?: boolean;
   /** Flat delivery charge applied when the order is below the threshold. */
   shippingFlatAmount?: number;
   /** Discounted subtotal at or above this ships free. `null` = never free. */
@@ -594,6 +633,26 @@ export interface PublicStoreResponse {
   timezone?: string;
   /** Where customers physically come for an appointment; also the ICS location. */
   businessAddress?: string | null;
+  /**
+   * Which sections this shop actually has — `['CATALOG','SALES',...]`.
+   *
+   * Every storefront bundle ships every section; this list decides which of them
+   * THIS shop shows. Read it through `useStoreFeatures()` rather than directly:
+   * an absent list and an empty one mean opposite things (see lib/features.ts),
+   * and getting that backwards empties a working shop or exposes a withdrawn one.
+   *
+   * It reports what is AVAILABLE, not merely granted — a store entitled to a
+   * gateway with half its keys entered is absent from it.
+   */
+  features?: string[];
+  /**
+   * What this shop calls things: `{ products: 'cakes', category: 'occasion' }`.
+   *
+   * Every term resolved server-side — the merchant's word where they chose one,
+   * the platform's default everywhere else. Read it through `useLexicon()`,
+   * which supplies this bundle's own defaults for any key a deploy predates.
+   */
+  lexicon?: Record<string, string>;
 }
 
 export interface StoreSettingsResponse {
@@ -606,12 +665,20 @@ export interface StoreSettingsResponse {
   onlinePaymentEnabled: boolean;
   razorpayKeyId: string | null;
   razorpayConfigured: boolean;
+  /** Platform entitlement: may this store offer Manual UPI at all. */
+  manualUpiAllowed?: boolean;
+  /** Merchant switch: has this store turned Manual UPI on. */
+  manualUpiEnabled?: boolean;
+  /** The store's own UPI id payments are made to directly, e.g. shopowner@upi. */
+  manualUpiVpa?: string | null;
   whatsappEnabled: boolean;
   /** Commerce rules (WP-P.6) — same figures the storefront reads from /store. */
   shippingFlatAmount?: number;
   freeShippingThreshold?: number | null;
   taxRatePercent?: number;
   pricesIncludeTax?: boolean;
+  /** Whether a customer may choose in-person pickup instead of shipping. */
+  pickupEnabled?: boolean;
   /** Storefront opening copy. `null` = the merchant has written none, so show the
    *  field empty with the default as placeholder rather than as a value. */
   heroEyebrow?: string | null;
@@ -633,6 +700,48 @@ export interface StoreSettingsResponse {
    *  that shows an appointment time. */
   timezone?: string;
   businessAddress?: string | null;
+  /**
+   * The sections this store has been GRANTED — the console builds its navigation
+   * from this. Entitlements rather than effective capability, which is the same
+   * distinction the two booking flags above draw: a store entitled to bookings
+   * but not yet open for them still gets the setup pages, because that is how it
+   * becomes ready to open.
+   */
+  features?: string[];
+  /**
+   * The merchant's OVERRIDES only — a term they have never renamed is absent
+   * rather than filled in. That is what lets the rename form show the platform's
+   * word as a placeholder and treat an empty box as "use the default", which is
+   * the only way a merchant can undo a rename.
+   */
+  lexicon?: Record<string, string>;
+  /** Every term the platform knows, at its default. The rename form is built
+   *  from this, so a term added in a later release needs no console release. */
+  lexiconDefaults?: Record<string, string>;
+}
+
+/**
+ * `GET /api/v1/admin/store/features` (ADMIN **or STAFF**).
+ *
+ * The one part of a store's settings staff may read, and the reason it exists:
+ * the rest of `/admin/store` is ADMIN-only, so a console gate that read its
+ * entitlements from there had no answer for staff — and "no answer" has to mean
+ * "nothing is gated" for older backends, which would have shown staff every
+ * section regardless of what the store was granted.
+ */
+export interface StoreFeaturesResponse {
+  features: string[];
+}
+
+/**
+ * `PUT /api/v1/admin/store/lexicon` (ADMIN).
+ *
+ * FULL REPLACE: send every rename the store has, because a term left out reverts
+ * to the platform default. Blank values are dropped server-side, so clearing a
+ * box is how a merchant undoes one rename without touching the others.
+ */
+export interface UpdateStoreLexiconRequest {
+  terms: Record<string, string>;
 }
 
 /**
@@ -664,6 +773,9 @@ export interface UpdateCommerceSettingsRequest {
   pricesIncludeTax: boolean;
   /** Days a delivered order stays returnable. null = returns disabled. */
   returnWindowDays?: number | null;
+  /** Whether a customer may choose in-person pickup instead of shipping. Uses businessAddress as
+   *  the pickup location. */
+  pickupEnabled: boolean;
 }
 
 export interface UpdatePaymentSettingsRequest {
@@ -672,6 +784,9 @@ export interface UpdatePaymentSettingsRequest {
   razorpayKeyId?: string | null;
   razorpayKeySecret?: string | null;
   razorpayWebhookSecret?: string | null;
+  manualUpiEnabled: boolean;
+  /** Required when manualUpiEnabled is true; blank clears it. */
+  manualUpiVpa?: string | null;
 }
 
 export interface UpdateWhatsappSettingsRequest {

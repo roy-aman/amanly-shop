@@ -24,6 +24,7 @@ import type {
   ProductSummaryResponse,
   ProductVariantResponse,
   ReviewStatus,
+  StoreFeaturesResponse,
   StoreSettingsResponse,
   UpdateBrandRequest,
   UpdateCategoryRequest,
@@ -33,6 +34,7 @@ import type {
   UpdateVariantRequest,
   UpdateCommerceSettingsRequest,
   UpdateStorefrontContentRequest,
+  UpdateStoreLexiconRequest,
   UpdateWhatsappSettingsRequest,
   UserResponse,
 } from '@/lib/types';
@@ -236,6 +238,12 @@ export const adminStore = {
   get(): Promise<StoreSettingsResponse> {
     return request('GET', `${A}/store`, { auth: true });
   },
+  /** Which console sections this store has. ADMIN **or STAFF**, unlike everything
+   *  else here — a counter assistant needs to know whether this shop has a diary
+   *  without being shown its owner's payment keys. */
+  features(): Promise<StoreFeaturesResponse> {
+    return request('GET', `${A}/store/features`, { auth: true });
+  },
   updatePayment(body: UpdatePaymentSettingsRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/payment-settings`, { body, auth: true });
   },
@@ -253,5 +261,13 @@ export const adminStore = {
    *  no home-page banner is booked — a live campaign takes that screen. */
   updateStorefrontContent(body: UpdateStorefrontContentRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/storefront-content`, { body, auth: true });
+  },
+  /** What this shop calls things — "cakes" for products, "occasions" for
+   *  categories. FULL REPLACE: send every rename the store has, because a term
+   *  left out reverts to the platform default. That is deliberate; it is how a
+   *  merchant undoes one. Unknown keys are a 400 naming them rather than a row
+   *  nothing will ever render. */
+  updateLexicon(body: UpdateStoreLexiconRequest): Promise<StoreSettingsResponse> {
+    return request('PUT', `${A}/store/lexicon`, { body, auth: true });
   },
 };

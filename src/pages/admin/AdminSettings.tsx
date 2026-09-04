@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, MessageCircle, Truck, Type } from 'lucide-react';
+import { CreditCard, MessageCircle, Tag, Truck, Type } from 'lucide-react';
 import { adminStore } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type {
@@ -8,8 +8,10 @@ import type {
   UpdateCommerceSettingsRequest,
   UpdatePaymentSettingsRequest,
   UpdateStorefrontContentRequest,
+  UpdateStoreLexiconRequest,
   UpdateWhatsappSettingsRequest,
 } from '@/lib/types';
+import { LEXICON_DEFAULTS } from '@/lib/lexicon';
 import { useToast } from '@/context/ToastContext';
 import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, PageLoader, Textarea } from '@/components/ui';
 
@@ -29,6 +31,7 @@ export default function AdminSettings() {
       <PageHeader title="Settings" subtitle="Delivery, tax, payment and messaging for your store." />
       <div className="space-y-6">
         <StorefrontCard store={data} />
+        <LexiconCard store={data} />
         <CommerceCard store={data} />
         <PaymentsCard store={data} />
         <WhatsappCard store={data} />
@@ -135,6 +138,163 @@ function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
   );
 }
 
+// ── What this shop calls things ───────────────────────────────────────
+/**
+ * The rename form.
+ *
+ * Every store on the platform runs these same pages; this is where a merchant
+ * decides what the things on them are called. A bakery's customers browse cakes
+ * by occasion, and its staff open a nav item that says Cakes — same code, same
+ * routes, different words, and no developer involved in changing them.
+ *
+ * Two rules shape the form, and both come from "clearing a box must undo a
+ * rename". The inputs hold OVERRIDES only, never the defaults, with the default
+ * shown as placeholder — pre-filling would make "use the platform's word"
+ * impossible to express. And the save is a FULL REPLACE, so what is submitted is
+ * every rename the store has; a term cleared here is a term that reverts.
+ *
+ * The list of terms comes from the server (`lexiconDefaults`) rather than from
+ * this file, so a term added in a later backend release appears here without a
+ * console release. This bundle's own defaults are only the fallback.
+ */
+const TERM_GROUPS: { heading: string; hint: string; keys: string[] }[] = [
+  {
+    heading: 'What you sell',
+    hint: 'Shown to customers, all over the shop.',
+    keys: ['product', 'products', 'category', 'categories', 'brand', 'brands', 'variant', 'variants'],
+  },
+  {
+    heading: 'Buying',
+    hint: 'The bag, the checkout, and what a customer calls what they have bought.',
+    keys: ['cart', 'order', 'orders', 'coupon', 'coupons', 'wishlist', 'review', 'reviews'],
+  },
+  {
+    heading: 'Appointments',
+    hint: 'Only shown to customers if your shop takes bookings.',
+    keys: ['service', 'services', 'booking', 'bookings', 'staffMember', 'staff'],
+  },
+  {
+    heading: 'This console',
+    hint: 'The navigation you and your team read all day.',
+    keys: [
+      'nav.overview', 'nav.dashboard', 'nav.catalog', 'nav.inventory', 'nav.categories',
+      'nav.brands', 'nav.banners', 'nav.reviews', 'nav.sales', 'nav.orders', 'nav.deliverables',
+      'nav.coupons', 'nav.bookings', 'nav.diary', 'nav.services', 'nav.serviceGroups', 'nav.team',
+      'nav.serviceReviews', 'nav.bookingSetup', 'nav.people', 'nav.users', 'nav.insights',
+      'nav.reports', 'nav.system', 'nav.storeQr', 'nav.settings',
+    ],
+  },
+];
+
+function LexiconCard({ store }: { store: StoreSettingsResponse }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const [terms, setTerms] = useState<Record<string, string>>(store.lexicon ?? {});
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => setTerms(store.lexicon ?? {}), [store]);
+
+  // Server-supplied where available: a term this console has never heard of is
+  // still renameable, and one that has been retired stops being offered.
+  const defaults: Record<string, string> = store.lexiconDefaults ?? LEXICON_DEFAULTS;
+
+  const mutation = useMutation({
+    mutationFn: (body: UpdateStoreLexiconRequest) => adminStore.updateLexicon(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'store'] });
+      // The storefront AND this console's own navigation read the resolved words
+      // from the public bootstrap, which is cached for minutes. Without this the
+      // merchant saves "Cakes" and the sidebar still says Inventory.
+      qc.invalidateQueries({ queryKey: ['public-store'] });
+      toast.success('Wording saved');
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'UNKNOWN_LEXICON_TERM') {
+        toast.error('That word does not belong to anything', e.message);
+        return;
+      }
+      toast.error('Could not save', e instanceof Error ? e.message : 'Please try again.');
+    },
+  });
+
+  function set(key: string, value: string) {
+    setTerms((prev) => {
+      const next = { ...prev };
+      // A cleared box is a removed override, not an empty word. Keeping "" would
+      // send a blank the server then has to interpret, and would leave the field
+      // looking edited when it has been reset.
+      if (value.trim()) next[key] = value;
+      else delete next[key];
+      return next;
+    });
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    mutation.mutate({ terms });
+  }
+
+  const renamed = Object.keys(terms).length;
+
+  return (
+    <Card className="p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+        <Tag className="h-4 w-4 text-gold-400" /> What you call things
+      </h2>
+      <p className="mt-1 text-caption text-slate-400">
+        Your shop runs the same pages as every shop on the platform — this is what the things on them
+        are called. Sell cakes by occasion rather than products by category. Leave a box empty to keep
+        the word shown in grey.
+        {renamed > 0 && <> You have renamed {renamed} of them.</>}
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-4 space-y-5">
+        {TERM_GROUPS.map((group, i) => {
+          // The console group is long and most merchants never open it, so it is
+          // collapsed until asked for rather than pushing the save button off the
+          // screen for everyone.
+          const collapsible = i === TERM_GROUPS.length - 1;
+          if (collapsible && !open) {
+            return (
+              <Button key={group.heading} type="button" variant="ghost" onClick={() => setOpen(true)}>
+                Rename this console too
+              </Button>
+            );
+          }
+          return (
+            <div key={group.heading}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {group.heading}
+              </p>
+              <p className="mt-0.5 text-caption text-slate-400">{group.hint}</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {group.keys
+                  .filter((key) => key in defaults)
+                  .map((key) => (
+                    <Field key={key} label={defaults[key]}>
+                      <Input
+                        aria-label={`Your word for ${defaults[key]}`}
+                        maxLength={60}
+                        placeholder={defaults[key]}
+                        value={terms[key] ?? ''}
+                        onChange={(e) => set(key, e.target.value)}
+                      />
+                    </Field>
+                  ))}
+              </div>
+            </div>
+          );
+        })}
+
+        <Button type="submit" loading={mutation.isPending}>
+          Save wording
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
 // ── Delivery & tax (WP-P.6) ───────────────────────────────────────────
 function CommerceCard({ store }: { store: StoreSettingsResponse }) {
   const qc = useQueryClient();
@@ -146,6 +306,7 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
   const [threshold, setThreshold] = useState(store.freeShippingThreshold == null ? '' : String(store.freeShippingThreshold));
   const [taxRate, setTaxRate] = useState(String(store.taxRatePercent ?? 0));
   const [inclusive, setInclusive] = useState(store.pricesIncludeTax ?? true);
+  const [pickupEnabled, setPickupEnabled] = useState(store.pickupEnabled ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -153,6 +314,7 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
     setThreshold(store.freeShippingThreshold == null ? '' : String(store.freeShippingThreshold));
     setTaxRate(String(store.taxRatePercent ?? 0));
     setInclusive(store.pricesIncludeTax ?? true);
+    setPickupEnabled(store.pickupEnabled ?? false);
   }, [store]);
 
   const mutation = useMutation({
@@ -189,6 +351,7 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
       freeShippingThreshold: thresholdNum,
       taxRatePercent: rateNum,
       pricesIncludeTax: inclusive,
+      pickupEnabled,
     });
   }
 
@@ -219,6 +382,22 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
         <Field label="Tax rate (%)" error={errors.taxRate}>
           <Input type="number" min={0} max={100} step="0.001" value={taxRate} invalid={!!errors.taxRate} onChange={(e) => setTaxRate(e.target.value)} />
         </Field>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 p-3 transition hover:bg-ink-800/60">
+          <input
+            type="checkbox"
+            className="mt-1 accent-gold-400"
+            checked={pickupEnabled}
+            onChange={(e) => setPickupEnabled(e.target.checked)}
+          />
+          <span>
+            <span className="block text-body-sm text-slate-100">Allow in-person pickup</span>
+            <span className="block text-caption text-slate-400">
+              Shoppers may collect their order themselves instead of having it shipped — no address
+              required, no delivery charge. Uses your business address as the pickup location.
+            </span>
+          </span>
+        </label>
 
         <fieldset className="space-y-2">
           <legend className="text-body-sm font-medium text-slate-300">How prices are entered</legend>
@@ -251,20 +430,36 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
 }
 
 // ── Payments ──────────────────────────────────────────────────────────
+/**
+ * Which ways of paying this store accepts.
+ *
+ * Two rules shape this card. A method the platform has not provisioned for this
+ * store is not shown at all — the Razorpay account belongs to the platform, so
+ * there are no gateway credentials here and no dead toggle to explain. And the
+ * detail a method needs (the UPI id) appears only once that method is switched
+ * on, so a box is never asking for something the store is not using.
+ *
+ * The one exception is a method already switched on whose entitlement has since
+ * gone away: that stays visible, badged, so the merchant can turn it off.
+ */
 function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [codEnabled, setCodEnabled] = useState(store.codEnabled);
   const [onlineEnabled, setOnlineEnabled] = useState(store.onlinePaymentEnabled);
-  const [keyId, setKeyId] = useState(store.razorpayKeyId ?? '');
-  const [keySecret, setKeySecret] = useState('');
-  const [webhookSecret, setWebhookSecret] = useState('');
+  const [manualUpiEnabled, setManualUpiEnabled] = useState(store.manualUpiEnabled ?? false);
+  const [manualUpiVpa, setManualUpiVpa] = useState(store.manualUpiVpa ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const manualUpiAllowed = store.manualUpiAllowed ?? false;
+  const showOnline = store.razorpayConfigured || store.onlinePaymentEnabled;
+  const showManualUpi = manualUpiAllowed || (store.manualUpiEnabled ?? false);
 
   useEffect(() => {
     setCodEnabled(store.codEnabled);
     setOnlineEnabled(store.onlinePaymentEnabled);
-    setKeyId(store.razorpayKeyId ?? '');
+    setManualUpiEnabled(store.manualUpiEnabled ?? false);
+    setManualUpiVpa(store.manualUpiVpa ?? '');
   }, [store]);
 
   const mutation = useMutation({
@@ -272,8 +467,6 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'store'] });
       toast.success('Payment settings saved');
-      setKeySecret('');
-      setWebhookSecret('');
     },
     onError: (e) => {
       if (e instanceof ApiError) {
@@ -287,66 +480,78 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    // A UPI id is what the QR pays into, so the method is meaningless without one.
+    if (manualUpiEnabled && !manualUpiVpa.trim()) {
+      setErrors({ manualUpiVpa: 'Required to accept manual UPI' });
+      return;
+    }
     setErrors({});
     mutation.mutate({
       codEnabled,
       onlinePaymentEnabled: onlineEnabled,
-      razorpayKeyId: keyId.trim() || null,
-      razorpayKeySecret: keySecret.trim() || undefined,
-      razorpayWebhookSecret: webhookSecret.trim() || undefined,
+      manualUpiEnabled,
+      manualUpiVpa: manualUpiVpa.trim() || null,
     });
   }
 
   return (
     <Card className="p-5">
       <form onSubmit={onSubmit} className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-            <CreditCard className="h-4 w-4 text-gold-400" /> Payments
-          </h2>
-          <Badge tone={store.razorpayConfigured ? 'green' : 'gray'}>
-            {store.razorpayConfigured ? 'Razorpay configured' : 'Razorpay not configured'}
-          </Badge>
-        </div>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+          <CreditCard className="h-4 w-4 text-gold-400" /> Payments
+        </h2>
 
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input type="checkbox" checked={codEnabled} onChange={(e) => setCodEnabled(e.target.checked)} />
           Enable cash on delivery (COD)
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input type="checkbox" checked={onlineEnabled} onChange={(e) => setOnlineEnabled(e.target.checked)} />
-          Enable online payments
-        </label>
 
-        <Field label="Razorpay Key ID" error={errors.razorpayKeyId}>
-          <Input value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="rzp_live_…" />
-        </Field>
-        <Field
-          label="Razorpay Key Secret"
-          error={errors.razorpayKeySecret}
-          hint="Write-only — secrets are never returned. Leave blank to keep current."
-        >
-          <Input
-            type="password"
-            value={keySecret}
-            onChange={(e) => setKeySecret(e.target.value)}
-            placeholder="leave blank to keep current"
-            autoComplete="new-password"
-          />
-        </Field>
-        <Field
-          label="Razorpay Webhook Secret"
-          error={errors.razorpayWebhookSecret}
-          hint="Write-only. Leave blank to keep current."
-        >
-          <Input
-            type="password"
-            value={webhookSecret}
-            onChange={(e) => setWebhookSecret(e.target.value)}
-            placeholder="leave blank to keep current"
-            autoComplete="new-password"
-          />
-        </Field>
+        {showOnline && (
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={onlineEnabled}
+              onChange={(e) => setOnlineEnabled(e.target.checked)}
+            />
+            Enable online payments (cards, UPI, netbanking)
+          </label>
+        )}
+
+        {showManualUpi && (
+          <div className="border-t border-ink-700 pt-4">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={manualUpiEnabled}
+                  onChange={(e) => setManualUpiEnabled(e.target.checked)}
+                />
+                Enable Manual UPI
+              </label>
+              {!manualUpiAllowed && <Badge tone="gray">No longer on your plan</Badge>}
+            </div>
+            <p className="mt-1 text-caption text-slate-400">
+              Shoppers scan a QR to pay your UPI id directly and quote a token at pickup/delivery — you
+              verify receipt yourself in your own UPI app and mark the order paid. No gateway, no
+              automatic verification.
+            </p>
+            {manualUpiEnabled && (
+              <Field
+                label="Your UPI id"
+                error={errors.manualUpiVpa}
+                hint="What the QR pays into, e.g. shopowner@upi."
+                className="mt-3"
+              >
+                <Input
+                  value={manualUpiVpa}
+                  invalid={!!errors.manualUpiVpa}
+                  onChange={(e) => setManualUpiVpa(e.target.value)}
+                  placeholder="shopowner@upi"
+                />
+              </Field>
+            )}
+          </div>
+        )}
 
         <Button type="submit" loading={mutation.isPending}>
           Save payment settings
@@ -357,6 +562,11 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
 }
 
 // ── WhatsApp ──────────────────────────────────────────────────────────
+/**
+ * Connection details show only while the integration is switched on — the same
+ * rule the payments card follows. Turning it off leaves the stored credentials
+ * alone; they are simply not asked about.
+ */
 function WhatsappCard({ store }: { store: StoreSettingsResponse }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -418,38 +628,42 @@ function WhatsappCard({ store }: { store: StoreSettingsResponse }) {
           Enable WhatsApp notifications
         </label>
 
-        <Field label="Phone Number ID" error={errors.phoneNumberId}>
-          <Input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
-        </Field>
-        <Field label="Verify Token" error={errors.verifyToken}>
-          <Input value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} />
-        </Field>
-        <Field
-          label="Access Token"
-          error={errors.accessToken}
-          hint="Write-only — secrets are never returned. Leave blank to keep current."
-        >
-          <Input
-            type="password"
-            value={accessToken}
-            onChange={(e) => setAccessToken(e.target.value)}
-            placeholder="leave blank to keep current"
-            autoComplete="new-password"
-          />
-        </Field>
-        <Field
-          label="App Secret"
-          error={errors.appSecret}
-          hint="Write-only. Leave blank to keep current."
-        >
-          <Input
-            type="password"
-            value={appSecret}
-            onChange={(e) => setAppSecret(e.target.value)}
-            placeholder="leave blank to keep current"
-            autoComplete="new-password"
-          />
-        </Field>
+        {enabled && (
+          <>
+            <Field label="Phone Number ID" error={errors.phoneNumberId}>
+              <Input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
+            </Field>
+            <Field label="Verify Token" error={errors.verifyToken}>
+              <Input value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} />
+            </Field>
+            <Field
+              label="Access Token"
+              error={errors.accessToken}
+              hint="Write-only — secrets are never returned. Leave blank to keep current."
+            >
+              <Input
+                type="password"
+                value={accessToken}
+                onChange={(e) => setAccessToken(e.target.value)}
+                placeholder="leave blank to keep current"
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field
+              label="App Secret"
+              error={errors.appSecret}
+              hint="Write-only. Leave blank to keep current."
+            >
+              <Input
+                type="password"
+                value={appSecret}
+                onChange={(e) => setAppSecret(e.target.value)}
+                placeholder="leave blank to keep current"
+                autoComplete="new-password"
+              />
+            </Field>
+          </>
+        )}
 
         <Button type="submit" loading={mutation.isPending}>
           Save WhatsApp settings

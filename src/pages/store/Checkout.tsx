@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CreditCard, MapPin, Plus, Tag, Wallet } from 'lucide-react';
+import { AlertTriangle, CreditCard, MapPin, Plus, QrCode, Store as StoreIcon, Tag, Truck, Wallet } from 'lucide-react';
 import { getPublicStore } from '@/api/store';
 import { getCart } from '@/api/cart';
 import { placeOrder, verifyRazorpayPayment } from '@/api/orders';
@@ -13,7 +13,14 @@ import { ApiError } from '@/lib/http';
 import { money } from '@/lib/format';
 import { estimateCartTotals } from '@/lib/totals';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import type { AddressRequest, AddressResponse, PaymentMethod, PlaceOrderRequest, ShippingDetails } from '@/lib/types';
+import type {
+  AddressRequest,
+  AddressResponse,
+  DeliveryMethod,
+  PaymentMethod,
+  PlaceOrderRequest,
+  ShippingDetails,
+} from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import { BRAND_NAME } from '@/lib/brand';
@@ -145,11 +152,16 @@ export default function Checkout() {
 
   // ── Step + form state (lives in the parent so back/forward never loses it) ──
   const [step, setStep] = useState(0);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('DELIVERY');
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [addressError, setAddressError] = useState<string | null>(null);
   const [addingAddress, setAddingAddress] = useState(false);
   const [addForm, setAddForm] = useState<AddressFormState>({ ...EMPTY_ADDRESS });
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
+
+  // Pickup contact — no street address needed, just who to hand the order to.
+  const [pickupName, setPickupName] = useState('');
+  const [pickupPhone, setPickupPhone] = useState('');
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [notes, setNotes] = useState('');
@@ -163,22 +175,34 @@ export default function Checkout() {
 
   // Pre-placement estimate from the store's published rules; null while they are
   // unknown. The order response is authoritative once placed.
-  const estimate = estimateCartTotals(cart?.totalAmount ?? 0, appliedCoupon?.discountAmount ?? 0, store);
+  // Pickup never charges shipping, regardless of the store's configured rate — mirrors the
+  // backend's own policyFor(store, deliveryMethod) so the estimate never overstates the total.
+  const estimateStore = deliveryMethod === 'PICKUP' && store ? { ...store, shippingFlatAmount: 0, freeShippingThreshold: null } : store;
+  const estimate = estimateCartTotals(cart?.totalAmount ?? 0, appliedCoupon?.discountAmount ?? 0, estimateStore);
 
   // Payment methods available from store config (gated by the store flags).
   const codEnabled = !!store?.codEnabled;
   const onlineEnabled = !!store?.onlinePaymentEnabled;
+  const manualUpiEnabled = !!store?.manualUpiEnabled;
+  const pickupEnabled = !!store?.pickupEnabled;
   const methods = useMemo(() => {
     const opts: { value: PaymentMethod; label: string; desc: string; icon: typeof Wallet }[] = [];
     if (codEnabled)
       opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
     if (onlineEnabled)
       opts.push({ value: 'UPI', label: 'UPI / Online payment', desc: 'Pay securely now via UPI, cards & more', icon: CreditCard });
-    // Neither flag on → fall back to COD so a store is never un-checkoutable.
+    if (manualUpiEnabled)
+      opts.push({
+        value: 'MANUAL_UPI',
+        label: 'UPI (scan to pay)',
+        desc: 'Scan a QR, pay us directly, then quote your token at pickup/delivery',
+        icon: QrCode,
+      });
+    // No flag on → fall back to COD so a store is never un-checkoutable.
     if (opts.length === 0)
       opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
     return opts;
-  }, [codEnabled, onlineEnabled]);
+  }, [codEnabled, onlineEnabled, manualUpiEnabled]);
 
   // Preselect the default (or first) saved address once addresses load.
   useEffect(() => {
@@ -252,6 +276,15 @@ export default function Checkout() {
   const showAddForm = addingAddress || savedAddresses.length === 0;
 
   function goToPayment() {
+    if (deliveryMethod === 'PICKUP') {
+      if (!pickupName.trim()) {
+        setAddressError('Please tell us who is picking up the order.');
+        return;
+      }
+      setAddressError(null);
+      setStep(1);
+      return;
+    }
     if (!selectedAddress) {
       setAddressError(
         showAddForm ? 'Add and save a delivery address to continue.' : 'Please select a delivery address.',
@@ -263,26 +296,50 @@ export default function Checkout() {
   }
 
   async function handlePlaceOrder() {
-    if (!selectedAddress) {
-      setStep(0);
-      setAddressError('Please select a delivery address.');
-      return;
+    let shippingAddress: ShippingDetails;
+    if (deliveryMethod === 'PICKUP') {
+      if (!pickupName.trim()) {
+        setStep(0);
+        setAddressError('Please tell us who is picking up the order.');
+        return;
+      }
+      shippingAddress = {
+        name: pickupName.trim(),
+        phone: pickupPhone.trim() || null,
+        addressLine1: null,
+        addressLine2: null,
+        city: null,
+        state: null,
+        postalCode: null,
+        country: null,
+      };
+    } else {
+      if (!selectedAddress) {
+        setStep(0);
+        setAddressError('Please select a delivery address.');
+        return;
+      }
+      shippingAddress = toShipping(selectedAddress);
     }
-    const shippingAddress = toShipping(selectedAddress);
     setPlaceErrors([]);
     setPaymentIssue(null);
     setSubmitting(true);
     // Only send a coupon the re-validation confirmed is still valid; placement
     // recomputes the discount authoritatively and rejects an invalid code.
-    const body: PlaceOrderRequest = { shippingAddress, notes: notes.trim() || null, paymentMethod };
+    const body: PlaceOrderRequest = { shippingAddress, notes: notes.trim() || null, paymentMethod, deliveryMethod };
     if (appliedCoupon) body.couponCode = appliedCoupon.code;
     try {
       const order = await placeOrder(body);
 
       if (!order.paymentAction) {
-        // COD — order complete. The coupon (if any) is now redeemed on the order.
+        // COD or Manual UPI — order complete (a Manual UPI order stays unpaid until staff verify,
+        // but there is no further client step: no widget to open, nothing to await here).
         clearStoredCoupon();
-        toast.success('Order placed!', 'Thank you — your order has been received.');
+        if (order.manualUpiPayment) {
+          toast.success('Scan to pay', 'Your order is placed — scan the QR to complete payment.');
+        } else {
+          toast.success('Order placed!', 'Thank you — your order has been received.');
+        }
         await refresh();
         navigate(`/orders/${order.id}`);
         return;
@@ -375,9 +432,59 @@ export default function Checkout() {
           {step === 0 && (
             <section className="space-y-5 rounded-2xl border border-ink-700 bg-ink-900 p-6">
               <h2 ref={stepHeadingRef} tabIndex={-1} className="text-h4 text-slate-100 outline-none">
-                Delivery address
+                {deliveryMethod === 'PICKUP' ? 'Pickup details' : 'Delivery address'}
               </h2>
 
+              {pickupEnabled && (
+                <div className="space-y-2" role="radiogroup" aria-label="Delivery method">
+                  {(
+                    [
+                      { value: 'DELIVERY' as const, label: 'Ship to me', desc: 'Delivered to your address', icon: Truck },
+                      { value: 'PICKUP' as const, label: 'Collect in person', desc: 'No delivery charge', icon: StoreIcon },
+                    ]
+                  ).map((m) => {
+                    const active = deliveryMethod === m.value;
+                    const Icon = m.icon;
+                    return (
+                      <label
+                        key={m.value}
+                        className={
+                          'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ' +
+                          (active ? 'border-primary bg-ink-850' : 'border-ink-600 hover:border-slate-100')
+                        }
+                      >
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="delivery-method"
+                            checked={active}
+                            onChange={() => {
+                              setDeliveryMethod(m.value);
+                              setAddressError(null);
+                            }}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          <Icon className="h-5 w-5 text-slate-400" />
+                          <span className="text-sm font-medium text-slate-100">{m.label}</span>
+                        </span>
+                        <span className="text-xs text-slate-500">{m.desc}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {deliveryMethod === 'PICKUP' ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Full name" required>
+                    <Input value={pickupName} onChange={(e) => setPickupName(e.target.value)} autoComplete="name" />
+                  </Field>
+                  <Field label="Phone" hint="So we can reach you when it's ready.">
+                    <Input value={pickupPhone} onChange={(e) => setPickupPhone(e.target.value)} autoComplete="tel" />
+                  </Field>
+                </div>
+              ) : (
+                <>
               {savedAddresses.length > 0 && (
                 <div className="space-y-2" role="radiogroup" aria-label="Saved addresses">
                   {savedAddresses.map((a) => {
@@ -485,6 +592,8 @@ export default function Checkout() {
                   </div>
                 </div>
               )}
+                </>
+              )}
 
               {addressError && (
                 <p className="text-sm text-danger-300" role="alert">
@@ -545,13 +654,28 @@ export default function Checkout() {
               <section className="space-y-1">
                 <div className="flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                    <MapPin className="h-4 w-4 text-slate-400" /> Delivery to
+                    {deliveryMethod === 'PICKUP' ? (
+                      <StoreIcon className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <MapPin className="h-4 w-4 text-slate-400" />
+                    )}{' '}
+                    {deliveryMethod === 'PICKUP' ? 'Collect in person' : 'Delivery to'}
                   </h3>
                   <Button variant="ghost" size="sm" onClick={() => setStep(0)}>
                     Change
                   </Button>
                 </div>
-                {selectedAddress ? (
+                {deliveryMethod === 'PICKUP' ? (
+                  pickupName.trim() ? (
+                    <div className="text-sm text-slate-400">
+                      <p className="font-medium text-slate-200">{pickupName}</p>
+                      {pickupPhone && <p>{pickupPhone}</p>}
+                      <p>Collected in person — no delivery.</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-danger-300">No pickup contact given.</p>
+                  )
+                ) : selectedAddress ? (
                   <div className="text-sm text-slate-400">
                     <p className="font-medium text-slate-200">{selectedAddress.recipientName}</p>
                     {selectedAddress.phone && <p>{selectedAddress.phone}</p>}
@@ -670,8 +794,10 @@ export default function Checkout() {
                 </InfoRow>
               )}
 
-              <InfoRow label="Delivery">
-                {estimate ? (
+              <InfoRow label={deliveryMethod === 'PICKUP' ? 'Pickup' : 'Delivery'}>
+                {deliveryMethod === 'PICKUP' ? (
+                  <span className="text-success-300">Free</span>
+                ) : estimate ? (
                   estimate.shipping === 0 ? (
                     <span className="text-success-300">Free</span>
                   ) : (

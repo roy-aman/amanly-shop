@@ -20,6 +20,8 @@ import { ThemeSegmented, ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
+import { useStoreFeatures, type StoreFeature } from '@/lib/features';
+import { useLexicon, type Lexicon } from '@/lib/lexicon';
 import { useToast } from '@/context/ToastContext';
 import { getPublicStore } from '@/api/store';
 import { getCategoryTree } from '@/api/catalog';
@@ -39,20 +41,30 @@ import {
 } from '@/components/ui';
 
 /**
- * Primary nav. "New in" is a real query against the catalog's default sort
- * rather than a decorative label — every entry here resolves to a live route.
+ * Primary nav, built per shop.
+ *
+ * Nothing here is a constant, for two reasons that pull the same way. The
+ * sections a shop has are the platform's grant, read at runtime — a store
+ * without a catalogue must not carry links into one. And what it CALLS them is
+ * the merchant's, so a bakery's header reads "Shop all cakes" without anyone
+ * editing this file.
  */
-const PRIMARY_NAV = [
-  { to: '/products?sort=createdAt,desc', label: 'New in' },
-  { to: '/products', label: 'Shop all' },
-];
-
-/**
- * "Services" is not in the constant above because it is not true of every shop.
- * It appears only where the store actually takes bookings, and a store that does
- * not sees precisely the nav it saw before this feature existed.
- */
-const SERVICES_NAV = { to: '/services', label: 'Services' };
+function buildPrimaryNav(
+  has: (feature: StoreFeature) => boolean,
+  lex: Lexicon,
+): { to: string; label: string }[] {
+  const nav: { to: string; label: string }[] = [];
+  if (has('CATALOG')) {
+    // "New in" is a real query against the catalog's default sort rather than a
+    // decorative label — every entry here resolves to a live route.
+    nav.push({ to: '/products?sort=createdAt,desc', label: 'New in' });
+    nav.push({ to: '/products', label: `Shop all ${lex.lower('products')}` });
+  }
+  if (has('BOOKINGS')) {
+    nav.push({ to: '/services', label: lex.t('services') });
+  }
+  return nav;
+}
 
 const SOCIALS = [
   { label: 'Instagram', icon: Instagram },
@@ -89,9 +101,9 @@ export default function StoreLayout() {
   });
   const storeName = store?.name || BRAND_NAME;
   const categories = tree ?? [];
-  // Undefined counts as off: a payload cached before the flag existed, or an
-  // older backend, must not put a link to a surface that answers 404.
-  const primaryNav = store?.bookingsEnabled ? [...PRIMARY_NAV, SERVICES_NAV] : PRIMARY_NAV;
+  const { has: hasFeature } = useStoreFeatures();
+  const lex = useLexicon();
+  const primaryNav = buildPrimaryNav(hasFeature, lex);
 
   // The header carries no border until the page moves; the hairline appearing
   // on scroll is what separates it from the content instead of a permanent rule.
@@ -258,21 +270,31 @@ export default function StoreLayout() {
                 narrowest screens, where the drawer carries it instead. */}
             <ThemeToggle className={cn(iconButton, 'hidden sm:flex')} />
 
-            {isAuthenticated && (
-              <Link to="/account/wishlist" className={cn(iconButton, 'hidden sm:flex')} aria-label="Wishlist">
+            {/* The wishlist is a list of things to buy: without a catalogue it
+                has nothing to point at, so it goes with one. */}
+            {isAuthenticated && hasFeature('CATALOG') && (
+              <Link
+                to="/account/wishlist"
+                className={cn(iconButton, 'hidden sm:flex')}
+                aria-label={lex.t('wishlist')}
+              >
                 <Heart className="h-5 w-5" />
                 {wishlistCount > 0 && <CountDot value={wishlistCount} />}
               </Link>
             )}
 
-            <button
-              onClick={() => setCartOpen(true)}
-              className={iconButton}
-              aria-label={`Bag${itemCount > 0 ? `, ${itemCount} items` : ', empty'}`}
-            >
-              <ShoppingBag className="h-5 w-5" />
-              {itemCount > 0 && <CountDot value={itemCount} />}
-            </button>
+            {/* No bag on a shop that cannot take an order — a booking-only
+                parlour, or one whose Sales section has been withdrawn. */}
+            {hasFeature('SALES') && (
+              <button
+                onClick={() => setCartOpen(true)}
+                className={iconButton}
+                aria-label={`Bag${itemCount > 0 ? `, ${itemCount} items` : ', empty'}`}
+              >
+                <ShoppingBag className="h-5 w-5" />
+                {itemCount > 0 && <CountDot value={itemCount} />}
+              </button>
+            )}
 
             <AccountMenu
               isAuthenticated={isAuthenticated}
@@ -397,7 +419,7 @@ export default function StoreLayout() {
                     ? [
                         { label: 'My account', to: '/account' },
                         { label: 'Orders', to: '/orders' },
-                        ...(store?.bookingsEnabled
+                        ...(hasFeature('BOOKINGS')
                           ? [{ label: 'My bookings', to: '/account/bookings' }]
                           : []),
                         { label: 'Wishlist', to: '/account/wishlist' },
@@ -493,7 +515,7 @@ export default function StoreLayout() {
                   })),
                   { to: '/account', label: 'Account' },
                   { to: '/orders', label: 'Orders' },
-                  ...(store?.bookingsEnabled ? [{ to: '/account/bookings', label: 'My bookings' }] : []),
+                  ...(hasFeature('BOOKINGS') ? [{ to: '/account/bookings', label: `My ${lex.lower('bookings')}` }] : []),
                   {
                     to: '/account/wishlist',
                     label: `Wishlist${wishlistCount > 0 ? ` (${wishlistCount})` : ''}`,

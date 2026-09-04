@@ -60,7 +60,7 @@ export default function AdminOrders() {
             <Input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Name, city or country…"
+              placeholder="Name, city, country, or Manual UPI token…"
             />
           </div>
           <div>
