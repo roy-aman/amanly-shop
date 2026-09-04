@@ -151,20 +151,20 @@ export default function OrderDetail() {
             <span className="inline-flex items-center gap-2">
               {titleCase(order.paymentMethod)}
               <PaymentStatusBadge status={order.paymentStatus} />
-              {order.manualUpiPayment && (
-                <button
-                  type="button"
-                  onClick={() => setQrOpen(true)}
-                  className="rounded text-body-sm text-primary underline-offset-4 transition hover:underline"
-                >
-                  Pay via UPI
-                </button>
-              )}
             </span>
           </InfoRow>
           <InfoRow label="Last updated">{formatDateTime(order.updatedAt)}</InfoRow>
         </dl>
       </SummarySection>
+
+      {order.manualUpiPayment && (
+        <SummarySection title="Pay via UPI" bodyClassName="px-5 py-3">
+          <Button onClick={() => setQrOpen(true)} fullWidth>
+            <QrCode className="h-4 w-4" aria-hidden />
+            Show QR to pay
+          </Button>
+        </SummarySection>
+      )}
 
       {!order.manualUpiPayment && order.manualUpiToken && (
         <SummarySection title="Manual UPI payment">
