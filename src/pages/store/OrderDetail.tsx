@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Clock, MapPin, PackageX, QrCode, Store as StoreIcon } from 'lucide-react';
@@ -21,12 +21,34 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
  * figures were the same; finding any one of them meant reading across. Capping the column keeps the
  * eye travelling down a single edge, which is why receipts have always been narrow.
  */
+/** Drops the 3-letter name prefix from a token like `AMA-JC5N2`, for display next to the
+ *  customer's own full first name instead of the abbreviated one. */
+function tokenBody(token: string): string {
+  return token.split('-').pop() ?? token;
+}
+
 export default function OrderDetail() {
   const { id = '' } = useParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [showMarkDone, setShowMarkDone] = useState(false);
+  const [tokenRevealed, setTokenRevealed] = useState(false);
+
+  // Give the customer a few seconds with just the QR before offering "I've paid" — the
+  // token is a receipt for a payment that's supposedly already happened, not something to
+  // rush to before scanning.
+  useEffect(() => {
+    if (!qrOpen) {
+      setShowMarkDone(false);
+      setTokenRevealed(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowMarkDone(true), 5000);
+    return () => clearTimeout(timer);
+  }, [qrOpen]);
 
   const orderQuery = useQuery({
     queryKey: ['order', id],
@@ -71,6 +93,7 @@ export default function OrderDetail() {
   const a = order.shippingAddress;
   const canCancel = order.status === 'PENDING' || order.status === 'PROCESSING';
   const itemCount = order.items.reduce((n, it) => n + it.quantity, 0);
+  const firstName = a.name?.trim().split(/\s+/)[0];
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -139,25 +162,20 @@ export default function OrderDetail() {
 
       {order.manualUpiPayment && (
         <SummarySection title="Pay via UPI">
-          <div className="flex flex-col items-center gap-4 py-2 text-center">
-            <img
-              src={order.manualUpiPayment.qrDataUri}
-              alt="Scan to pay via UPI"
-              className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
-            />
-            <div>
-              <p className="text-h3 font-display text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</p>
-              <p className="mt-1 text-body-sm text-slate-400">to {order.manualUpiPayment.vpa}</p>
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
+              <QrCode className="h-5 w-5" aria-hidden />
             </div>
-            <div className="rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
-              <p className="text-overline uppercase text-slate-400">Your payment token</p>
-              <p className="mt-1 font-display text-h3 tabular-nums text-slate-100">{order.manualUpiPayment.token}</p>
+            <div className="min-w-0 flex-1 text-body-sm text-slate-400">
+              <p className="font-medium text-slate-100">
+                {money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}
+                {firstName && <> — token for {firstName}</>}
+              </p>
+              <p>Awaiting payment. Scan the QR to pay, or quote your token to staff.</p>
             </div>
-            <p className="max-w-sm text-caption text-slate-400">
-              Scan the QR with any UPI app and pay the amount above. For pickup, quote this token to
-              staff — for delivery, keep it as your reference. We&apos;ll email you once payment is
-              confirmed.
-            </p>
+            <Button size="sm" onClick={() => setQrOpen(true)} className="shrink-0">
+              Show QR to pay
+            </Button>
           </div>
         </SummarySection>
       )}
@@ -169,7 +187,9 @@ export default function OrderDetail() {
               <QrCode className="h-5 w-5" aria-hidden />
             </div>
             <div className="text-body-sm text-slate-400">
-              <p className="font-medium text-slate-100">Token: {order.manualUpiToken}</p>
+              <p className="font-medium text-slate-100">
+                {firstName ? `Token for ${firstName}` : 'Token'}: {firstName ? tokenBody(order.manualUpiToken) : order.manualUpiToken}
+              </p>
               <p>
                 {order.paymentStatus === 'PAID'
                   ? 'Payment confirmed.'
@@ -240,6 +260,42 @@ export default function OrderDetail() {
           This will cancel order {orderRef(order)}. This action cannot be undone.
         </p>
       </Modal>
+
+      {order.manualUpiPayment && (
+        <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Pay via UPI" size="sm">
+          <div className="flex flex-col items-center gap-4 py-2 text-center">
+            <img
+              src={order.manualUpiPayment.qrDataUri}
+              alt="Scan to pay via UPI"
+              className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
+            />
+            <div>
+              <p className="text-h3 font-display text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</p>
+              <p className="mt-1 text-body-sm text-slate-400">to {order.manualUpiPayment.vpa}</p>
+            </div>
+            {tokenRevealed ? (
+              <div className="rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
+                <p className="text-overline uppercase text-slate-400">
+                  {firstName ? `Token for ${firstName}` : 'Your payment token'}
+                </p>
+                <p className="mt-1 font-display text-h3 tabular-nums text-slate-100">
+                  {firstName ? tokenBody(order.manualUpiPayment.token) : order.manualUpiPayment.token}
+                </p>
+              </div>
+            ) : showMarkDone ? (
+              <Button onClick={() => setTokenRevealed(true)}>Mark payment done</Button>
+            ) : (
+              <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
+            )}
+            <p className="max-w-sm text-caption text-slate-400">
+              {tokenRevealed
+                ? 'For pickup, quote this token to staff — for delivery, keep it as your reference. ' +
+                  "We'll email you once payment is confirmed."
+                : "Once you've paid, tap Mark payment done to get your token."}
+            </p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
