@@ -381,7 +381,8 @@ function CategoryTiles({ categories, loading }: { categories: CategoryTreeRespon
             <Reveal key={c.id} delay={i * 70}>
               <Link
                 to={`/products?categoryId=${c.id}`}
-                className="rc-lift group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl bg-ink-850 p-6 transition-colors duration-500 hover:bg-ink-800"
+                onClick={(e) => e.currentTarget.blur()}
+                className="rc-lift group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl bg-ink-850 p-6 transition-colors duration-500 hover:bg-ink-800 focus:outline-none focus-visible:outline-none"
               >
                 {/* Real photography when the merchant has set it. Empty alt:
                     the category name is right below as actual text, so

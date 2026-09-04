@@ -1,3 +1,19 @@
+// Prevent pointer/mouse clicks from leaving sticky focus borders or outlines
+if (typeof window !== 'undefined') {
+  document.addEventListener('pointerdown', (e) => {
+    if (e.target instanceof HTMLElement) {
+      const focusable = e.target.closest('a, button, [role="button"], [role="tab"], [tabindex]');
+      if (focusable instanceof HTMLElement && focusable.tagName !== 'INPUT' && focusable.tagName !== 'TEXTAREA') {
+        setTimeout(() => {
+          if (document.activeElement === focusable) {
+            focusable.blur();
+          }
+        }, 0);
+      }
+    }
+  });
+}
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
