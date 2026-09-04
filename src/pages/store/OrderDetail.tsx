@@ -21,12 +21,6 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
  * figures were the same; finding any one of them meant reading across. Capping the column keeps the
  * eye travelling down a single edge, which is why receipts have always been narrow.
  */
-/** Drops the 3-letter name prefix from a token like `AMA-JC5N2`, for display next to the
- *  customer's own full first name instead of the abbreviated one. */
-function tokenBody(token: string): string {
-  return token.split('-').pop() ?? token;
-}
-
 export default function OrderDetail() {
   const { id = '' } = useParams();
   const queryClient = useQueryClient();
@@ -180,7 +174,7 @@ export default function OrderDetail() {
             </div>
             <div className="text-body-sm text-slate-400">
               <p className="font-medium text-slate-100">
-                {firstName ? `Token for ${firstName}` : 'Token'}: {firstName ? tokenBody(order.manualUpiToken) : order.manualUpiToken}
+                {firstName ? `Payment from ${firstName}: ${order.manualUpiToken}` : `Token: ${order.manualUpiToken}`}
               </p>
               <p>
                 {order.paymentStatus === 'PAID'
@@ -277,11 +271,11 @@ export default function OrderDetail() {
                 </div>
               </dl>
               <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
-                <p className="text-overline uppercase text-slate-400">
-                  {firstName ? `Token for ${firstName}` : 'Your payment token'}
-                </p>
-                <p className="mt-1 font-display text-h3 tabular-nums text-slate-100">
-                  {firstName ? tokenBody(order.manualUpiPayment.token) : order.manualUpiPayment.token}
+                <p className="text-overline uppercase text-slate-400">Your payment token</p>
+                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-slate-100">
+                  {firstName
+                    ? `Payment from ${firstName}: ${order.manualUpiPayment.token}`
+                    : order.manualUpiPayment.token}
                 </p>
               </div>
               <p className="max-w-sm text-caption text-slate-400">
