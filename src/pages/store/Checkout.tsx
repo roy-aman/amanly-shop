@@ -982,7 +982,15 @@ export default function Checkout() {
                 something to keep would be inventing a ritual this shop does not run. */}
             {manualUpiOrder.manualUpiPayment.tokenVerificationEnabled && (
               <div className="w-full rounded-lg border border-ink-600 bg-ink-850 px-4 py-3">
-                <p className="text-caption uppercase tracking-wide text-slate-500">Your payment token</p>
+                {/* The app is named beside the token, not instead of it: the token identifies the
+                    payment and the app identifies the account it lands in, and staff need both to
+                    find one. A token quoted without its app sends someone hunting every ledger. */}
+                <p className="text-caption uppercase tracking-wide text-slate-500">
+                  Your payment token
+                  {manualUpiOrder.manualUpiPayment.appLabel
+                    ? ` · ${manualUpiOrder.manualUpiPayment.appLabel}`
+                    : ''}
+                </p>
                 <p className="mt-1 font-mono text-h3 tracking-widest text-primary">
                   {manualUpiOrder.manualUpiPayment.token}
                 </p>

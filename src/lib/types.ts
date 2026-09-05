@@ -583,6 +583,21 @@ export interface OrderResponse {
   /** The Manual UPI token for this order, persistent once generated regardless of payment status —
    *  what the customer quotes to staff and what staff cross-check. Null for every other method. */
   manualUpiToken?: string | null;
+  /**
+   * The app the customer said they would pay from, persistent alongside `manualUpiToken` and
+   * outliving `manualUpiPayment`, which goes null once the order is paid.
+   *
+   * Show it wherever you show the token: a token names a payment, and the account that payment
+   * landed in is the other half of what identifies it — staff hearing "AMA-A7K42" still have to
+   * know which app's ledger to open.
+   *
+   * Null for every generic-flow order, and that is also the persistent answer to "was this order
+   * placed under token verification": an app is recorded only when it was. Branch on this rather
+   * than the store's current setting, which a merchant may have changed since.
+   */
+  upiApp?: UpiApp | null;
+  /** Display name of `upiApp`; null when it is. Render this, not the enum name. */
+  upiAppLabel?: string | null;
   /** True when this is an unpaid COD order whose store has Manual UPI configured and it hasn't
    *  opted in yet (manualUpiPayment/manualUpiToken are still null) — call enableManualUpiForOrder
    *  to generate one and let the customer pay early via UPI instead of at the door. */

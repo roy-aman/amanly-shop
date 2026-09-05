@@ -245,7 +245,19 @@ export default function AdminOrderDetail() {
               <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-3">
                 <p className="text-xs uppercase text-slate-400">Manual UPI token — check this matches what the customer quoted</p>
                 <p className="mt-1 font-mono text-lg tabular-nums text-slate-100">{order.manualUpiToken}</p>
-                {order.manualUpiPayment && (
+                {/* WHICH account to look in. This is the whole reason the customer was asked to
+                    pick an app: the token narrows a search to one payment, and the app narrows it
+                    to one ledger. Read from the order rather than manualUpiPayment, which is gone
+                    once the order is paid — a staff member re-checking a confirmed payment still
+                    needs to know where it landed. */}
+                {order.upiAppLabel && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Paid from <span className="text-slate-200">{order.upiAppLabel}</span> — look in
+                    that account
+                    {order.manualUpiPayment ? ` (${order.manualUpiPayment.vpa})` : ''}.
+                  </p>
+                )}
+                {!order.upiAppLabel && order.manualUpiPayment && (
                   <p className="mt-1 text-xs text-slate-500">Expected in your UPI app: {order.manualUpiPayment.vpa}</p>
                 )}
               </div>

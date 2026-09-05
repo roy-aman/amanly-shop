@@ -204,27 +204,42 @@ describe('OrderDetail token instructions', () => {
     expect(screen.queryByText(/quote this token/i)).not.toBeInTheDocument();
   });
 
-  it('shows the token to quote when the store does verify by one', async () => {
+  /**
+   * And where it does, the app is named beside it. Staff search a token inside ONE account's
+   * ledger — the one the customer chose — so a token quoted without its app is half an answer.
+   */
+  it('shows the token and the app it was paid from when the store verifies by one', async () => {
     getOrderMock.mockResolvedValue(
       order({
         paymentMethod: 'MANUAL_UPI',
+        paymentStatus: 'PAID',
         manualUpiToken: 'AMA-12345',
-        manualUpiPayment: {
-          token: 'AMA-12345',
-          vpa: 'store@ybl',
-          qrDataUri: 'data:image/png;base64,mockqr',
-          amount: 85,
-          currency: 'USD',
-          app: 'PHONEPE',
-          appLabel: 'PhonePe',
-          tokenVerificationEnabled: true,
-        },
+        upiApp: 'PHONEPE',
+        upiAppLabel: 'PhonePe',
       }),
     );
     renderWithProviders(<OrderDetail />);
 
-    // The persistent block only renders once the customer has marked payment done, so assert the
-    // gate itself: the pay-screen trigger is present and the token is not being suppressed.
-    expect(await screen.findByRole('button', { name: /pay via upi/i })).toBeInTheDocument();
+    expect(await screen.findByText(/AMA-12345/)).toBeInTheDocument();
+    expect(screen.getByText(/via PhonePe/i)).toBeInTheDocument();
+  });
+
+  /** The app outlives the pay screen, which goes null once the order is paid — so it must not be
+   *  read from there. A paid order still has to say which ledger its token is in. */
+  it('keeps naming the app after payment, when manualUpiPayment is gone', async () => {
+    getOrderMock.mockResolvedValue(
+      order({
+        paymentMethod: 'MANUAL_UPI',
+        paymentStatus: 'PAID',
+        manualUpiToken: 'AMA-12345',
+        upiApp: 'GOOGLE_PAY',
+        upiAppLabel: 'Google Pay',
+        manualUpiPayment: null,
+      }),
+    );
+    renderWithProviders(<OrderDetail />);
+
+    expect(await screen.findByText(/via Google Pay/i)).toBeInTheDocument();
+    expect(screen.getByText(/Payment confirmed\./i)).toBeInTheDocument();
   });
 });

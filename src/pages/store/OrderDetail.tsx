@@ -110,10 +110,13 @@ export default function OrderDetail() {
   const order = orderQuery.data;
 
   const needsAppChoice = upiApps.length > 0 && !order?.manualUpiPayment;
-  // An order carries its own answer once it has a payment; only an untouched COD order is still
-  // choosing, and reads the store's current setting instead.
-  const tokenVerification = order?.manualUpiPayment
-    ? !!order.manualUpiPayment.tokenVerificationEnabled
+  // An order that has been paid for carries its own answer, and it outlives manualUpiPayment (which
+  // goes null once paid): an app is recorded only where verification was on, so upiApp IS the
+  // persistent flag. Only an order with no token yet — an untouched COD one — is still choosing,
+  // and reads the store's current setting. A merchant flipping that setting must not retroactively
+  // change what an old order was.
+  const tokenVerification = order?.manualUpiToken
+    ? !!order.upiApp
     : upiApps.length > 0;
 
   useDocumentTitle(order ? `Order ${orderRef(order)}` : 'Order');
@@ -264,6 +267,12 @@ export default function OrderDetail() {
             <div className="text-body-sm text-slate-400">
               <p className="font-medium text-slate-100">
                 <span className="font-mono">{firstName ? `${firstName}: ${order.manualUpiToken}` : order.manualUpiToken}</span>
+                {/* upiAppLabel rather than manualUpiPayment.appLabel: this block outlives the pay
+                    screen, which goes null once the order is paid, and the app is exactly as
+                    persistent as the token it sits beside. */}
+                {order.upiAppLabel && (
+                  <span className="ml-2 font-normal text-slate-400">via {order.upiAppLabel}</span>
+                )}
               </p>
               <p>
                 {order.paymentStatus === 'PAID'
@@ -359,10 +368,21 @@ export default function OrderDetail() {
                   <dt className="text-slate-400">Amount</dt>
                   <dd className="text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</dd>
                 </div>
+                {order.manualUpiPayment.appLabel && (
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-slate-400">Paid from</dt>
+                    <dd className="text-slate-100">{order.manualUpiPayment.appLabel}</dd>
+                  </div>
+                )}
               </dl>
               {order.manualUpiPayment.tokenVerificationEnabled && (
                 <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
-                  <p className="text-overline uppercase text-slate-400">Your payment token</p>
+                  {/* Token and app together. Staff search a token inside one account's ledger, so a
+                      token quoted without the app it was paid from is half an answer. */}
+                  <p className="text-overline uppercase text-slate-400">
+                    Your payment token
+                    {order.manualUpiPayment.appLabel ? ` · ${order.manualUpiPayment.appLabel}` : ''}
+                  </p>
                   <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-wide text-slate-100">
                     {firstName ? `${firstName}: ${order.manualUpiPayment.token}` : order.manualUpiPayment.token}
                   </p>
@@ -370,7 +390,7 @@ export default function OrderDetail() {
               )}
               <p className="max-w-sm text-caption text-slate-400">
                 {order.manualUpiPayment.tokenVerificationEnabled
-                  ? "For pickup, quote this token to staff — for delivery, keep it as your reference. We'll email you once payment is confirmed."
+                  ? `For pickup, quote this token${order.manualUpiPayment.appLabel ? ` and that you paid from ${order.manualUpiPayment.appLabel}` : ''} to staff — for delivery, keep it as your reference. We'll email you once payment is confirmed.`
                   : "We'll check for your payment and email you once it's confirmed. Nothing else to do."}
               </p>
             </div>
