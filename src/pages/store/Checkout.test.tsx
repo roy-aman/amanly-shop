@@ -422,13 +422,30 @@ describe('Checkout (WP-2.5)', () => {
     // QR pop-up appears
     expect(await screen.findByAltText(/Scan to pay via UPI/i)).toBeInTheDocument();
 
-    // Mark payment done button is clicked
-    const markDoneBtn = screen.getByRole('button', { name: /Mark payment done/i });
+    // The token is not on the pay screen — it is the customer's copy for afterwards, and it is
+    // waiting on the order page they land on the moment they mark the payment done.
+    expect(screen.queryByText(/AMA-123/)).not.toBeInTheDocument();
+
+    // Nor is the button, for the first five seconds: nobody can have scanned, paid and come back
+    // inside that window, so an early press is only ever a mistake.
+    expect(screen.queryByRole('button', { name: /Mark payment done/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Scan the QR and pay the amount above/i)).toBeInTheDocument();
+
+    const markDoneBtn = await screen.findByRole(
+      'button',
+      { name: /Mark payment done/i },
+      { timeout: 8000 },
+    );
     await user.click(markDoneBtn);
 
     // Navigates directly to order details page
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith('/orders/order-123');
     }, { timeout: 3000 });
+
+    // ...and is not bounced away from it. Placing the order empties the cart, which the
+    // empty-cart redirect used to read as "nothing to check out" — landing the customer on /cart
+    // instead of the order they had just paid for.
+    expect(navigate).not.toHaveBeenCalledWith('/cart', { replace: true });
   });
 });

@@ -182,11 +182,35 @@ export default function Checkout() {
   // completes and navigates directly to the order details page.
   const [manualUpiOrder, setManualUpiOrder] = useState<OrderResponse | null>(null);
   const [manualUpiConfirming, setManualUpiConfirming] = useState(false);
+  const [showMarkDone, setShowMarkDone] = useState(false);
   const [restoringCart, setRestoringCart] = useState(false);
+
+  // Set the moment an order is on its way to its details page, and never cleared. Placing an
+  // order empties the cart, and the redirect below reads an empty cart as "nothing to check out"
+  // and sends the customer to /cart — so without this the last thing that happens after a
+  // successful payment is the checkout bouncing them away from their own order. A ref rather
+  // than state because the redirect must see it on its very next run: a state update schedules
+  // a re-render, and every `await` between here and the navigate is a window for that redirect
+  // to fire first.
+  const completingOrder = useRef(false);
+
+  // "Mark payment done" is held back for five seconds after the QR appears, the same as the
+  // pay-again modal on the order page. Nobody can have scanned, switched apps, authorised and
+  // come back inside that window, so a button offered immediately is only ever pressed by
+  // mistake — and pressing it is what takes the order off this screen.
+  useEffect(() => {
+    if (!manualUpiOrder) {
+      setShowMarkDone(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowMarkDone(true), 5000);
+    return () => clearTimeout(timer);
+  }, [manualUpiOrder]);
 
   function finishManualUpiOrder() {
     if (!manualUpiOrder) return;
     const orderToOpen = manualUpiOrder;
+    completingOrder.current = true;
     setManualUpiConfirming(true);
     try {
       localStorage.setItem(`rc-manual-upi-done-${orderToOpen.id}`, '1');
@@ -198,10 +222,12 @@ export default function Checkout() {
       setManualUpiConfirming(false);
       setManualUpiOrder(null);
       clearStoredCoupon();
+      // Navigated before the cart work, not after it: refreshing and invalidating both yield, and
+      // the customer has no reason to watch the checkout page while they settle.
+      navigate(`/orders/${orderToOpen.id}`);
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ['cart'] });
       toast.success('Order placed!', 'Thank you — your order has been received.');
-      navigate(`/orders/${orderToOpen.id}`);
     }, 1000);
   }
 
@@ -313,9 +339,19 @@ export default function Checkout() {
     setPaymentMethod(value);
   }
 
-  // Redirect to /cart if the cart is empty.
+  // Redirect to /cart if the cart is empty — a customer who arrived here with nothing. An empty
+  // cart during checkout is not always that: it is also the normal result of placing an order,
+  // of the QR pop-up being open against an order already created, and of a cancelled Manual UPI
+  // order having its items put back. Each of those is excluded, or this redirect fires on
+  // success and undoes the navigation the flow just performed.
   useEffect(() => {
-    if (cartQuery.isSuccess && (!cart || cart.items.length === 0) && !manualUpiOrder && !restoringCart) {
+    if (
+      cartQuery.isSuccess &&
+      (!cart || cart.items.length === 0) &&
+      !manualUpiOrder &&
+      !restoringCart &&
+      !completingOrder.current
+    ) {
       navigate('/cart', { replace: true });
     }
   }, [cartQuery.isSuccess, cart, navigate, manualUpiOrder, restoringCart]);
@@ -447,6 +483,7 @@ export default function Checkout() {
           setSubmitting(false);
           return;
         }
+        completingOrder.current = true;
         clearStoredCoupon();
         await refresh();
         await queryClient.invalidateQueries({ queryKey: ['cart'] });
@@ -491,6 +528,7 @@ export default function Checkout() {
               razorpayOrderId: resp.razorpay_order_id,
               razorpaySignature: resp.razorpay_signature,
             });
+            completingOrder.current = true;
             clearStoredCoupon();
             toast.success('Payment successful!', 'Thank you — your order is confirmed.');
             await refresh();
@@ -977,39 +1015,29 @@ export default function Checkout() {
               </p>
               <p className="mt-1 text-body-sm text-slate-400">to {manualUpiOrder.manualUpiPayment.vpa}</p>
             </div>
-            {/* The token is shown only where the shop actually runs a counter step that uses it.
-                Under the ordinary flow it exists as the order's reference, and presenting it as
-                something to keep would be inventing a ritual this shop does not run. */}
-            {manualUpiOrder.manualUpiPayment.tokenVerificationEnabled && (
-              <div className="w-full rounded-lg border border-ink-600 bg-ink-850 px-4 py-3">
-                {/* The app is named beside the token, not instead of it: the token identifies the
-                    payment and the app identifies the account it lands in, and staff need both to
-                    find one. A token quoted without its app sends someone hunting every ledger. */}
-                <p className="text-caption uppercase tracking-wide text-slate-500">
-                  Your payment token
-                  {manualUpiOrder.manualUpiPayment.appLabel
-                    ? ` · ${manualUpiOrder.manualUpiPayment.appLabel}`
-                    : ''}
-                </p>
-                <p className="mt-1 font-mono text-h3 tracking-widest text-primary">
-                  {manualUpiOrder.manualUpiPayment.token}
-                </p>
-              </div>
-            )}
+            {/* No token here. This screen is for paying; the token is the customer's copy for
+                afterwards, and showing it beside a QR nobody has scanned yet asks them to memorise
+                something before it means anything. They land on the order page the moment they
+                mark the payment done, and it is waiting for them there — the same split the
+                pay-again modal on that page already makes. */}
             {manualUpiConfirming ? (
               <div className="flex items-center gap-2 text-body-sm text-slate-400">
                 <Spinner className="h-4 w-4" />
                 Confirming your payment…
               </div>
-            ) : (
+            ) : showMarkDone ? (
               <Button onClick={finishManualUpiOrder}>Mark payment done</Button>
+            ) : (
+              <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
             )}
             <p className="max-w-sm text-caption text-slate-400">
               {manualUpiConfirming
                 ? 'Confirming payment — you will be redirected to your order details shortly.'
-                : manualUpiOrder.manualUpiPayment.tokenVerificationEnabled
-                  ? `Pay ${manualUpiOrder.manualUpiPayment.appLabel ?? 'from your chosen UPI app'}, then keep your token — quote it when you collect your order. Once you've paid, tap Mark payment done.`
-                  : "Scan the QR with any UPI app to pay. Once you've paid, tap Mark payment done."}
+                : showMarkDone
+                  ? manualUpiOrder.manualUpiPayment.tokenVerificationEnabled
+                    ? "Once you've paid, tap Mark payment done to get your token."
+                    : "Once you've paid, tap Mark payment done."
+                  : 'Scan the QR with any UPI app to pay.'}
             </p>
           </div>
         </Modal>

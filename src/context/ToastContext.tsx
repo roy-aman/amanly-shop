@@ -117,8 +117,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {/* Centred at every width rather than tucked into the top-right corner above `sm`: a toast
+          is the only feedback some actions give, and the corner is the part of the screen a
+          reader's eye is least likely to be on at the moment one appears. */}
       <div
-        className="pointer-events-none fixed inset-x-0 top-4 z-toast flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6"
+        className="pointer-events-none fixed inset-x-0 top-4 z-toast flex flex-col items-center gap-2 px-4"
         aria-live="polite"
         aria-atomic="false"
       >
