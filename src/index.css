@@ -251,38 +251,23 @@
     @apply text-slate-100;
   }
 
-  /* Remove any harsh tap/click highlight borders or lingering focus outlines */
+  /* Smooth, non-intrusive focus management */
   *,
   *::before,
   *::after {
     -webkit-tap-highlight-color: transparent;
   }
 
-  *:focus,
-  *:focus-visible {
-    outline: none !important;
-  }
-
-  /* Ensure clickable elements (links, buttons, tabs, cards) never show lingering highlighter borders on click */
-  a,
-  button,
-  [role="button"],
-  [role="tab"],
-  [tabindex] {
-    outline: none !important;
-    -webkit-tap-highlight-color: transparent !important;
-  }
-
-  a:focus,
-  a:focus-visible,
-  button:focus,
-  button:focus-visible,
-  [role="button"]:focus,
-  [role="button"]:focus-visible,
-  [role="tab"]:focus,
-  [role="tab"]:focus-visible {
+  /* Suppress default browser outline on mouse clicks */
+  *:focus:not(:focus-visible) {
     outline: none !important;
     box-shadow: none !important;
+  }
+
+  /* Subtle, accessible focus ring for keyboard navigation */
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--primary) / 0.35);
   }
 
   /* Honour the OS setting: strip motion, keep every state change instant and
