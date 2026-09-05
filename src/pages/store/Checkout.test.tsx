@@ -199,6 +199,66 @@ describe('Checkout (WP-2.5)', () => {
     expect(screen.getByRole('radio', { name: /Cash on Delivery/i })).not.toBeChecked();
   });
 
+  /**
+   * The defect this pins: a shop's UPI id belongs to some app, and the checkout used to read that
+   * back as an instruction to the customer. It is not one — any UPI app pays any handle — so the
+   * app question exists only where the shop verifies payments by token and needs to know which of
+   * its own accounts to look in.
+   */
+  it('asks for no UPI app when the store does not verify payments by token', async () => {
+    storeMock.mockResolvedValue(store({ manualUpiEnabled: true, codEnabled: false, onlinePaymentEnabled: false }));
+    const user = userEvent.setup();
+    renderCheckout();
+
+    await screen.findByText('Delivery address');
+    await user.click(await screen.findByRole('radio', { name: /Home/i }));
+    await user.click(screen.getByRole('button', { name: 'Continue to review' }));
+
+    await screen.findByText('Payment method');
+    expect(screen.getByRole('radio', { name: /UPI \(scan to pay\)/i })).toBeChecked();
+    expect(screen.queryByText(/which upi app/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/from any UPI app/i)).toBeInTheDocument();
+
+    placeMock.mockResolvedValue(codOrder({ id: 'order-9', paymentMethod: 'MANUAL_UPI' }));
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    await waitFor(() => expect(placeMock).toHaveBeenCalled());
+    expect(placeMock.mock.calls[0][0].upiApp).toBeUndefined();
+  });
+
+  it('asks which app, and sends it, when the store verifies payments by token', async () => {
+    storeMock.mockResolvedValue(store({
+      manualUpiEnabled: true,
+      codEnabled: false,
+      onlinePaymentEnabled: false,
+      manualUpiTokenVerificationEnabled: true,
+      manualUpiApps: [
+        { app: 'GOOGLE_PAY', label: 'Google Pay' },
+        { app: 'PHONEPE', label: 'PhonePe' },
+      ],
+    }));
+    const user = userEvent.setup();
+    renderCheckout();
+
+    await screen.findByText('Delivery address');
+    await user.click(await screen.findByRole('radio', { name: /Home/i }));
+    await user.click(screen.getByRole('button', { name: 'Continue to review' }));
+
+    await screen.findByText('Payment method');
+    expect(screen.getByText(/which upi app/i)).toBeInTheDocument();
+
+    // Placing without a choice is refused here rather than after stock has been reserved.
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+    expect(placeMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'PhonePe' }));
+    placeMock.mockResolvedValue(codOrder({ id: 'order-9', paymentMethod: 'MANUAL_UPI' }));
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    await waitFor(() => expect(placeMock).toHaveBeenCalled());
+    expect(placeMock.mock.calls[0][0].upiApp).toBe('PHONEPE');
+  });
+
   it('COD happy path: Place order calls placeOrder with the mapped shippingAddress and navigates', async () => {
     const order: OrderResponse = codOrder({ totalAmount: 200, discountAmount: 0, couponCode: null });
     placeMock.mockResolvedValue(order);

@@ -26,6 +26,7 @@ import type {
   ReviewStatus,
   StoreFeaturesResponse,
   StoreSettingsResponse,
+  StoreUpiSettingsResponse,
   UpdateBrandRequest,
   UpdateCategoryRequest,
   UpdateCouponRequest,
@@ -35,6 +36,7 @@ import type {
   UpdateCommerceSettingsRequest,
   UpdateStorefrontContentRequest,
   UpdateStoreLexiconRequest,
+  UpdateStoreUpiSettingsRequest,
   UpdateWhatsappSettingsRequest,
   UserResponse,
 } from '@/lib/types';
@@ -246,6 +248,23 @@ export const adminStore = {
   },
   updatePayment(body: UpdatePaymentSettingsRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/payment-settings`, { body, auth: true });
+  },
+  /**
+   * The shop's UPI receiving accounts and how direct UPI payment behaves.
+   *
+   * Two levels, and the console must keep them apart or it teaches the merchant the same mistake
+   * the storefront used to make: the DEFAULT id is where ordinary payments land, and customers pay
+   * it from whatever app they use — configuring a Google Pay id does not ask anybody to install
+   * Google Pay. The per-app ids matter only once token verification is on, where the customer picks
+   * an app so staff know which account's ledger to check for the token.
+   */
+  upiSettings(): Promise<StoreUpiSettingsResponse> {
+    return request('GET', `${A}/store/upi-settings`, { auth: true });
+  },
+  /** FULL REPLACE on `configs` — an app left out is removed. Send `configs: null` to toggle
+   *  verification alone. Turning it on with no enabled app is `UPI_APPS_NOT_CONFIGURED`. */
+  updateUpiSettings(body: UpdateStoreUpiSettingsRequest): Promise<StoreUpiSettingsResponse> {
+    return request('PUT', `${A}/store/upi-settings`, { body, auth: true });
   },
   updateWhatsapp(body: UpdateWhatsappSettingsRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/whatsapp-settings`, { body, auth: true });

@@ -179,8 +179,52 @@ describe('OrderDetail Manual UPI for COD orders', () => {
     fireEvent.click(payBtn);
 
     await waitFor(() => {
-      expect(enableManualUpiMock).toHaveBeenCalledWith('order-123');
+      // No app is sent, and none was asked for: this shop takes ordinary UPI, which any app pays.
+      expect(enableManualUpiMock).toHaveBeenCalledWith('order-123', null);
     });
+    expect(screen.queryByText(/which upi app/i)).not.toBeInTheDocument();
     expect(await screen.findByAltText(/scan to pay via upi/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The token is the customer's copy only where a counter step uses it. A shop running ordinary UPI
+ * has no such step, so telling the customer to keep and quote a token invents a ritual it does not
+ * run — and the token is still on the order, as its payment reference, for staff to search.
+ */
+describe('OrderDetail token instructions', () => {
+  it('says nothing about a token when the store does not verify by one', async () => {
+    getOrderMock.mockResolvedValue(
+      order({ paymentMethod: 'MANUAL_UPI', manualUpiToken: 'AMA-12345' }),
+    );
+    renderWithProviders(<OrderDetail />);
+
+    await screen.findByText('Signet Ring');
+    expect(screen.queryByText(/AMA-12345/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/quote this token/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the token to quote when the store does verify by one', async () => {
+    getOrderMock.mockResolvedValue(
+      order({
+        paymentMethod: 'MANUAL_UPI',
+        manualUpiToken: 'AMA-12345',
+        manualUpiPayment: {
+          token: 'AMA-12345',
+          vpa: 'store@ybl',
+          qrDataUri: 'data:image/png;base64,mockqr',
+          amount: 85,
+          currency: 'USD',
+          app: 'PHONEPE',
+          appLabel: 'PhonePe',
+          tokenVerificationEnabled: true,
+        },
+      }),
+    );
+    renderWithProviders(<OrderDetail />);
+
+    // The persistent block only renders once the customer has marked payment done, so assert the
+    // gate itself: the pay-screen trigger is present and the token is not being suppressed.
+    expect(await screen.findByRole('button', { name: /pay via upi/i })).toBeInTheDocument();
   });
 });

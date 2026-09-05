@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, MessageCircle, Tag, Truck, Type } from 'lucide-react';
+import { CreditCard, MessageCircle, QrCode, Tag, Trash2, Truck, Type } from 'lucide-react';
 import { adminStore } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import type {
   StoreSettingsResponse,
+  StoreUpiSettingsResponse,
   UpdateCommerceSettingsRequest,
   UpdatePaymentSettingsRequest,
+  UpiApp,
   UpdateStorefrontContentRequest,
   UpdateStoreLexiconRequest,
   UpdateWhatsappSettingsRequest,
@@ -34,6 +36,7 @@ export default function AdminSettings() {
         <LexiconCard store={data} />
         <CommerceCard store={data} />
         <PaymentsCard store={data} />
+        <UpiAppsCard store={data} />
         <WhatsappCard store={data} />
       </div>
     </div>
@@ -531,15 +534,15 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
               {!manualUpiAllowed && <Badge tone="gray">No longer on your plan</Badge>}
             </div>
             <p className="mt-1 text-caption text-slate-400">
-              Shoppers scan a QR to pay your UPI id directly and quote a token at pickup/delivery — you
-              verify receipt yourself in your own UPI app and mark the order paid. No gateway, no
-              automatic verification.
+              Shoppers scan a QR and pay your UPI id directly from whichever UPI app they use — you
+              see the money arrive in your own app and mark the order paid. No gateway, no automatic
+              verification.
             </p>
             {manualUpiEnabled && (
               <Field
-                label="Your UPI id"
+                label="Your default UPI id"
                 error={errors.manualUpiVpa}
-                hint="What the QR pays into, e.g. shopowner@upi."
+                hint="What the QR pays into, e.g. shopowner@upi. Customers can pay it from any UPI app — the app you registered it with doesn't limit who can pay you."
                 className="mt-3"
               >
                 <Input
@@ -555,6 +558,208 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
 
         <Button type="submit" loading={mutation.isPending}>
           Save payment settings
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+// ── UPI applications & token verification ─────────────────────────────
+/** Every app the platform can name, for the "add an app" picker. Labels match the server's. */
+const UPI_APP_CHOICES: { app: UpiApp; label: string }[] = [
+  { app: 'GOOGLE_PAY', label: 'Google Pay' },
+  { app: 'PHONEPE', label: 'PhonePe' },
+  { app: 'PAYTM', label: 'Paytm' },
+  { app: 'BHIM', label: 'BHIM' },
+  { app: 'AMAZON_PAY', label: 'Amazon Pay' },
+  { app: 'WHATSAPP_PAY', label: 'WhatsApp Pay' },
+  { app: 'CRED', label: 'CRED' },
+  { app: 'MOBIKWIK', label: 'MobiKwik' },
+  { app: 'FREECHARGE', label: 'Freecharge' },
+  { app: 'OTHER', label: 'UPI' },
+];
+
+interface UpiRow {
+  app: UpiApp;
+  upiId: string;
+  enabled: boolean;
+}
+
+/**
+ * The shop's UPI accounts, and the one decision that makes several of them worth having.
+ *
+ * The copy here does more work than usual, because the mistake this card exists to prevent is one
+ * a merchant makes naturally: they register a UPI id through Google Pay, so they assume their
+ * customers need Google Pay. They do not — `upi://pay` is an open standard and any UPI app pays
+ * any handle. Reading "configure Google Pay" as "my customers must use Google Pay" is exactly the
+ * error the storefront used to make out loud, one level up.
+ *
+ * So the card says plainly what the apps are for: they matter only once token verification is on,
+ * where the customer picks the app they will pay from and the payment is directed at the id held
+ * WITH that app — which is what lets a staff member find one token in one account's ledger instead
+ * of hunting across all of them.
+ */
+function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin', 'store', 'upi-settings'],
+    queryFn: () => adminStore.upiSettings(),
+    enabled: store.manualUpiEnabled ?? false,
+  });
+
+  const [rows, setRows] = useState<UpiRow[]>([]);
+  const [tokenVerification, setTokenVerification] = useState(false);
+  const [addApp, setAddApp] = useState<UpiApp | ''>('');
+
+  useEffect(() => {
+    if (!data) return;
+    setRows(data.configs.map((c) => ({ app: c.app, upiId: c.upiId, enabled: c.enabled })));
+    setTokenVerification(data.tokenVerificationEnabled);
+  }, [data]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      adminStore.updateUpiSettings({
+        tokenVerificationEnabled: tokenVerification,
+        configs: rows.map((r) => ({ app: r.app, upiId: r.upiId.trim(), enabled: r.enabled })),
+      }),
+    onSuccess: (saved: StoreUpiSettingsResponse) => {
+      qc.setQueryData(['admin', 'store', 'upi-settings'], saved);
+      qc.invalidateQueries({ queryKey: ['admin', 'store'] });
+      toast.success('UPI settings saved');
+    },
+    onError: (e) => toast.error('Could not save', e instanceof ApiError ? e.message : undefined),
+  });
+
+  // Nothing to configure for a shop not taking direct UPI at all; the switch for that lives one
+  // card up, and duplicating it here would be two doors to one setting.
+  if (!store.manualUpiEnabled) return null;
+
+  const unused = UPI_APP_CHOICES.filter((c) => !rows.some((r) => r.app === c.app));
+
+  return (
+    <Card className="p-5">
+      <form
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
+        className="space-y-4"
+      >
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+          <QrCode className="h-4 w-4 text-gold-400" /> UPI accounts &amp; verification
+        </h2>
+
+        <p className="text-caption text-slate-400">
+          Ordinary UPI payments go to your default UPI id above, and customers pay it from whichever
+          app they already have — Google Pay, PhonePe, anything. You never need more than one id for
+          that.
+        </p>
+
+        <label className="flex items-start gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={tokenVerification}
+            onChange={(e) => setTokenVerification(e.target.checked)}
+          />
+          <span>
+            Verify payments by token
+            <span className="mt-1 block text-caption text-slate-400">
+              Adds a step at checkout: the customer picks which UPI app they&apos;ll pay from, gets a
+              short token, and pays the id you hold with that app. You then look for that one token
+              in that one account before marking the order paid. Leave this off unless you actually
+              reconcile that way.
+            </span>
+          </span>
+        </label>
+
+        {tokenVerification && (
+          <div className="space-y-3 border-t border-ink-700 pt-4">
+            <p className="text-caption text-slate-400">
+              The apps below are what the customer chooses from. Each one needs the UPI id you
+              receive money at <em>in that app</em>, so the payment lands where you&apos;ll look for
+              it.
+            </p>
+
+            {isLoading && <p className="text-caption text-slate-400">Loading…</p>}
+
+            {rows.map((row, i) => (
+              <div key={row.app} className="flex flex-wrap items-center gap-2">
+                <span className="w-28 shrink-0 text-sm text-slate-300">
+                  {UPI_APP_CHOICES.find((c) => c.app === row.app)?.label ?? row.app}
+                </span>
+                <Input
+                  value={row.upiId}
+                  placeholder="shopowner@okaxis"
+                  className="min-w-[12rem] flex-1"
+                  onChange={(e) =>
+                    setRows((r) => r.map((x, j) => (j === i ? { ...x, upiId: e.target.value } : x)))
+                  }
+                />
+                <label className="flex items-center gap-1.5 text-caption text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={(e) =>
+                      setRows((r) => r.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))
+                    }
+                  />
+                  Offer to customers
+                </label>
+                <button
+                  type="button"
+                  aria-label={`Remove ${row.app}`}
+                  className="rounded p-1.5 text-slate-500 hover:text-danger-300"
+                  onClick={() => setRows((r) => r.filter((_, j) => j !== i))}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            ))}
+
+            {rows.length === 0 && !isLoading && (
+              <p className="text-caption text-slate-400">
+                No apps yet. Add at least one — the customer&apos;s first step is choosing from this
+                list.
+              </p>
+            )}
+
+            {unused.length > 0 && (
+              <div className="flex items-center gap-2">
+                <select
+                  value={addApp}
+                  onChange={(e) => setAddApp(e.target.value as UpiApp | '')}
+                  className="rounded-lg border border-ink-600 bg-transparent px-3 py-2 text-sm text-slate-200"
+                >
+                  <option value="">Add an app…</option>
+                  {unused.map((c) => (
+                    <option key={c.app} value={c.app}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!addApp}
+                  onClick={() => {
+                    if (!addApp) return;
+                    setRows((r) => [...r, { app: addApp, upiId: '', enabled: true }]);
+                    setAddApp('');
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <Button type="submit" loading={mutation.isPending}>
+          Save UPI settings
         </Button>
       </form>
     </Card>

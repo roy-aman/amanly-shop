@@ -483,9 +483,40 @@ export interface PaymentAction {
   currency: string;
 }
 
-/** What the customer needs to pay via Manual UPI and quote to store staff. */
+/**
+ * A UPI application a store can hold a receiving id with.
+ *
+ * This names the SHOP's account, never a requirement on the customer: `upi://pay` is an open
+ * standard, so money sent from PhonePe reaches an `@okaxis` handle exactly as money sent from
+ * Google Pay does. It becomes visible to a customer in exactly one place — the app picker under
+ * token-based verification, where the choice tells staff whose ledger to check.
+ */
+export type UpiApp =
+  | 'GOOGLE_PAY'
+  | 'PHONEPE'
+  | 'PAYTM'
+  | 'BHIM'
+  | 'AMAZON_PAY'
+  | 'WHATSAPP_PAY'
+  | 'CRED'
+  | 'MOBIKWIK'
+  | 'FREECHARGE'
+  | 'OTHER';
+
+/** One application a customer may choose to pay from. Carries no UPI id — that arrives with the QR. */
+export interface UpiAppOption {
+  app: UpiApp;
+  /** What to put on the button. Render this; 'PHONEPE' is not 'PhonePe'. */
+  label: string;
+}
+
+/**
+ * What the customer needs in order to pay this order by UPI.
+ *
+ * Read `tokenVerificationEnabled` FIRST — it decides which of two screens this is.
+ */
 export interface ManualUpiPayment {
-  /** Shown to the customer and quoted to staff at pickup/delivery. */
+  /** The order's payment reference; under verification also the customer's copy to quote. */
   token: string;
   /** The store's UPI id the QR pays into. */
   vpa: string;
@@ -493,6 +524,18 @@ export interface ManualUpiPayment {
   qrDataUri: string;
   amount: number;
   currency: string;
+  /** The application the customer chose; null for every ordinary-flow order. */
+  app?: UpiApp | null;
+  /** Display name of `app`; null when `app` is. */
+  appLabel?: string | null;
+  /**
+   * False (and undefined) is the ORDINARY flow: show the QR and the amount, say it can be paid
+   * from any UPI app, and show no application name and no token instructions.
+   *
+   * True means the store verifies payments by token: the customer already picked an application,
+   * so show the token to quote alongside the QR.
+   */
+  tokenVerificationEnabled?: boolean;
 }
 
 export interface OrderResponse {
@@ -575,6 +618,16 @@ export interface PlaceOrderRequest {
   /** Defaults to 'DELIVERY'. 'PICKUP' requires the store to have pickup enabled and charges no
    *  shipping; 'DELIVERY' requires a full shippingAddress. */
   deliveryMethod?: DeliveryMethod;
+  /**
+   * For MANUAL_UPI only, and only where the store runs token-based verification
+   * (`manualUpiTokenVerificationEnabled` on `/store`): which app the customer will pay from,
+   * chosen from `manualUpiApps`. It decides which of the store's ids the QR pays into.
+   *
+   * Leave it undefined everywhere else. Ordinary UPI payment is generic by design, so sending one
+   * has no effect and asking the customer to pick is a UI bug. Omitting it when verification IS on
+   * fails with `UPI_APP_REQUIRED`; naming an app the store has not enabled, `UPI_APP_UNAVAILABLE`.
+   */
+  upiApp?: UpiApp | null;
 }
 
 export interface RazorpayVerifyRequest {
@@ -604,6 +657,20 @@ export interface PublicStoreResponse {
   /** True when this store offers Manual UPI (entitled AND switched on AND a VPA is configured).
    *  Optional/undefined reads as off, the same convention as `bookingsEnabled`. */
   manualUpiEnabled?: boolean;
+  /**
+   * Which of the two Manual UPI screens to draw.
+   *
+   * False (the default) is the generic flow: one QR, payable from any UPI app, no application
+   * picker and no token instructions. The shop's UPI id being a Google Pay or PhonePe handle is a
+   * fact about its bank account and never an instruction to the customer.
+   *
+   * True adds one step before the QR: the customer picks an app from `manualUpiApps`, which is
+   * sent as the order's `upiApp` and decides which of the store's ids the payment lands in.
+   */
+  manualUpiTokenVerificationEnabled?: boolean;
+  /** The apps to offer, already filtered to what the merchant enabled. Empty unless the flag above
+   *  is true — so never render a picker without checking the flag. */
+  manualUpiApps?: UpiAppOption[];
   /** True when the customer may choose in-person pickup instead of shipping. */
   pickupEnabled?: boolean;
   /** Flat delivery charge applied when the order is below the threshold. */
@@ -673,8 +740,12 @@ export interface StoreSettingsResponse {
   manualUpiAllowed?: boolean;
   /** Merchant switch: has this store turned Manual UPI on. */
   manualUpiEnabled?: boolean;
-  /** The store's own UPI id payments are made to directly, e.g. shopowner@upi. */
+  /** The store's DEFAULT UPI id — what an ordinary UPI payment is made to, from whatever app the
+   *  customer uses. App-specific ids live in StoreUpiSettingsResponse. */
   manualUpiVpa?: string | null;
+  /** Whether direct UPI payments are verified by token. Set through the upi-settings endpoint,
+   *  not the payment-settings card. */
+  manualUpiTokenVerificationEnabled?: boolean;
   whatsappEnabled: boolean;
   /** Commerce rules (WP-P.6) — same figures the storefront reads from /store. */
   shippingFlatAmount?: number;
@@ -791,6 +862,35 @@ export interface UpdatePaymentSettingsRequest {
   manualUpiEnabled: boolean;
   /** Required when manualUpiEnabled is true; blank clears it. */
   manualUpiVpa?: string | null;
+}
+
+/** One configured UPI application and the id it is paid at. Admin-side — carries the handle. */
+export interface StoreUpiConfigResponse {
+  app: UpiApp;
+  /** Display name for the app — render this rather than the enum name. */
+  label: string;
+  upiId: string;
+  /** A disabled app is never offered to a customer and is refused if one selects it anyway. */
+  enabled: boolean;
+  sortOrder: number;
+}
+
+/** The store's UPI receiving configuration, as the merchant console sees it. */
+export interface StoreUpiSettingsResponse {
+  manualUpiEnabled: boolean;
+  /** Where ordinary UPI payments land, whatever app the customer uses. */
+  defaultUpiId: string | null;
+  tokenVerificationEnabled: boolean;
+  /** Every configured application, enabled or not, in the merchant's own order. */
+  configs: StoreUpiConfigResponse[];
+}
+
+export interface UpdateStoreUpiSettingsRequest {
+  /** Enabling this requires at least one enabled application — the flow's first step is the
+   *  customer choosing one, so the server refuses with UPI_APPS_NOT_CONFIGURED otherwise. */
+  tokenVerificationEnabled: boolean;
+  /** FULL REPLACE: an app left out is removed. `null` leaves the list untouched. */
+  configs?: { app: UpiApp; upiId: string; enabled?: boolean }[] | null;
 }
 
 export interface UpdateWhatsappSettingsRequest {

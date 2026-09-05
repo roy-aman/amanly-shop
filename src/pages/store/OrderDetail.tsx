@@ -9,9 +9,11 @@ import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { OrderTotals } from '@/components/OrderTotals';
 import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
 import { useToast } from '@/context/ToastContext';
+import { useStore } from '@/context/StoreContext';
 import { Button, EmptyState, LinkButton, Modal, Spinner } from '@/components/ui';
 import { DetailSkeleton } from '@/components/RouteSkeletons';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import type { UpiApp } from '@/lib/types';
 
 /**
  * A placed order, laid out as the receipt it is: a narrow stack of labelled blocks — what was
@@ -32,6 +34,14 @@ export default function OrderDetail() {
   const [confirming, setConfirming] = useState(false);
   const [tokenRevealed, setTokenRevealed] = useState(false);
   const [enablingUpi, setEnablingUpi] = useState(false);
+  const [upiApp, setUpiApp] = useState<UpiApp | null>(null);
+  const { store } = useStore();
+
+  // The app choice exists only where the shop verifies payments by token and needs to know which
+  // of its accounts to look in. The shop's UPI id belonging to Google Pay or PhonePe is a fact
+  // about its own bank account and never a requirement on the customer — any UPI app pays any
+  // handle — so outside that flow no app is named and nothing is asked.
+  const upiApps = (store?.manualUpiTokenVerificationEnabled && store?.manualUpiApps) || [];
 
   async function handlePayViaUpi() {
     if (order?.manualUpiPayment) {
@@ -39,9 +49,13 @@ export default function OrderDetail() {
       return;
     }
     if (!order) return;
+    if (needsAppChoice && !upiApp) {
+      toast.error('Choose a UPI app', 'Pick the app you will pay from so we can confirm your payment.');
+      return;
+    }
     setEnablingUpi(true);
     try {
-      const updated = await enableManualUpiForOrder(order.id);
+      const updated = await enableManualUpiForOrder(order.id, needsAppChoice ? upiApp : null);
       queryClient.setQueryData(['order', id], updated);
       setQrOpen(true);
     } catch (e) {
@@ -94,6 +108,13 @@ export default function OrderDetail() {
   });
 
   const order = orderQuery.data;
+
+  const needsAppChoice = upiApps.length > 0 && !order?.manualUpiPayment;
+  // An order carries its own answer once it has a payment; only an untouched COD order is still
+  // choosing, and reads the store's current setting instead.
+  const tokenVerification = order?.manualUpiPayment
+    ? !!order.manualUpiPayment.tokenVerificationEnabled
+    : upiApps.length > 0;
 
   useDocumentTitle(order ? `Order ${orderRef(order)}` : 'Order');
 
@@ -199,6 +220,31 @@ export default function OrderDetail() {
 
       {(order.manualUpiPayment || order.manualUpiPayAvailable) && !markedDone && order.status !== 'CANCELLED' && (
         <SummarySection title="Pay via UPI" bodyClassName="px-5 py-3">
+          {needsAppChoice && (
+            <div className="mb-3 space-y-2">
+              <p className="text-body-sm text-slate-400">
+                Which UPI app will you pay from? We check that app&apos;s account for your payment.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {upiApps.map((option) => (
+                  <button
+                    key={option.app}
+                    type="button"
+                    onClick={() => setUpiApp(option.app)}
+                    aria-pressed={upiApp === option.app}
+                    className={
+                      'rounded-lg border px-3 py-2 text-body-sm transition ' +
+                      (upiApp === option.app
+                        ? 'border-primary bg-ink-850 text-slate-100'
+                        : 'border-ink-600 text-slate-300 hover:border-slate-100')
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <Button onClick={handlePayViaUpi} loading={enablingUpi} fullWidth>
             <QrCode className="h-4 w-4" aria-hidden />
             Pay via UPI
@@ -206,7 +252,10 @@ export default function OrderDetail() {
         </SummarySection>
       )}
 
-      {(!order.manualUpiPayment || markedDone) && order.manualUpiToken && (
+      {/* Shown only where the shop runs the token step. Under the ordinary flow the token is the
+          order's internal reference — presenting it as something to quote invents a ritual this
+          shop does not run, and the payment status block already says where the order stands. */}
+      {(!order.manualUpiPayment || markedDone) && order.manualUpiToken && tokenVerification && (
         <SummarySection title="Manual UPI payment">
           <div className="flex items-start gap-3.5">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400/10 text-brand-ink">
@@ -291,7 +340,7 @@ export default function OrderDetail() {
         <Modal
           open={qrOpen}
           onClose={() => setQrOpen(false)}
-          title={tokenRevealed ? 'Payment token' : 'Pay via UPI'}
+          title={tokenRevealed ? (order.manualUpiPayment.tokenVerificationEnabled ? 'Payment token' : 'Thanks — payment noted') : 'Pay via UPI'}
           size="sm"
           dismissible={false}
         >
@@ -311,15 +360,18 @@ export default function OrderDetail() {
                   <dd className="text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</dd>
                 </div>
               </dl>
-              <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
-                <p className="text-overline uppercase text-slate-400">Your payment token</p>
-                <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-wide text-slate-100">
-                  {firstName ? `${firstName}: ${order.manualUpiPayment.token}` : order.manualUpiPayment.token}
-                </p>
-              </div>
+              {order.manualUpiPayment.tokenVerificationEnabled && (
+                <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-5 py-3">
+                  <p className="text-overline uppercase text-slate-400">Your payment token</p>
+                  <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-wide text-slate-100">
+                    {firstName ? `${firstName}: ${order.manualUpiPayment.token}` : order.manualUpiPayment.token}
+                  </p>
+                </div>
+              )}
               <p className="max-w-sm text-caption text-slate-400">
-                For pickup, quote this token to staff — for delivery, keep it as your reference.
-                We&apos;ll email you once payment is confirmed.
+                {order.manualUpiPayment.tokenVerificationEnabled
+                  ? "For pickup, quote this token to staff — for delivery, keep it as your reference. We'll email you once payment is confirmed."
+                  : "We'll check for your payment and email you once it's confirmed. Nothing else to do."}
               </p>
             </div>
           ) : (
@@ -345,7 +397,9 @@ export default function OrderDetail() {
               )}
               <p className="max-w-sm text-caption text-slate-400">
                 {confirming || showMarkDone
-                  ? "Once you've paid, tap Mark payment done to get your token."
+                  ? order.manualUpiPayment.tokenVerificationEnabled
+                    ? "Once you've paid, tap Mark payment done to get your token."
+                    : "Once you've paid, tap Mark payment done."
                   : 'Scan the QR with any UPI app to pay.'}
               </p>
             </div>

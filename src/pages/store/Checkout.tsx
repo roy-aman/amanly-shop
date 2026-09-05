@@ -21,6 +21,7 @@ import type {
   PaymentMethod,
   PlaceOrderRequest,
   ShippingDetails,
+  UpiApp,
 } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
@@ -251,6 +252,24 @@ export default function Checkout() {
   const onlineEnabled = !!store?.onlinePaymentEnabled;
   const manualUpiEnabled = !!store?.manualUpiEnabled;
   const pickupEnabled = !!store?.pickupEnabled;
+
+  // The shop's own UPI id belongs to some app — @okaxis to Google Pay, @ybl to PhonePe — and that
+  // is a fact about ITS bank account, not a requirement on the customer: upi://pay is an open
+  // standard and any UPI app pays any handle. So the app choice exists in exactly one case, where
+  // it means something: the shop verifies payments by token, and needs to know which of its
+  // accounts to look in for one. Everywhere else this is empty and the copy stays generic.
+  const upiTokenVerification = manualUpiEnabled && !!store?.manualUpiTokenVerificationEnabled;
+  const upiApps = useMemo(
+    () => (upiTokenVerification ? store?.manualUpiApps ?? [] : []),
+    [upiTokenVerification, store?.manualUpiApps],
+  );
+  const [upiApp, setUpiApp] = useState<UpiApp | null>(null);
+  // Only ever holds an app the store still offers, so a merchant disabling one between page load
+  // and checkout cannot leave a stale selection to be rejected at placement.
+  useEffect(() => {
+    setUpiApp((current) => (current && upiApps.some((a) => a.app === current) ? current : null));
+  }, [upiApps]);
+
   // Priority order — also the default-selection order below: a real payment gateway beats a
   // manually-verified UPI scan, which beats paying nothing up front.
   const methods = useMemo(() => {
@@ -261,7 +280,9 @@ export default function Checkout() {
       opts.push({
         value: 'MANUAL_UPI',
         label: 'UPI (scan to pay)',
-        desc: 'Scan a QR, pay us directly, then quote your token at pickup/delivery',
+        desc: upiTokenVerification
+          ? 'Scan a QR, pay us directly, then quote your token at pickup/delivery'
+          : 'Scan a QR and pay us directly from any UPI app',
         icon: QrCode,
       });
     if (codEnabled)
@@ -270,7 +291,7 @@ export default function Checkout() {
     if (opts.length === 0)
       opts.push({ value: 'CASH', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: Wallet });
     return opts;
-  }, [codEnabled, onlineEnabled, manualUpiEnabled]);
+  }, [codEnabled, onlineEnabled, manualUpiEnabled, upiTokenVerification]);
 
   // Preselect the default (or first) saved address once addresses load.
   useEffect(() => {
@@ -404,6 +425,16 @@ export default function Checkout() {
     // recomputes the discount authoritatively and rejects an invalid code.
     const body: PlaceOrderRequest = { shippingAddress, notes: notes.trim() || null, paymentMethod, deliveryMethod };
     if (appliedCoupon) body.couponCode = appliedCoupon.code;
+    // Caught here as well as server-side so the customer is told which field to fix rather than
+    // being handed a UPI_APP_REQUIRED after their stock has been reserved and released again.
+    if (paymentMethod === 'MANUAL_UPI' && upiTokenVerification) {
+      if (!upiApp) {
+        setSubmitting(false);
+        setPlaceErrors(['Choose the UPI app you will pay from.']);
+        return;
+      }
+      body.upiApp = upiApp;
+    }
     try {
       const order = await placeOrder(body);
 
@@ -759,6 +790,40 @@ export default function Checkout() {
                     {methods[0].label} is the only payment method available for this store.
                   </p>
                 )}
+
+                {/* Rendered ONLY when this shop verifies payments by token — never as a
+                    consequence of which app its own UPI id happens to be registered with. The list
+                    comes from the server already filtered to the apps the merchant enabled; an
+                    empty one means there is no choice to make and this block must not appear. */}
+                {paymentMethod === 'MANUAL_UPI' && upiTokenVerification && upiApps.length > 0 && (
+                  <div className="space-y-2 rounded-xl border border-ink-600 p-4">
+                    <p className="text-sm font-medium text-slate-100">Which UPI app will you pay from?</p>
+                    <p className="text-xs text-slate-500">
+                      We check that app's account for your payment before confirming your order.
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {upiApps.map((option) => {
+                        const active = upiApp === option.app;
+                        return (
+                          <button
+                            key={option.app}
+                            type="button"
+                            onClick={() => setUpiApp(option.app)}
+                            aria-pressed={active}
+                            className={
+                              'rounded-lg border px-3 py-2 text-sm transition ' +
+                              (active
+                                ? 'border-primary bg-ink-850 text-slate-100'
+                                : 'border-ink-600 text-slate-300 hover:border-slate-100')
+                            }
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </section>
 
               <section className="border-t border-ink-600 pt-5">
@@ -912,6 +977,17 @@ export default function Checkout() {
               </p>
               <p className="mt-1 text-body-sm text-slate-400">to {manualUpiOrder.manualUpiPayment.vpa}</p>
             </div>
+            {/* The token is shown only where the shop actually runs a counter step that uses it.
+                Under the ordinary flow it exists as the order's reference, and presenting it as
+                something to keep would be inventing a ritual this shop does not run. */}
+            {manualUpiOrder.manualUpiPayment.tokenVerificationEnabled && (
+              <div className="w-full rounded-lg border border-ink-600 bg-ink-850 px-4 py-3">
+                <p className="text-caption uppercase tracking-wide text-slate-500">Your payment token</p>
+                <p className="mt-1 font-mono text-h3 tracking-widest text-primary">
+                  {manualUpiOrder.manualUpiPayment.token}
+                </p>
+              </div>
+            )}
             {manualUpiConfirming ? (
               <div className="flex items-center gap-2 text-body-sm text-slate-400">
                 <Spinner className="h-4 w-4" />
@@ -923,7 +999,9 @@ export default function Checkout() {
             <p className="max-w-sm text-caption text-slate-400">
               {manualUpiConfirming
                 ? 'Confirming payment — you will be redirected to your order details shortly.'
-                : "Scan the QR with any UPI app to pay. Once you've paid, tap Mark payment done."}
+                : manualUpiOrder.manualUpiPayment.tokenVerificationEnabled
+                  ? `Pay ${manualUpiOrder.manualUpiPayment.appLabel ?? 'from your chosen UPI app'}, then keep your token — quote it when you collect your order. Once you've paid, tap Mark payment done.`
+                  : "Scan the QR with any UPI app to pay. Once you've paid, tap Mark payment done."}
             </p>
           </div>
         </Modal>
