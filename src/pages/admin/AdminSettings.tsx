@@ -637,6 +637,14 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
   // card up, and duplicating it here would be two doors to one setting.
   if (!store.manualUpiEnabled) return null;
 
+  // The several-accounts-and-tokens flow is an operator grant, and without it this whole card is
+  // not this shop's to fill in: one UPI id, paid from any app, is the entire setup. Hidden rather
+  // than disabled, because a card explaining a capability the merchant cannot have is an advert,
+  // and the one exception is a store still switched on from before the grant was withdrawn — that
+  // stays visible, badged, so they can see why their checkout changed and turn it off.
+  const verificationAllowed = data?.tokenVerificationAllowed ?? false;
+  if (!verificationAllowed && !data?.tokenVerificationEnabled) return null;
+
   const unused = UPI_APP_CHOICES.filter((c) => !rows.some((r) => r.app === c.app));
 
   return (
@@ -648,9 +656,12 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
         }}
         className="space-y-4"
       >
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-          <QrCode className="h-4 w-4 text-gold-400" /> UPI accounts &amp; verification
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+            <QrCode className="h-4 w-4 text-gold-400" /> UPI accounts &amp; verification
+          </h2>
+          {!verificationAllowed && <Badge tone="gray">No longer on your plan</Badge>}
+        </div>
 
         <p className="text-caption text-slate-400">
           Ordinary UPI payments go to your default UPI id above, and customers pay it from whichever
@@ -658,11 +669,21 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
           that.
         </p>
 
+        {!verificationAllowed && (
+          <p className="text-caption text-warning-300">
+            Token verification is no longer on your plan, so your checkout is back to ordinary UPI.
+            Your apps are kept — switch this off to tidy the card, or ask us to restore it.
+          </p>
+        )}
+
         <label className="flex items-start gap-2 text-sm text-slate-300">
           <input
             type="checkbox"
             className="mt-1"
             checked={tokenVerification}
+            // Still un-tickable when withdrawn: the server refuses it, and offering a switch that
+            // cannot be turned on is worse than not offering one.
+            disabled={!verificationAllowed && !tokenVerification}
             onChange={(e) => setTokenVerification(e.target.checked)}
           />
           <span>

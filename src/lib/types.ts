@@ -758,8 +758,13 @@ export interface StoreSettingsResponse {
   /** The store's DEFAULT UPI id — what an ordinary UPI payment is made to, from whatever app the
    *  customer uses. App-specific ids live in StoreUpiSettingsResponse. */
   manualUpiVpa?: string | null;
-  /** Whether direct UPI payments are verified by token. Set through the upi-settings endpoint,
-   *  not the payment-settings card. */
+  /** Platform entitlement: may this store run token-based UPI verification. False means the whole
+   *  multi-account/token area is not this store's to configure — hide it rather than showing a
+   *  switch the server will refuse. */
+  manualUpiTokenVerificationAllowed?: boolean;
+  /** Merchant switch: whether direct UPI payments are verified by token. What the merchant saved,
+   *  not necessarily what is in force. Set through the upi-settings endpoint, not the
+   *  payment-settings card. */
   manualUpiTokenVerificationEnabled?: boolean;
   whatsappEnabled: boolean;
   /** Commerce rules (WP-P.6) — same figures the storefront reads from /store. */
@@ -895,7 +900,15 @@ export interface StoreUpiSettingsResponse {
   manualUpiEnabled: boolean;
   /** Where ordinary UPI payments land, whatever app the customer uses. */
   defaultUpiId: string | null;
+  /** Platform entitlement. False means this store may not run token verification at all — the
+   *  switch below cannot be turned on, and the server refuses it with
+   *  `UPI_TOKEN_VERIFICATION_NOT_ALLOWED`. */
+  tokenVerificationAllowed: boolean;
+  /** The MERCHANT's switch — what they saved, which a withdrawn entitlement leaves untouched. */
   tokenVerificationEnabled: boolean;
+  /** Effective: allowed AND enabled AND the store can take direct UPI. What customers actually
+   *  meet at checkout, and what the storefront's own flag is derived from. */
+  tokenVerificationInForce: boolean;
   /** Every configured application, enabled or not, in the merchant's own order. */
   configs: StoreUpiConfigResponse[];
 }
