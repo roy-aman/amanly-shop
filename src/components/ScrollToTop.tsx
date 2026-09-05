@@ -19,9 +19,6 @@ export default function ScrollToTop(): null {
   const navigationType = useNavigationType();
 
   useEffect(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
     if (navigationType === 'POP') return; // browser restores back/forward scroll
     if (hash) {
       const el = document.getElementById(hash.slice(1));
