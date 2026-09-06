@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { createContext, useRef, useContext, useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, CreditCard, MessageCircle, QrCode, Tag, Trash2, Truck, Type } from 'lucide-react';
 import { adminStore } from '@/api/admin';
@@ -43,6 +43,8 @@ function SettingsSection({
   badge,
   open,
   onToggle,
+  dirty = false,
+  onEdited,
   children,
 }: {
   icon: ReactNode;
@@ -51,6 +53,10 @@ function SettingsSection({
   badge?: ReactNode;
   open: boolean;
   onToggle: () => void;
+  /** Holding edits nobody has saved. */
+  dirty?: boolean;
+  /** Called when anything inside changes, so a card need not track its own fields. */
+  onEdited?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -65,6 +71,14 @@ function SettingsSection({
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-slate-200">{title}</span>
+            {/* Folded and edited: the summary underneath reads from what was SAVED, so without
+                this the row would calmly report the old values back at someone who has just
+                typed new ones, with no sign their work still exists. */}
+            {!open && dirty && (
+              <span className="rounded-full bg-warning-500/15 px-2 py-0.5 text-overline uppercase text-warning-300">
+                Not saved yet
+              </span>
+            )}
             {badge}
           </span>
           {/* Only when folded: open, the form below says all of this and more, and a summary
@@ -72,12 +86,18 @@ function SettingsSection({
           {!open && <span className="mt-1 block text-caption text-slate-400">{summary}</span>}
         </span>
         <span className="mt-0.5 flex shrink-0 items-center gap-1 text-caption text-slate-400">
-          {open ? 'Close' : 'Change'}
+          {open ? 'Close' : dirty ? 'Resume' : 'Change'}
           <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', open && 'rotate-180')} />
         </span>
       </button>
 
-      {open && <div className="mt-4">{children}</div>}
+      {/* React's synthetic change bubbles, so one listener here covers every input, select and
+          checkbox in the card — and a card need not report its own dirtiness field by field. */}
+      {open && (
+        <div className="mt-4" onChange={onEdited} onInput={onEdited}>
+          {children}
+        </div>
+      )}
     </Card>
   );
 }
@@ -96,14 +116,16 @@ export default function AdminSettings() {
   return (
     <div className="max-w-3xl">
       <PageHeader title="Settings" subtitle="Delivery, tax, payment and messaging for your store." />
-      <div className="space-y-6">
-        <StorefrontCard store={data} />
-        <LexiconCard store={data} />
-        <CommerceCard store={data} />
-        <PaymentsCard store={data} />
-        <UpiAppsCard store={data} />
-        <WhatsappCard store={data} />
-      </div>
+      <SectionFoldProvider>
+        <div className="space-y-6">
+          <StorefrontCard store={data} />
+          <LexiconCard store={data} />
+          <CommerceCard store={data} />
+          <PaymentsCard store={data} />
+          <UpiAppsCard store={data} />
+          <WhatsappCard store={data} />
+        </div>
+      </SectionFoldProvider>
     </div>
   );
 }
@@ -123,6 +145,95 @@ const HERO_DEFAULTS = {
   subtext: 'A tight edit of everyday pieces — chosen for fit, fabric, and how they wear over time.',
 };
 
+/**
+ * Which section is open, and which are holding edits nobody has saved.
+ *
+ * Lifted out of the cards because "only one open at a time" is a fact about the SET: each card
+ * owning its own fold meant opening a second left the first standing, and six forms open at once
+ * is the wall of inputs the fold exists to prevent.
+ */
+interface SectionFoldApi {
+  openId: string | null;
+  setOpenId: (next: string | null | ((current: string | null) => string | null)) => void;
+  dirty: Record<string, boolean>;
+  setDirty: (id: string, dirty: boolean) => void;
+}
+
+const SectionFoldContext = createContext<SectionFoldApi | null>(null);
+
+/**
+ * Which unfinished section wins the one open slot.
+ *
+ * With every section able to open itself and only one able to be open, "first to claim" meant
+ * render order decided it — and render order is a layout decision, not a judgement about what a
+ * merchant most needs to fix. A shop nobody can pay cannot trade at all; a shop running the
+ * default opening copy is merely unpolished. Anything unranked is a 0 and yields to both.
+ */
+const CLAIM_PRIORITY: Record<string, number> = { payments: 2, upi: 1 };
+
+function SectionFoldProvider({ children }: { children: ReactNode }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [dirty, setDirtyMap] = useState<Record<string, boolean>>({});
+  const setDirty = useCallback((id: string, next: boolean) => {
+    // Guarded: an edit fires on every keystroke, and re-setting the same flag would re-render
+    // the whole page for nothing.
+    setDirtyMap((prev) => (!!prev[id] === next ? prev : { ...prev, [id]: next }));
+  }, []);
+  return (
+    <SectionFoldContext.Provider value={{ openId, setOpenId, dirty, setDirty }}>
+      {children}
+    </SectionFoldContext.Provider>
+  );
+}
+
+/**
+ * One card's end of the fold.
+ *
+ * `initiallyOpen` ASKS for the floor rather than taking it: a card that discovers it is
+ * half-configured claims the opening slot only if nothing else has, so it can never shut a
+ * section the merchant is already typing in.
+ */
+function useSectionFold(id: string, initiallyOpen = false) {
+  const api = useContext(SectionFoldContext);
+  if (!api) throw new Error('useSectionFold outside SectionFoldProvider');
+  const { openId, setOpenId, dirty, setDirty } = api;
+  const claimed = useRef(false);
+
+  useEffect(() => {
+    if (!initiallyOpen || claimed.current) return;
+    claimed.current = true;
+    setOpenId((current) => {
+      if (current === null) return id;
+      return (CLAIM_PRIORITY[id] ?? 0) > (CLAIM_PRIORITY[current] ?? 0) ? id : current;
+    });
+  }, [initiallyOpen, id, setOpenId]);
+
+  const open = openId === id;
+  const setOpen = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      setOpenId((current) => {
+        const want = typeof next === 'function' ? next(current === id) : next;
+        return want ? id : current === id ? null : current;
+      });
+    },
+    [id, setOpenId],
+  );
+
+  return {
+    open,
+    setOpen,
+    dirty: !!dirty[id],
+    /** Something in this card changed. */
+    markEdited: useCallback(() => setDirty(id, true), [id, setDirty]),
+    /** Saved: fold it, and drop the warning. */
+    markSaved: useCallback(() => {
+      setDirty(id, false);
+      setOpenId((current) => (current === id ? null : current));
+    }, [id, setDirty, setOpenId]),
+  };
+}
+
+
 function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -131,7 +242,7 @@ function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
   const [headline, setHeadline] = useState(store.heroHeadline ?? '');
   const [subtext, setSubtext] = useState(store.heroSubtext ?? '');
   // Open only for a shop that has not written its own opening screen yet.
-  const [open, setOpen] = useState(!(store.heroEyebrow || store.heroHeadline || store.heroSubtext));
+  const fold = useSectionFold('storefront', !(store.heroEyebrow || store.heroHeadline || store.heroSubtext));
 
   useEffect(() => {
     setEyebrow(store.heroEyebrow ?? '');
@@ -147,7 +258,7 @@ function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
       // minutes — without this the merchant reloads the shop and sees the old words.
       qc.invalidateQueries({ queryKey: ['public-store'] });
       toast.success('Storefront copy saved');
-      setOpen(false);
+      fold.markSaved();
     },
     onError: (e) => toast.error('Could not save', e instanceof Error ? e.message : 'Please try again.'),
   });
@@ -168,8 +279,10 @@ function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
         store.heroEyebrow?.trim() ||
         'Using the default wording'
       }
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
+      open={fold.open}
+      onToggle={() => fold.setOpen((o) => !o)}
+      dirty={fold.dirty}
+      onEdited={fold.markEdited}
     >
       <p className="text-caption text-slate-400">
         The words shoppers see first. Leave a box empty to use the wording shown in grey. These
@@ -277,7 +390,7 @@ function LexiconCard({ store }: { store: StoreSettingsResponse }) {
     setOpenGroup((current) => (current === heading ? null : heading));
   // Folded from the start: running the platform's own words is a perfectly good answer, and a
   // section that stayed open until you renamed something would nag every shop that never will.
-  const [open, setOpen] = useState(false);
+  const fold = useSectionFold('lexicon', false);
 
   useEffect(() => setTerms(store.lexicon ?? {}), [store]);
 
@@ -294,7 +407,7 @@ function LexiconCard({ store }: { store: StoreSettingsResponse }) {
       // merchant saves "Cakes" and the sidebar still says Inventory.
       qc.invalidateQueries({ queryKey: ['public-store'] });
       toast.success('Wording saved');
-      setOpen(false);
+      fold.markSaved();
     },
     onError: (e) => {
       if (e instanceof ApiError && e.code === 'UNKNOWN_LEXICON_TERM') {
@@ -329,8 +442,10 @@ function LexiconCard({ store }: { store: StoreSettingsResponse }) {
       icon={<Tag className="h-4 w-4 text-gold-400" />}
       title="What you call things"
       summary={renamed > 0 ? `${renamed} renamed` : 'Using the platform’s own words'}
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
+      open={fold.open}
+      onToggle={() => fold.setOpen((o) => !o)}
+      dirty={fold.dirty}
+      onEdited={fold.markEdited}
     >
       <p className="text-caption text-slate-400">
         Your shop runs the same pages as every shop on the platform — this is what the things on them
@@ -429,7 +544,7 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Always has a value — zero delivery and zero tax is a real answer, not an unset one — so this
   // opens folded and states its figures rather than asking to be filled in.
-  const [open, setOpen] = useState(false);
+  const fold = useSectionFold('commerce', false);
 
   useEffect(() => {
     setShipping(String(store.shippingFlatAmount ?? 0));
@@ -447,7 +562,7 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
       // estimates would otherwise keep quoting the old delivery charge.
       qc.invalidateQueries({ queryKey: ['public-store'] });
       toast.success('Delivery & tax saved', 'Applies to future orders; placed orders keep their own figures.');
-      setOpen(false);
+      fold.markSaved();
     },
     onError: (e) => {
       if (e instanceof ApiError && e.hasFieldErrors()) setErrors(e.fieldErrorMap());
@@ -494,8 +609,10 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
       ]
         .filter(Boolean)
         .join(' · ')}
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
+      open={fold.open}
+      onToggle={() => fold.setOpen((o) => !o)}
+      dirty={fold.dirty}
+      onEdited={fold.markEdited}
     >
       <p className="text-caption text-slate-400">
         Applies to orders placed from now on. Orders already placed keep the figures snapshotted at the time, so
@@ -505,19 +622,19 @@ function CommerceCard({ store }: { store: StoreSettingsResponse }) {
       <form onSubmit={onSubmit} className="mt-5 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Delivery charge" error={errors.shipping} hint={`Flat, in ${store.currency}.`}>
-            <Input type="number" min={0} step="0.01" value={shipping} invalid={!!errors.shipping} onChange={(e) => setShipping(e.target.value)} />
+            <Input type="number" min={0} step="0.01" aria-label="Delivery charge" value={shipping} invalid={!!errors.shipping} onChange={(e) => setShipping(e.target.value)} />
           </Field>
           <Field
             label="Free delivery over"
             error={errors.threshold}
             hint="Compared against the total after any discount. Empty = never free."
           >
-            <Input type="number" min={0} step="0.01" value={threshold} invalid={!!errors.threshold} onChange={(e) => setThreshold(e.target.value)} />
+            <Input type="number" min={0} step="0.01" aria-label="Free delivery over" value={threshold} invalid={!!errors.threshold} onChange={(e) => setThreshold(e.target.value)} />
           </Field>
         </div>
 
         <Field label="Tax rate (%)" error={errors.taxRate}>
-          <Input type="number" min={0} max={100} step="0.001" value={taxRate} invalid={!!errors.taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+          <Input type="number" min={0} max={100} step="0.001" aria-label="Tax rate (%)" value={taxRate} invalid={!!errors.taxRate} onChange={(e) => setTaxRate(e.target.value)} />
         </Field>
 
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-700 p-3 transition hover:bg-ink-800/60">
@@ -589,9 +706,7 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   // A shop accepting no payment at all cannot be sold from, so that is the one state here worth
   // opening for — every other combination is a decision the merchant has already made.
-  const [open, setOpen] = useState(
-    !(store.codEnabled || store.onlinePaymentEnabled || (store.manualUpiEnabled ?? false)),
-  );
+  const fold = useSectionFold('payments', !(store.codEnabled || store.onlinePaymentEnabled || (store.manualUpiEnabled ?? false)));
 
   const manualUpiAllowed = store.manualUpiAllowed ?? false;
   const showOnline = store.razorpayConfigured || store.onlinePaymentEnabled;
@@ -609,7 +724,7 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'store'] });
       toast.success('Payment settings saved');
-      setOpen(false);
+      fold.markSaved();
     },
     onError: (e) => {
       if (e instanceof ApiError) {
@@ -650,8 +765,10 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
           .filter(Boolean)
           .join(' · ') || 'No payment method enabled — customers cannot check out'
       }
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
+      open={fold.open}
+      onToggle={() => fold.setOpen((o) => !o)}
+      dirty={fold.dirty}
+      onEdited={fold.markEdited}
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -770,7 +887,7 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
   const [rows, setRows] = useState<UpiRow[]>([]);
   const [tokenVerification, setTokenVerification] = useState(false);
   const [addApp, setAddApp] = useState<UpiApp | ''>('');
-  const [open, setOpen] = useState(false);
+  const fold = useSectionFold('upi', false);
 
   useEffect(() => {
     if (!data) return;
@@ -779,7 +896,7 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
     // Decided here rather than in useState, because the accounts arrive on their own request and
     // there is nothing to judge "set up or not" by until they do. A shop with verification on and
     // no accounts configured cannot take a direct UPI payment at all, so that one opens.
-    setOpen(data.tokenVerificationEnabled && data.configs.length === 0);
+    if (data.tokenVerificationEnabled && data.configs.length === 0) fold.setOpen(true);
   }, [data]);
 
   const mutation = useMutation({
@@ -792,7 +909,7 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
       qc.setQueryData(['admin', 'store', 'upi-settings'], saved);
       qc.invalidateQueries({ queryKey: ['admin', 'store'] });
       toast.success('UPI settings saved');
-      setOpen(false);
+      fold.markSaved();
     },
     onError: (e) => toast.error('Could not save', e instanceof ApiError ? e.message : undefined),
   });
@@ -823,8 +940,10 @@ function UpiAppsCard({ store }: { store: StoreSettingsResponse }) {
             ? 'Verification on, but no accounts added yet'
             : `${rows.length} account${rows.length === 1 ? '' : 's'} · ${rows.filter((r) => r.enabled).length} offered at checkout`
       }
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
+      open={fold.open}
+      onToggle={() => fold.setOpen((o) => !o)}
+      dirty={fold.dirty}
+      onEdited={fold.markEdited}
     >
       <form
         onSubmit={(e: FormEvent) => {
@@ -979,7 +1098,7 @@ function WhatsappCard({ store }: { store: StoreSettingsResponse }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Opt-in, and off is a perfectly good answer — so folded either way rather than sitting open
   // asking to be configured on the settings page of every shop that will never use it.
-  const [open, setOpen] = useState(false);
+  const fold = useSectionFold('whatsapp', false);
 
   useEffect(() => {
     setEnabled(store.whatsappEnabled);
@@ -992,7 +1111,7 @@ function WhatsappCard({ store }: { store: StoreSettingsResponse }) {
       toast.success('WhatsApp settings saved');
       setAccessToken('');
       setAppSecret('');
-      setOpen(false);
+      fold.markSaved();
     },
     onError: (e) => {
       if (e instanceof ApiError) {
@@ -1030,8 +1149,10 @@ function WhatsappCard({ store }: { store: StoreSettingsResponse }) {
           ? 'Order notifications are sent over WhatsApp'
           : 'Not sending WhatsApp notifications'
       }
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
+      open={fold.open}
+      onToggle={() => fold.setOpen((o) => !o)}
+      dirty={fold.dirty}
+      onEdited={fold.markEdited}
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="flex items-center gap-2 text-sm text-slate-300">
