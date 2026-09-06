@@ -133,4 +133,82 @@ describe('AdminSettings — folded sections', () => {
     await screen.findByText('Payments');
     expect(screen.getByText(/Cash on delivery · Manual UPI \(royaman78@axl\)/)).toBeInTheDocument();
   });
+  // -- one at a time -------------------------------------------------------
+
+  /**
+   * Each card used to own its own fold, so opening a second left the first standing — and six
+   * forms open at once is the wall of inputs the fold exists to prevent.
+   */
+  it('closes the open section when another is opened', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminSettings />);
+
+    await screen.findByText('Delivery & tax');
+    await user.click(screen.getByRole('button', { name: /Delivery & tax/i }));
+    expect(await screen.findByRole('button', { name: /Save delivery/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /What you call things/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Save delivery/i })).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByRole('button', { name: /Save wording/i })).toBeInTheDocument();
+  });
+
+  /**
+   * The folded row's summary reads from what was SAVED. A section closed mid-edit would
+   * otherwise report the old figures back at someone who has just typed new ones, with no sign
+   * their work still exists.
+   */
+  it('marks a section it folded with edits still in it', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminSettings />);
+
+    await screen.findByText('Delivery & tax');
+    await user.click(screen.getByRole('button', { name: /Delivery & tax/i }));
+    const rate = await screen.findByLabelText(/Tax rate/i);
+    await user.clear(rate);
+    await user.type(rate, '12');
+
+    await user.click(screen.getByRole('button', { name: /What you call things/i }));
+
+    const folded = await screen.findByRole('button', { name: /Delivery & tax/i });
+    expect(folded).toHaveTextContent('Not saved yet');
+    // And it invites you back in, rather than offering a fresh "Change".
+    expect(folded).toHaveTextContent('Resume');
+  });
+
+  /** Folding is not discarding: the edits are still there on the way back in. */
+  it('keeps the edits, so reopening resumes rather than restarts', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminSettings />);
+
+    await screen.findByText('Delivery & tax');
+    await user.click(screen.getByRole('button', { name: /Delivery & tax/i }));
+    const rate = await screen.findByLabelText(/Tax rate/i);
+    await user.clear(rate);
+    await user.type(rate, '12');
+
+    await user.click(screen.getByRole('button', { name: /What you call things/i }));
+    await user.click(screen.getByRole('button', { name: /Delivery & tax/i }));
+
+    expect(await screen.findByLabelText(/Tax rate/i)).toHaveValue(12);
+  });
+
+  it('drops the mark once the edits are saved', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminSettings />);
+
+    await screen.findByText('Delivery & tax');
+    await user.click(screen.getByRole('button', { name: /Delivery & tax/i }));
+    const rate = await screen.findByLabelText(/Tax rate/i);
+    await user.clear(rate);
+    await user.type(rate, '12');
+    await user.click(screen.getByRole('button', { name: /Save delivery/i }));
+
+    await waitFor(() => expect(updateCommerceMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Delivery & tax/i })).not.toHaveTextContent('Not saved yet'),
+    );
+  });
 });
