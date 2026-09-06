@@ -13,7 +13,7 @@ import type {
   UpdateStoreLexiconRequest,
   UpdateWhatsappSettingsRequest,
 } from '@/lib/types';
-import { LEXICON_DEFAULTS } from '@/lib/lexicon';
+import { LEXICON_DEFAULTS, type LexiconKey } from '@/lib/lexicon';
 import { useToast } from '@/context/ToastContext';
 import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, PageLoader, Select, Textarea } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
@@ -237,31 +237,28 @@ function StorefrontCard({ store }: { store: StoreSettingsResponse }) {
  * this file, so a term added in a later backend release appears here without a
  * console release. This bundle's own defaults are only the fallback.
  */
-const TERM_GROUPS: { heading: string; hint: string; keys: string[] }[] = [
+const TERM_GROUPS: { heading: string; hint: string; keys: LexiconKey[] }[] = [
   {
-    heading: 'What you sell',
-    hint: 'Shown to customers, all over the shop.',
-    keys: ['product', 'products', 'category', 'categories', 'brand', 'brands', 'variant', 'variants'],
-  },
-  {
-    heading: 'Buying',
-    hint: 'The bag, the checkout, and what a customer calls what they have bought.',
-    keys: ['cart', 'order', 'orders', 'coupon', 'coupons', 'wishlist', 'review', 'reviews'],
-  },
-  {
-    heading: 'Appointments',
-    hint: 'Only shown to customers if your shop takes bookings.',
-    keys: ['service', 'services', 'booking', 'bookings', 'staffMember', 'staff'],
+    heading: 'What you serve and sell',
+    hint: 'Shown to users, all over the site.',
+    keys: [
+      'product', 'products', 'category', 'categories', 'brand',
+      'brands', 'variant', 'variants', 'cart', 'order',
+      'orders', 'coupon', 'coupons', 'wishlist', 'review',
+      'reviews', 'service', 'services', 'booking', 'bookings',
+      'staffMember', 'staff',
+    ],
   },
   {
     heading: 'This console',
     hint: 'The navigation you and your team read all day.',
     keys: [
       'nav.overview', 'nav.dashboard', 'nav.catalog', 'nav.inventory', 'nav.categories',
-      'nav.brands', 'nav.banners', 'nav.reviews', 'nav.sales', 'nav.orders', 'nav.deliverables',
-      'nav.coupons', 'nav.bookings', 'nav.diary', 'nav.services', 'nav.serviceGroups', 'nav.team',
-      'nav.serviceReviews', 'nav.bookingSetup', 'nav.people', 'nav.users', 'nav.insights',
-      'nav.reports', 'nav.system', 'nav.storeQr', 'nav.settings',
+      'nav.brands', 'nav.banners', 'nav.reviews', 'nav.sales', 'nav.orders',
+      'nav.deliverables', 'nav.coupons', 'nav.bookings', 'nav.diary', 'nav.services',
+      'nav.serviceGroups', 'nav.team', 'nav.serviceReviews', 'nav.bookingSetup', 'nav.people',
+      'nav.users', 'nav.insights', 'nav.reports', 'nav.system', 'nav.storeQr',
+      'nav.settings',
     ],
   },
 ];
@@ -271,8 +268,13 @@ function LexiconCard({ store }: { store: StoreSettingsResponse }) {
   const toast = useToast();
 
   const [terms, setTerms] = useState<Record<string, string>>(store.lexicon ?? {});
-  // The long "this console" group inside the form, distinct from the section fold itself.
-  const [consoleOpen, setConsoleOpen] = useState(false);
+  // Which ONE group inside the form is open. Both start closed: a merchant arrives wanting
+  // one of the two — the words customers read, or the words their own staff read — rather
+  // than forty inputs, and opening the second closes the first so what is on screen is
+  // always the thing being worked on.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const toggleGroup = (heading: string) =>
+    setOpenGroup((current) => (current === heading ? null : heading));
   // Folded from the start: running the platform's own words is a perfectly good answer, and a
   // section that stayed open until you renamed something would nag every shop that never will.
   const [open, setOpen] = useState(false);
@@ -338,39 +340,68 @@ function LexiconCard({ store }: { store: StoreSettingsResponse }) {
       </p>
 
       <form onSubmit={onSubmit} className="mt-4 space-y-5">
-        {TERM_GROUPS.map((group, i) => {
-          // The console group is long and most merchants never open it, so it is
-          // collapsed until asked for rather than pushing the save button off the
-          // screen for everyone.
-          const collapsible = i === TERM_GROUPS.length - 1;
-          if (collapsible && !consoleOpen) {
-            return (
-              <Button key={group.heading} type="button" variant="ghost" onClick={() => setConsoleOpen(true)}>
-                Rename this console too
-              </Button>
-            );
-          }
+        {TERM_GROUPS.map((group) => {
+          // Both groups fold, and only one is open at a time.
+          //
+          // Forty-eight inputs in one scroll was the whole problem: the console terms used to
+          // sit behind an unlabelled ghost button, which a merchant looking for the sidebar's
+          // own words scrolled straight past and concluded the nav could not be renamed. Each
+          // group now says what it is and how many terms it holds before you open it, and
+          // opening one closes the other so what is on screen is the thing being worked on.
+          const isOpen = openGroup === group.heading;
+          const renamedHere = group.keys.filter((key) => terms[key]).length;
+
           return (
-            <div key={group.heading}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {group.heading}
-              </p>
-              <p className="mt-0.5 text-caption text-slate-400">{group.hint}</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {group.keys
-                  .filter((key) => key in defaults)
-                  .map((key) => (
-                    <Field key={key} label={defaults[key]}>
-                      <Input
-                        aria-label={`Your word for ${defaults[key]}`}
-                        maxLength={60}
-                        placeholder={defaults[key]}
-                        value={terms[key] ?? ''}
-                        onChange={(e) => set(key, e.target.value)}
-                      />
-                    </Field>
-                  ))}
-              </div>
+            <div key={group.heading} className="border-t border-ink-700 pt-4">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.heading)}
+                aria-expanded={isOpen}
+                className="flex w-full items-start gap-3 text-left"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {group.heading}
+                  </span>
+                  <span className="mt-0.5 block text-caption text-slate-400">
+                    {group.hint} {group.keys.length} terms
+                    {renamedHere > 0 && `, ${renamedHere} renamed`}.
+                  </span>
+                </span>
+                <span className="mt-0.5 flex shrink-0 items-center gap-1 text-caption text-slate-400">
+                  {isOpen ? 'Close' : 'Rename'}
+                  <ChevronDown
+                    className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')}
+                  />
+                </span>
+              </button>
+
+              {isOpen && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {group.keys
+                    .filter((key) => key in defaults)
+                    .map((key) => (
+                      <Field key={key} label={defaults[key]}>
+                        <Input
+                          // Several terms share a word with a nav item — "Orders" the thing a
+                          // customer has, and "Orders" the console page listing them — so the
+                          // visible label alone is ambiguous once you cannot see which group a
+                          // box sits under. Sighted readers get that from the heading above;
+                          // this is how everyone else does.
+                          aria-label={
+                            key.startsWith('nav.')
+                              ? `Your word for ${defaults[key]} in the console`
+                              : `Your word for ${defaults[key]}`
+                          }
+                          maxLength={60}
+                          placeholder={defaults[key]}
+                          value={terms[key] ?? ''}
+                          onChange={(e) => set(key, e.target.value)}
+                        />
+                      </Field>
+                    ))}
+                </div>
+              )}
             </div>
           );
         })}
