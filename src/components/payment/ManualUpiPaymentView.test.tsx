@@ -165,9 +165,7 @@ describe('ManualUpiPaymentView', () => {
     expect(screen.getByText(/your payment token • google pay/i)).toBeInTheDocument();
     expect(screen.getByText(/Aman Raj: AMA-49BV8/)).toBeInTheDocument();
 
-    // Allows opening app switcher if needed
-    const switcherToggle = screen.getByRole('button', { name: /paying from a different upi app?/i });
-    await user.click(switcherToggle);
+    // App selector is directly available on the pay option
     expect(screen.getByText(/select your upi app/i)).toBeInTheDocument();
   });
 

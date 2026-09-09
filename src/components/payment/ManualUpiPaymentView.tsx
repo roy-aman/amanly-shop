@@ -164,7 +164,7 @@ export function ManualUpiPaymentView({
   const isPreselectedApp = Boolean(payment.app && payment.app !== 'OTHER');
   const [activeAppKey, setActiveAppKey] = useState<string | null>(() => (isPreselectedApp ? payment.app! : null));
   const [activeAppLabel, setActiveAppLabel] = useState<string | null>(() => (isPreselectedApp ? payment.appLabel || payment.app! : null));
-  const [showAppSelector, setShowAppSelector] = useState<boolean>(() => !isPreselectedApp);
+  const [showAppSelector] = useState<boolean>(true);
 
   const phoneTabId = useId();
   const qrTabId = useId();
@@ -313,19 +313,7 @@ export function ManualUpiPaymentView({
             </p>
           </div>
 
-          {/* If preselected at checkout, allow expanding the app switcher */}
-          {isPreselectedApp && (
-            <div className="pt-0.5">
-              <button
-                type="button"
-                onClick={() => setShowAppSelector((s) => !s)}
-                className="inline-flex items-center gap-1.5 text-caption font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
-              >
-                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAppSelector && 'rotate-180')} />
-                <span>{showAppSelector ? 'Hide app options' : 'Paying from a different UPI app?'}</span>
-              </button>
-            </div>
-          )}
+
 
           {/* UPI Apps Selection as per available UI-compatible UPI apps */}
           {showAppSelector && (

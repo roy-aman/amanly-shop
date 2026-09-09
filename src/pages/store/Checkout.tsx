@@ -27,7 +27,7 @@ import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import { BRAND_NAME } from '@/lib/brand';
 import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
-import { ManualUpiPaymentView, AppOrUpiIcon } from '@/components/payment/ManualUpiPaymentView';
+import { ManualUpiPaymentView } from '@/components/payment/ManualUpiPaymentView';
 import { cn } from '@/components/ui/cn';
 import {
   Button,
@@ -287,16 +287,6 @@ export default function Checkout() {
   // it means something: the shop verifies payments by token, and needs to know which of its
   // accounts to look in for one. Everywhere else this is empty and the copy stays generic.
   const upiTokenVerification = manualUpiEnabled && !!store?.manualUpiTokenVerificationEnabled;
-  const upiApps = useMemo(
-    () => (upiTokenVerification ? store?.manualUpiApps ?? [] : []),
-    [upiTokenVerification, store?.manualUpiApps],
-  );
-  const [upiApp, setUpiApp] = useState<UpiApp | null>(null);
-  // Only ever holds an app the store still offers, so a merchant disabling one between page load
-  // and checkout cannot leave a stale selection to be rejected at placement.
-  useEffect(() => {
-    setUpiApp((current) => (current && upiApps.some((a) => a.app === current) ? current : null));
-  }, [upiApps]);
 
   // Priority order — also the default-selection order below: a real payment gateway beats a
   // manually-verified UPI scan, which beats paying nothing up front.
@@ -463,16 +453,6 @@ export default function Checkout() {
     // recomputes the discount authoritatively and rejects an invalid code.
     const body: PlaceOrderRequest = { shippingAddress, notes: notes.trim() || null, paymentMethod, deliveryMethod };
     if (appliedCoupon) body.couponCode = appliedCoupon.code;
-    // Caught here as well as server-side so the customer is told which field to fix rather than
-    // being handed a UPI_APP_REQUIRED after their stock has been reserved and released again.
-    if (paymentMethod === 'MANUAL_UPI' && upiTokenVerification) {
-      if (!upiApp) {
-        setSubmitting(false);
-        setPlaceErrors(['Choose the UPI app you will pay from.']);
-        return;
-      }
-      body.upiApp = upiApp;
-    }
     try {
       const order = await placeOrder(body);
 
@@ -831,43 +811,7 @@ export default function Checkout() {
                   </p>
                 )}
 
-                {/* Rendered ONLY when this shop verifies payments by token — never as a
-                    consequence of which app its own UPI id happens to be registered with. The list
-                    comes from the server already filtered to the apps the merchant enabled; an
-                    empty one means there is no choice to make and this block must not appear. */}
-                {paymentMethod === 'MANUAL_UPI' && upiTokenVerification && upiApps.length > 0 && (
-                  <div className="space-y-2 rounded-xl border border-ink-600 p-4">
-                    <p className="text-sm font-medium text-slate-100">Which UPI app will you pay from?</p>
-                    <p className="text-xs text-slate-500">
-                      We check that app's account for your payment before confirming your order.
-                    </p>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {upiApps.map((option) => {
-                        const active = upiApp === option.app;
-                        return (
-                          <button
-                            key={option.app}
-                            type="button"
-                            onClick={() => setUpiApp(option.app)}
-                            aria-pressed={active}
-                            className={cn(
-                              'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition cursor-pointer',
-                              active
-                                ? 'border-primary bg-ink-850 text-slate-100 font-semibold ring-1 ring-primary'
-                                : 'border-ink-600 text-slate-300 hover:border-slate-100 hover:text-slate-100'
-                            )}
-                          >
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white p-0.5 shadow-2xs">
-                              <AppOrUpiIcon app={option.app} className="h-3.5 w-3.5 shrink-0" />
-                            </span>
-                            <span>{option.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </section>
+                              </section>
 
               <section className="border-t border-ink-600 pt-5">
                 <Field label="Order notes">

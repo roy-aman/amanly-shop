@@ -226,7 +226,7 @@ describe('Checkout (WP-2.5)', () => {
     expect(placeMock.mock.calls[0][0].upiApp).toBeUndefined();
   });
 
-  it('asks which app, and sends it, when the store verifies payments by token', async () => {
+  it('does not ask for UPI app on review page, placing order directly into pay modal', async () => {
     storeMock.mockResolvedValue(store({
       manualUpiEnabled: true,
       codEnabled: false,
@@ -237,6 +237,7 @@ describe('Checkout (WP-2.5)', () => {
         { app: 'PHONEPE', label: 'PhonePe' },
       ],
     }));
+    placeMock.mockResolvedValue(codOrder({ id: 'order-9', paymentMethod: 'MANUAL_UPI' }));
     const user = userEvent.setup();
     renderCheckout();
 
@@ -245,18 +246,11 @@ describe('Checkout (WP-2.5)', () => {
     await user.click(screen.getByRole('button', { name: 'Continue to review' }));
 
     await screen.findByText('Payment method');
-    expect(screen.getByText(/which upi app/i)).toBeInTheDocument();
+    // App selection is no longer on the review page — it is given on the pay modal
+    expect(screen.queryByText(/which upi app/i)).not.toBeInTheDocument();
 
-    // Placing without a choice is refused here rather than after stock has been reserved.
     await user.click(screen.getByRole('button', { name: 'Place order' }));
-    expect(placeMock).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: 'PhonePe' }));
-    placeMock.mockResolvedValue(codOrder({ id: 'order-9', paymentMethod: 'MANUAL_UPI' }));
-    await user.click(screen.getByRole('button', { name: 'Place order' }));
-
     await waitFor(() => expect(placeMock).toHaveBeenCalled());
-    expect(placeMock.mock.calls[0][0].upiApp).toBe('PHONEPE');
   });
 
   it('COD happy path: Place order calls placeOrder with the mapped shippingAddress and navigates', async () => {
