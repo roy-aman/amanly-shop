@@ -27,6 +27,7 @@ import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import { BRAND_NAME } from '@/lib/brand';
 import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
+import { ManualUpiPaymentView } from '@/components/payment/ManualUpiPaymentView';
 import {
   Button,
   Field,
@@ -1003,43 +1004,13 @@ export default function Checkout() {
           size="sm"
           dismissible={false}
         >
-          <div className="flex flex-col items-center gap-4 py-2 text-center">
-            <img
-              src={manualUpiOrder.manualUpiPayment.qrDataUri}
-              alt="Scan to pay via UPI"
-              className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
-            />
-            <div>
-              <p className="text-h3 font-display text-slate-100">
-                {money(manualUpiOrder.manualUpiPayment.amount, manualUpiOrder.manualUpiPayment.currency)}
-              </p>
-              <p className="mt-1 text-body-sm text-slate-400">to {manualUpiOrder.manualUpiPayment.vpa}</p>
-            </div>
-            {/* No token here. This screen is for paying; the token is the customer's copy for
-                afterwards, and showing it beside a QR nobody has scanned yet asks them to memorise
-                something before it means anything. They land on the order page the moment they
-                mark the payment done, and it is waiting for them there — the same split the
-                pay-again modal on that page already makes. */}
-            {manualUpiConfirming ? (
-              <div className="flex items-center gap-2 text-body-sm text-slate-400">
-                <Spinner className="h-4 w-4" />
-                Confirming your payment…
-              </div>
-            ) : showMarkDone ? (
-              <Button onClick={finishManualUpiOrder}>Mark payment done</Button>
-            ) : (
-              <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
-            )}
-            <p className="max-w-sm text-caption text-slate-400">
-              {manualUpiConfirming
-                ? 'Confirming payment — you will be redirected to your order details shortly.'
-                : showMarkDone
-                  ? manualUpiOrder.manualUpiPayment.tokenVerificationEnabled
-                    ? "Once you've paid, tap Mark payment done to get your token."
-                    : "Once you've paid, tap Mark payment done."
-                  : 'Scan the QR with any UPI app to pay.'}
-            </p>
-          </div>
+          <ManualUpiPaymentView
+            payment={manualUpiOrder.manualUpiPayment}
+            confirming={manualUpiConfirming}
+            showMarkDone={showMarkDone}
+            onMarkDone={finishManualUpiOrder}
+            customerName={manualUpiOrder.shippingAddress?.name || null}
+          />
         </Modal>
       )}
     </div>

@@ -448,4 +448,51 @@ describe('Checkout (WP-2.5)', () => {
     // instead of the order they had just paid for.
     expect(navigate).not.toHaveBeenCalledWith('/cart', { replace: true });
   });
+
+  it('supports same-device payment in Checkout: switching to Pay on this phone exposes UPI app launcher with underlying upiUri', async () => {
+    storeMock.mockResolvedValue(store({ manualUpiEnabled: true, codEnabled: true, onlinePaymentEnabled: false }));
+    cartMock.mockResolvedValue(cart());
+    addressesMock.mockResolvedValue([address()]);
+
+    const user = userEvent.setup();
+    renderCheckout();
+
+    await screen.findByText(/1 King St/);
+    await user.click(screen.getByRole('button', { name: /Continue to review/i }));
+
+    await screen.findByText('Review & place order');
+    await user.click(screen.getByRole('radio', { name: /UPI \(scan to pay\)/i }));
+
+    placeMock.mockResolvedValue(codOrder({
+      id: 'order-456',
+      orderNumber: 'ORD-456',
+      paymentMethod: 'MANUAL_UPI',
+      items: [{ id: 'it-1', productId: 'prod-1', productName: 'Signet Ring', sku: 'SR-1', unitPrice: 100, quantity: 1, subtotal: 100 }],
+      manualUpiPayment: {
+        token: 'AMA-456',
+        vpa: 'store@upi',
+        qrDataUri: 'data:image/png;base64,qr',
+        upiUri: 'upi://pay?pa=store@upi&pn=Amanly&am=100.00&cu=USD&tr=ORD456',
+        amount: 100,
+        currency: 'USD',
+      },
+    }));
+
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    // Both options visible in the modal
+    const phoneTab = await screen.findByRole('tab', { name: /pay on this phone/i });
+    expect(phoneTab).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /scan qr code/i })).toBeInTheDocument();
+
+    // Switch to Pay on this phone
+    await user.click(phoneTab);
+
+    // Direct app button uses the exact same upiUri
+    const appPayLink = screen.getByRole('link', { name: /pay via any upi app/i });
+    expect(appPayLink).toHaveAttribute('href', 'upi://pay?pa=store@upi&pn=Amanly&am=100.00&cu=USD&tr=ORD456');
+
+    // Does not expose raw upi:// text
+    expect(screen.queryByText(/upi:\/\/pay/)).not.toBeInTheDocument();
+  });
 });

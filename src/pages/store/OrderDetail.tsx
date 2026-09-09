@@ -8,6 +8,7 @@ import { formatDateTime, money, orderRef, titleCase } from '@/lib/format';
 import { OrderStatusBadge, PaymentStatusBadge } from '@/components/StatusBadge';
 import { OrderTotals } from '@/components/OrderTotals';
 import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
+import { ManualUpiPaymentView } from '@/components/payment/ManualUpiPaymentView';
 import { useToast } from '@/context/ToastContext';
 import { useStore } from '@/context/StoreContext';
 import { Button, EmptyState, LinkButton, Modal, Spinner } from '@/components/ui';
@@ -395,34 +396,13 @@ export default function OrderDetail() {
               </p>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-4 py-2 text-center">
-              <img
-                src={order.manualUpiPayment.qrDataUri}
-                alt="Scan to pay via UPI"
-                className="h-56 w-56 rounded-lg border border-ink-700 bg-white p-2"
-              />
-              <div>
-                <p className="text-h3 font-display text-slate-100">{money(order.manualUpiPayment.amount, order.manualUpiPayment.currency)}</p>
-                <p className="mt-1 text-body-sm text-slate-400">to {order.manualUpiPayment.vpa}</p>
-              </div>
-              {confirming ? (
-                <div className="flex items-center gap-2 text-body-sm text-slate-400">
-                  <Spinner className="h-4 w-4" />
-                  Confirming your payment…
-                </div>
-              ) : showMarkDone ? (
-                <Button onClick={handleMarkPaymentDone}>Mark payment done</Button>
-              ) : (
-                <p className="text-body-sm text-slate-400">Scan the QR and pay the amount above.</p>
-              )}
-              <p className="max-w-sm text-caption text-slate-400">
-                {confirming || showMarkDone
-                  ? order.manualUpiPayment.tokenVerificationEnabled
-                    ? "Once you've paid, tap Mark payment done to get your token."
-                    : "Once you've paid, tap Mark payment done."
-                  : 'Scan the QR with any UPI app to pay.'}
-              </p>
-            </div>
+            <ManualUpiPaymentView
+              payment={order.manualUpiPayment}
+              confirming={confirming}
+              showMarkDone={showMarkDone}
+              onMarkDone={handleMarkPaymentDone}
+              customerName={firstName}
+            />
           )}
         </Modal>
       )}

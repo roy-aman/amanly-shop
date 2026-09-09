@@ -522,6 +522,8 @@ export interface ManualUpiPayment {
   vpa: string;
   /** data:image/png;base64,... — render directly in an <img>. */
   qrDataUri: string;
+  /** The raw upi://pay URI encoded into qrDataUri; used for same-device payments. */
+  upiUri?: string;
   amount: number;
   currency: string;
   /** The application the customer chose; null for every ordinary-flow order. */
