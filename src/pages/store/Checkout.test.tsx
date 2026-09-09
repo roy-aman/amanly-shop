@@ -489,7 +489,7 @@ describe('Checkout (WP-2.5)', () => {
     await user.click(phoneTab);
 
     // Direct app button uses the exact same upiUri
-    const appPayLink = screen.getByRole('link', { name: /pay via upi/i });
+    const appPayLink = screen.getByRole('link', { name: /pay via (any )?upi/i });
     expect(appPayLink).toHaveAttribute('href', 'upi://pay?pa=store@upi&pn=Amanly&am=100.00&cu=USD&tr=ORD456');
 
     // Does not expose raw upi:// text

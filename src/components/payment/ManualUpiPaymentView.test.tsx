@@ -16,6 +16,18 @@ describe('ManualUpiPaymentView', () => {
     tokenVerificationEnabled: false,
   };
 
+  const otherPayment: ManualUpiPayment = {
+    token: 'AMA-OTH01',
+    vpa: 'shopowner@upi',
+    qrDataUri: 'data:image/png;base64,mockqr',
+    upiUri: 'upi://pay?pa=shopowner@upi&pn=Amanly&am=499.00&cu=INR&tr=ORDER125',
+    amount: 499,
+    currency: 'INR',
+    app: 'OTHER',
+    appLabel: 'Other UPI App',
+    tokenVerificationEnabled: true,
+  };
+
   const verifiedPayment: ManualUpiPayment = {
     token: 'AMA-A7K42',
     vpa: 'shopowner@upi',
@@ -72,7 +84,8 @@ describe('ManualUpiPaymentView', () => {
     expect(container.textContent).not.toContain('upi://pay');
   });
 
-  it('renders generic Pay via UPI button when no app is preselected', () => {
+  it('displays UPI apps selection when user selects just UPI (generic), allowing 1-tap app switching', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ManualUpiPaymentView
         payment={genericPayment}
@@ -81,13 +94,59 @@ describe('ManualUpiPaymentView', () => {
       />
     );
 
-    // Primary generic UPI button (UPI logo only, no cluttered extra app buttons)
-    const payLink = screen.getByRole('link', { name: /pay via upi/i });
-    expect(payLink).toBeInTheDocument();
-    expect(payLink).toHaveAttribute('href', genericPayment.upiUri);
+    // Main button defaults to universal UPI intent
+    const mainPayLink = screen.getByRole('link', { name: /pay via any upi app/i });
+    expect(mainPayLink).toBeInTheDocument();
+    expect(mainPayLink).toHaveAttribute('href', genericPayment.upiUri);
+
+    // Available UI-compatible apps selection is displayed
+    expect(screen.getByText(/select your upi app/i)).toBeInTheDocument();
+    const gpayRadio = screen.getByRole('radio', { name: /google pay/i });
+    const phonePeRadio = screen.getByRole('radio', { name: /phonepe/i });
+    const paytmRadio = screen.getByRole('radio', { name: /paytm/i });
+
+    expect(gpayRadio).toBeInTheDocument();
+    expect(phonePeRadio).toBeInTheDocument();
+    expect(paytmRadio).toBeInTheDocument();
+
+    // Select PhonePe from available apps
+    await user.click(phonePeRadio);
+
+    // Main button dynamically switches to PhonePe deep link
+    const updatedPayLink = screen.getByRole('link', { name: /pay with phonepe/i });
+    expect(updatedPayLink).toBeInTheDocument();
+    expect(updatedPayLink.getAttribute('href')).toContain('phonepe://pay');
+
+    // Select Google Pay
+    await user.click(gpayRadio);
+    const gpayPayLink = screen.getByRole('link', { name: /pay with google pay/i });
+    expect(gpayPayLink).toBeInTheDocument();
+    expect(gpayPayLink.getAttribute('href')).toContain('tez://upi/pay');
   });
 
-  it('renders app-specific button and icon when a UPI app is selected (e.g. Google Pay)', () => {
+  it('displays UPI apps selection when user selects OTHER payment app under token verification', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ManualUpiPaymentView
+        payment={otherPayment}
+        customerName="Aman"
+        defaultMode="phone"
+        onMarkDone={vi.fn()}
+      />
+    );
+
+    // Apps selector is visible
+    expect(screen.getByText(/select your upi app/i)).toBeInTheDocument();
+    const paytmRadio = screen.getByRole('radio', { name: /paytm/i });
+    await user.click(paytmRadio);
+
+    const paytmLink = screen.getByRole('link', { name: /pay with paytm/i });
+    expect(paytmLink).toBeInTheDocument();
+    expect(paytmLink.getAttribute('href')).toContain('paytmmp://pay');
+  });
+
+  it('renders app-specific button and icon when a UPI app is preselected (e.g. Google Pay)', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ManualUpiPaymentView
         payment={googlePayPayment}
@@ -100,28 +159,16 @@ describe('ManualUpiPaymentView', () => {
     // Shows "Pay with Google Pay"
     const payLink = screen.getByRole('link', { name: /pay with google pay/i });
     expect(payLink).toBeInTheDocument();
-    // Google Pay deep link tez://upi/pay
     expect(payLink.getAttribute('href')).toContain('tez://upi/pay');
 
     // Token displayed
     expect(screen.getByText(/your payment token • google pay/i)).toBeInTheDocument();
     expect(screen.getByText(/Aman Raj: AMA-49BV8/)).toBeInTheDocument();
-  });
 
-  it('renders app-specific button and deep link for PhonePe', () => {
-    renderWithProviders(
-      <ManualUpiPaymentView
-        payment={verifiedPayment}
-        customerName="Aman"
-        defaultMode="phone"
-        onMarkDone={vi.fn()}
-      />
-    );
-
-    const payLink = screen.getByRole('link', { name: /pay with phonepe/i });
-    expect(payLink).toBeInTheDocument();
-    expect(payLink.getAttribute('href')).toContain('phonepe://pay');
-    expect(screen.getByText(/Aman: AMA-A7K42/)).toBeInTheDocument();
+    // Allows opening app switcher if needed
+    const switcherToggle = screen.getByRole('button', { name: /paying from a different upi app?/i });
+    await user.click(switcherToggle);
+    expect(screen.getByText(/select your upi app/i)).toBeInTheDocument();
   });
 
   it('switches seamlessly to QR code view when user chooses Scan QR Code', async () => {
@@ -177,7 +224,7 @@ describe('ManualUpiPaymentView', () => {
       />
     );
 
-    const payLink = screen.getByRole('link', { name: /pay via upi/i });
+    const payLink = screen.getByRole('link', { name: /pay via any upi app/i });
     expect(payLink).toHaveAttribute('href', genericPayment.upiUri);
     expect(onMarkDone).not.toHaveBeenCalled();
 

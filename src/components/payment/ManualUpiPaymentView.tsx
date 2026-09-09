@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useId } from 'react';
-import { Smartphone, QrCode, Copy, Check, ExternalLink, ShieldCheck, Info } from 'lucide-react';
+import { Smartphone, QrCode, Copy, Check, ExternalLink, ShieldCheck, Info, ChevronDown } from 'lucide-react';
 import type { ManualUpiPayment } from '../../lib/types';
 import { money } from '../../lib/format';
 import { Button } from '../ui/Button';
@@ -15,6 +15,22 @@ export interface ManualUpiPaymentViewProps {
   className?: string;
   defaultMode?: 'phone' | 'qr';
 }
+
+export interface UpiAppChoice {
+  key: string | null;
+  label: string;
+  shortLabel: string;
+}
+
+/** Supported UPI compatible apps with official brand schemes */
+export const AVAILABLE_UPI_APPS: UpiAppChoice[] = [
+  { key: null, label: 'Any UPI App', shortLabel: 'Any UPI' },
+  { key: 'GOOGLE_PAY', label: 'Google Pay', shortLabel: 'Google Pay' },
+  { key: 'PHONEPE', label: 'PhonePe', shortLabel: 'PhonePe' },
+  { key: 'PAYTM', label: 'Paytm', shortLabel: 'Paytm' },
+  { key: 'BHIM', label: 'BHIM', shortLabel: 'BHIM' },
+  { key: 'CRED', label: 'CRED', shortLabel: 'CRED' },
+];
 
 /** Official NPCI UPI Chevron Mark */
 export function UpiIcon({ className = 'h-5 w-5' }: { className?: string }) {
@@ -112,11 +128,12 @@ export function getAppSpecificUri(upiUri: string, appKey?: string | null): strin
   if (!upiUri) return '';
   if (!appKey) return upiUri;
   const query = upiUri.includes('?') ? upiUri.split('?')[1] : '';
-  switch (appKey.toUpperCase()) {
+  switch (appKey.toUpperCase().replace(/\s+/g, '_')) {
     case 'PHONEPE':
       return `phonepe://pay?${query}`;
     case 'GOOGLE_PAY':
     case 'GPAY':
+    case 'TEZ':
       return `tez://upi/pay?${query}`;
     case 'PAYTM':
       return `paytmmp://pay?${query}`;
@@ -143,11 +160,16 @@ export function ManualUpiPaymentView({
   const [copied, setCopied] = useState(false);
   const [appLaunched, setAppLaunched] = useState(false);
 
+  // Determine if a specific app was pre-locked at checkout (not generic and not OTHER)
+  const isPreselectedApp = Boolean(payment.app && payment.app !== 'OTHER');
+  const [activeAppKey, setActiveAppKey] = useState<string | null>(() => (isPreselectedApp ? payment.app! : null));
+  const [activeAppLabel, setActiveAppLabel] = useState<string | null>(() => (isPreselectedApp ? payment.appLabel || payment.app! : null));
+  const [showAppSelector, setShowAppSelector] = useState<boolean>(() => !isPreselectedApp);
+
   const phoneTabId = useId();
   const qrTabId = useId();
 
   const upiUri = payment.upiUri || '';
-  const isTokenFlowWithApp = Boolean(payment.tokenVerificationEnabled && payment.app);
 
   useEffect(() => {
     if (!copied) return;
@@ -166,6 +188,11 @@ export function ManualUpiPaymentView({
 
   function handleAppClick() {
     setAppLaunched(true);
+  }
+
+  function handleSelectApp(choice: UpiAppChoice) {
+    setActiveAppKey(choice.key);
+    setActiveAppLabel(choice.key ? choice.label : null);
   }
 
   return (
@@ -265,33 +292,86 @@ export function ManualUpiPaymentView({
           {/* Primary App Launch Action */}
           <div className="space-y-2">
             <a
-              href={getAppSpecificUri(upiUri, isTokenFlowWithApp ? payment.app : null)}
+              href={getAppSpecificUri(upiUri, activeAppKey)}
               onClick={handleAppClick}
               className="flex w-full items-center justify-between gap-3 rounded-xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-fg shadow-sm transition duration-200 hover:bg-primary-hover active:scale-[0.98]"
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
-                  <AppOrUpiIcon app={isTokenFlowWithApp ? payment.app : null} className="h-5 w-5 shrink-0" />
+                  <AppOrUpiIcon app={activeAppKey} className="h-5 w-5 shrink-0" />
                 </span>
                 <span className="text-primary-fg font-semibold text-base">
-                  {isTokenFlowWithApp ? `Pay with ${payment.appLabel || 'UPI'}` : 'Pay via UPI'}
+                  {activeAppLabel ? `Pay with ${activeAppLabel}` : 'Pay via any UPI App'}
                 </span>
               </div>
               <ExternalLink className="h-4 w-4 text-primary-fg/80 shrink-0" />
             </a>
             <p className="text-caption text-slate-600 dark:text-slate-400">
-              {isTokenFlowWithApp
-                ? `Tap to launch ${payment.appLabel || 'your chosen app'} with amount and payee prefilled.`
+              {activeAppLabel
+                ? `Tap to launch ${activeAppLabel} with amount and payee prefilled.`
                 : 'Tap to open your installed UPI app with amount and payee prefilled.'}
             </p>
           </div>
+
+          {/* If preselected at checkout, allow expanding the app switcher */}
+          {isPreselectedApp && (
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => setShowAppSelector((s) => !s)}
+                className="inline-flex items-center gap-1.5 text-caption font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
+              >
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAppSelector && 'rotate-180')} />
+                <span>{showAppSelector ? 'Hide app options' : 'Paying from a different UPI app?'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* UPI Apps Selection as per available UI-compatible UPI apps */}
+          {showAppSelector && (
+            <div className="w-full space-y-2 rounded-2xl border border-ink-600 bg-ink-850/50 p-3 text-left">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Select your UPI app
+                </p>
+                <span className="text-[11px] text-slate-400">1-tap select</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-0.5" role="radiogroup" aria-label="UPI app selection">
+                {AVAILABLE_UPI_APPS.map((appOption) => {
+                  const isSelected = activeAppKey === appOption.key;
+                  return (
+                    <button
+                      key={appOption.key ?? 'ALL'}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => handleSelectApp(appOption)}
+                      className={cn(
+                        'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center transition cursor-pointer active:scale-95',
+                        isSelected
+                          ? 'border-primary bg-primary/10 dark:bg-primary/20 shadow-xs ring-1 ring-primary'
+                          : 'border-ink-600 bg-ink-900 hover:border-slate-400 dark:hover:border-slate-600'
+                      )}
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
+                        <AppOrUpiIcon app={appOption.key} className="h-5 w-5 shrink-0" />
+                      </span>
+                      <span className={cn('text-xs font-medium line-clamp-1', isSelected ? 'text-slate-100 font-semibold' : 'text-slate-300')}>
+                        {appOption.shortLabel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Token display box under token verification */}
           {payment.tokenVerificationEnabled && (
             <div className="w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-left shadow-xs">
               <div className="flex items-center justify-between">
                 <p className="text-overline uppercase tracking-wider text-slate-500 font-semibold text-xs">
-                  Your Payment Token{payment.appLabel ? ` • ${payment.appLabel}` : ''}
+                  Your Payment Token{activeAppLabel ? ` • ${activeAppLabel}` : payment.appLabel ? ` • ${payment.appLabel}` : ''}
                 </p>
                 <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -336,7 +416,7 @@ export function ManualUpiPaymentView({
           {payment.tokenVerificationEnabled && (
             <div className="w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-left shadow-xs">
               <p className="text-overline uppercase tracking-wider text-slate-500 font-semibold text-xs">
-                Your payment token{payment.appLabel ? ` • ${payment.appLabel}` : ''}
+                Your payment token{activeAppLabel ? ` • ${activeAppLabel}` : payment.appLabel ? ` • ${payment.appLabel}` : ''}
               </p>
               <p className="mt-1 font-mono text-xl font-bold tabular-nums text-slate-100">
                 {customerName ? `${customerName}: ${payment.token}` : payment.token}
@@ -362,7 +442,7 @@ export function ManualUpiPaymentView({
             {appLaunched
               ? 'Complete the payment in your UPI app, then tap Mark payment done.'
               : mode === 'phone'
-                ? (isTokenFlowWithApp ? `Open ${payment.appLabel || 'UPI'} to complete payment.` : 'Open your UPI app to complete payment.')
+                ? (activeAppLabel ? `Open ${activeAppLabel} to complete payment.` : 'Open your UPI app to complete payment.')
                 : 'Scan the QR and pay the amount above.'}
           </div>
         )}

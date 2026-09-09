@@ -27,7 +27,8 @@ import { useCart } from '@/context/CartContext';
 import { useToast } from '@/context/ToastContext';
 import { BRAND_NAME } from '@/lib/brand';
 import { Divided, InfoRow, OrderLine, SummarySection } from '@/components/summary';
-import { ManualUpiPaymentView } from '@/components/payment/ManualUpiPaymentView';
+import { ManualUpiPaymentView, AppOrUpiIcon } from '@/components/payment/ManualUpiPaymentView';
+import { cn } from '@/components/ui/cn';
 import {
   Button,
   Field,
@@ -849,14 +850,17 @@ export default function Checkout() {
                             type="button"
                             onClick={() => setUpiApp(option.app)}
                             aria-pressed={active}
-                            className={
-                              'rounded-lg border px-3 py-2 text-sm transition ' +
-                              (active
-                                ? 'border-primary bg-ink-850 text-slate-100'
-                                : 'border-ink-600 text-slate-300 hover:border-slate-100')
-                            }
+                            className={cn(
+                              'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition cursor-pointer',
+                              active
+                                ? 'border-primary bg-ink-850 text-slate-100 font-semibold ring-1 ring-primary'
+                                : 'border-ink-600 text-slate-300 hover:border-slate-100 hover:text-slate-100'
+                            )}
                           >
-                            {option.label}
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white p-0.5 shadow-2xs">
+                              <AppOrUpiIcon app={option.app} className="h-3.5 w-3.5 shrink-0" />
+                            </span>
+                            <span>{option.label}</span>
                           </button>
                         );
                       })}
