@@ -1,19 +1,22 @@
-import React, { useState, useEffect, useId } from 'react';
-import { Smartphone, QrCode, Copy, Check, ExternalLink, ShieldCheck, Info, ChevronDown } from 'lucide-react';
-import type { ManualUpiPayment } from '../../lib/types';
+import React, { useState, useId, useMemo } from 'react';
+import { Smartphone, QrCode, Copy, Check, ExternalLink, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import type { ManualUpiPayment, UpiApp } from '../../lib/types';
 import { money } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
 import { cn } from '../ui/cn';
+import { updateManualUpiApp } from '../../api/orders';
 
 export interface ManualUpiPaymentViewProps {
   payment: ManualUpiPayment;
+  orderId?: string | null;
   confirming?: boolean;
   showMarkDone?: boolean;
   onMarkDone: () => void;
   customerName?: string | null;
   className?: string;
   defaultMode?: 'phone' | 'qr';
+  onAppChange?: (app: string | null) => void;
 }
 
 export interface UpiAppChoice {
@@ -148,151 +151,162 @@ export function getAppSpecificUri(upiUri: string, appKey?: string | null): strin
 
 export function ManualUpiPaymentView({
   payment,
+  orderId,
   confirming = false,
   showMarkDone = false,
   onMarkDone,
   customerName,
   className,
   defaultMode,
+  onAppChange,
 }: ManualUpiPaymentViewProps) {
   const [isMobile] = useState<boolean>(() => (defaultMode ? defaultMode === 'phone' : detectMobile()));
   const [mode, setMode] = useState<'phone' | 'qr'>(() => defaultMode ?? (detectMobile() ? 'phone' : 'qr'));
   const [copied, setCopied] = useState(false);
   const [appLaunched, setAppLaunched] = useState(false);
 
-  // Determine if a specific app was pre-locked at checkout (not generic and not OTHER)
-  const isPreselectedApp = Boolean(payment.app && payment.app !== 'OTHER');
-  const [activeAppKey, setActiveAppKey] = useState<string | null>(() => (isPreselectedApp ? payment.app! : null));
-  const [activeAppLabel, setActiveAppLabel] = useState<string | null>(() => (isPreselectedApp ? payment.appLabel || payment.app! : null));
-  const [showAppSelector] = useState<boolean>(true);
+  // Active selected app key (e.g. 'PHONEPE', 'GOOGLE_PAY', or null for Any UPI)
+  const [activeAppKey, setActiveAppKey] = useState<string | null>(() => {
+    if (payment.app && payment.app !== 'OTHER') return payment.app;
+    return null;
+  });
+
+  const [activeAppLabel, setActiveAppLabel] = useState<string | null>(() => {
+    if (payment.app && payment.app !== 'OTHER') return payment.appLabel || payment.app;
+    return null;
+  });
+
+  // Dynamically resolve target from admin-defined appTargets
+  const selectedTarget = useMemo(() => {
+    if (!payment.appTargets || payment.appTargets.length === 0) {
+      return null;
+    }
+    if (activeAppKey) {
+      const match = payment.appTargets.find((t) => t.app === activeAppKey);
+      if (match) return match;
+    }
+    // Fall back to common target (app === null) or first available
+    return payment.appTargets.find((t) => t.app === null) || payment.appTargets[0] || null;
+  }, [payment.appTargets, activeAppKey]);
+
+  // Effective VPA, QR code, and UPI URI
+  const effectiveVpa = selectedTarget?.vpa || payment.vpa;
+  const effectiveQr = selectedTarget?.qrDataUri || payment.qrDataUri;
+  const effectiveUpiUri = selectedTarget?.upiUri || payment.upiUri || '';
+
+  // Check if the selected app has a direct admin-configured account
+  const isDirectAdminAccount = Boolean(
+    activeAppKey && payment.appTargets?.some((t) => t.app === activeAppKey)
+  );
 
   const phoneTabId = useId();
   const qrTabId = useId();
 
-  const upiUri = payment.upiUri || '';
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  async function handleCopyVpa() {
+  const handleCopyVpa = async () => {
+    if (!effectiveVpa) return;
     try {
-      await navigator.clipboard.writeText(payment.vpa);
+      await navigator.clipboard.writeText(effectiveVpa);
       setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
+      // Fallback
       setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
-  }
+  };
 
-  function handleAppClick() {
+  const handleAppClick = () => {
     setAppLaunched(true);
-  }
+  };
 
-  function handleSelectApp(choice: UpiAppChoice) {
-    setActiveAppKey(choice.key);
-    setActiveAppLabel(choice.key ? choice.label : null);
-  }
+  const handleSelectApp = (appOption: UpiAppChoice) => {
+    setActiveAppKey(appOption.key);
+    setActiveAppLabel(appOption.key ? appOption.label : null);
+    if (orderId) {
+      updateManualUpiApp(orderId, (appOption.key as UpiApp) || null).catch(() => {
+        // Silently ignore best-effort update
+      });
+    }
+    if (onAppChange) {
+      onAppChange(appOption.key);
+    }
+  };
 
   return (
-    <div className={cn('flex flex-col items-center gap-4 py-1 text-center w-full max-w-sm mx-auto', className)}>
-      {/* Amount & Payee Header */}
-      <div className="w-full">
-        <p className="text-h2 font-display font-bold text-slate-100 tabular-nums">
+    <div className={cn('w-full max-w-md mx-auto space-y-4 text-center select-none', className)}>
+      {/* Amount & Merchant Header */}
+      <div className="space-y-1">
+        <p className="text-caption text-slate-500 font-medium">Total Amount to Pay</p>
+        <p className="text-3xl font-extrabold tracking-tight text-slate-100">
           {money(payment.amount, payment.currency)}
         </p>
-        <div className="mt-1 flex items-center justify-center gap-2 text-body-sm text-slate-500">
-          <span>to <strong className="font-semibold text-slate-200">{payment.vpa}</strong></span>
-          <button
-            type="button"
-            onClick={handleCopyVpa}
-            className="inline-flex items-center gap-1 rounded-md bg-ink-850 px-2.5 py-1 text-caption font-medium text-slate-700 dark:text-slate-200 hover:bg-ink-800 transition border border-ink-600 cursor-pointer active:scale-95"
-            title="Copy UPI ID"
-            aria-label="Copy UPI ID"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5 text-slate-500" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
       </div>
 
-      {/* Segmented Mode Selector: Pay on this phone vs Scan QR Code */}
-      <div
-        className="grid w-full grid-cols-2 rounded-xl bg-ink-800 p-1 border border-ink-700"
-        role="tablist"
-        aria-label="UPI payment options"
-      >
+      {/* Payee VPA pill with 1-tap copy */}
+      <div className="inline-flex items-center justify-center gap-2 rounded-full border border-ink-600 bg-ink-850 px-3.5 py-1.5 text-xs text-slate-300">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white p-0.5 shadow-2xs">
+          <AppOrUpiIcon app={activeAppKey} className="h-3 w-3 shrink-0" />
+        </span>
+        <span className="text-slate-400">UPI ID:</span>
+        <span className="font-mono font-semibold text-slate-100">{effectiveVpa}</span>
         <button
           type="button"
-          role="tab"
+          onClick={handleCopyVpa}
+          className="ml-1 inline-flex items-center gap-1 text-slate-400 hover:text-slate-100 transition cursor-pointer"
+          title="Copy UPI ID"
+          aria-label="Copy UPI ID"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+          <span className="text-[11px] font-medium">{copied ? 'Copied!' : 'Copy'}</span>
+        </button>
+      </div>
+
+      {/* Tabs: Pay on phone vs Scan QR */}
+      <div className="flex rounded-xl bg-ink-800 p-1 border border-ink-600" role="tablist" aria-label="Payment modes">
+        <button
+          type="button"
           id={phoneTabId}
+          role="tab"
           aria-selected={mode === 'phone'}
           aria-controls="phone-panel"
           onClick={() => setMode('phone')}
           className={cn(
-            'flex items-center justify-center gap-2 rounded-lg py-2.5 px-3 text-caption font-semibold transition cursor-pointer',
+            'flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition cursor-pointer',
             mode === 'phone'
-              ? 'bg-primary text-primary-fg shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-ink-700/50'
+              ? 'bg-primary text-primary-fg shadow-xs font-bold ring-1 ring-primary'
+              : 'text-slate-400 hover:text-slate-200'
           )}
         >
-          <Smartphone className="h-4 w-4 shrink-0 text-current" />
+          <Smartphone className="h-4 w-4" />
           <span>Pay on this phone</span>
         </button>
 
         <button
           type="button"
-          role="tab"
           id={qrTabId}
+          role="tab"
           aria-selected={mode === 'qr'}
           aria-controls="qr-panel"
           onClick={() => setMode('qr')}
           className={cn(
-            'flex items-center justify-center gap-2 rounded-lg py-2.5 px-3 text-caption font-semibold transition cursor-pointer',
+            'flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition cursor-pointer',
             mode === 'qr'
-              ? 'bg-primary text-primary-fg shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-ink-700/50'
+              ? 'bg-primary text-primary-fg shadow-xs font-bold ring-1 ring-primary'
+              : 'text-slate-400 hover:text-slate-200'
           )}
         >
-          <QrCode className="h-4 w-4 shrink-0 text-current" />
-          <span>Scan QR Code</span>
+          <QrCode className="h-4 w-4" />
+          <span>Scan QR code</span>
         </button>
       </div>
 
-      {/* Mode 1: Pay on this phone */}
+      {/* Mode 1: Pay on this Phone */}
       {mode === 'phone' && (
-        <div id="phone-panel" role="tabpanel" aria-labelledby={phoneTabId} className="w-full space-y-4 pt-1">
-          {!isMobile && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-left">
-              <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-caption text-amber-800 dark:text-amber-200">
-                <span>Direct app pay works best on mobile phones with UPI apps installed. If on a computer, you can </span>
-                <button
-                  type="button"
-                  onClick={() => setMode('qr')}
-                  className="underline font-semibold hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer"
-                >
-                  Scan the QR code
-                </button>
-                <span> instead.</span>
-              </div>
-            </div>
-          )}
-
+        <div id="phone-panel" role="tabpanel" aria-labelledby={phoneTabId} className="w-full space-y-3 pt-1">
           {/* Primary App Launch Action */}
           <div className="space-y-2">
             <a
-              href={getAppSpecificUri(upiUri, activeAppKey)}
+              href={getAppSpecificUri(effectiveUpiUri, activeAppKey)}
               onClick={handleAppClick}
               className="flex w-full items-center justify-between gap-3 rounded-xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-fg shadow-sm transition duration-200 hover:bg-primary-hover active:scale-[0.98]"
             >
@@ -306,74 +320,73 @@ export function ManualUpiPaymentView({
               </div>
               <ExternalLink className="h-4 w-4 text-primary-fg/80 shrink-0" />
             </a>
-            <p className="text-caption text-slate-600 dark:text-slate-400">
+            <p className="text-caption text-slate-400">
               {activeAppLabel
-                ? `Tap to launch ${activeAppLabel} with amount and payee prefilled.`
+                ? `Tap to launch ${activeAppLabel} with ${money(payment.amount, payment.currency)} prefilled.`
                 : 'Tap to open your installed UPI app with amount and payee prefilled.'}
             </p>
           </div>
 
-
-
-          {/* UPI Apps Selection as per available UI-compatible UPI apps */}
-          {showAppSelector && (
-            <div className="w-full space-y-2 rounded-2xl border border-ink-600 bg-ink-850/50 p-3 text-left">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Select your UPI app
-                </p>
-                <span className="text-[11px] text-slate-400">1-tap select</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 pt-0.5" role="radiogroup" aria-label="UPI app selection">
-                {AVAILABLE_UPI_APPS.map((appOption) => {
-                  const isSelected = activeAppKey === appOption.key;
-                  return (
-                    <button
-                      key={appOption.key ?? 'ALL'}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={() => handleSelectApp(appOption)}
-                      className={cn(
-                        'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center transition cursor-pointer active:scale-95',
-                        isSelected
-                          ? 'border-primary bg-primary/10 dark:bg-primary/20 shadow-xs ring-1 ring-primary'
-                          : 'border-ink-600 bg-ink-900 hover:border-slate-400 dark:hover:border-slate-600'
-                      )}
-                    >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
-                        <AppOrUpiIcon app={appOption.key} className="h-5 w-5 shrink-0" />
-                      </span>
-                      <span className={cn('text-xs font-medium line-clamp-1', isSelected ? 'text-slate-100 font-semibold' : 'text-slate-300')}>
-                        {appOption.shortLabel}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+          {/* UPI Apps Selection Grid */}
+          <div className="w-full space-y-2 rounded-2xl border border-ink-600 bg-ink-850/50 p-3 text-left">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Select your UPI app
+              </p>
+              <span className="text-[11px] text-slate-400">1-tap select</span>
             </div>
-          )}
+            <div className="grid grid-cols-3 gap-2 pt-0.5" role="radiogroup" aria-label="UPI app selection">
+              {AVAILABLE_UPI_APPS.map((appOption) => {
+                const isSelected = activeAppKey === appOption.key;
+                return (
+                  <button
+                    key={appOption.key ?? 'ALL'}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => handleSelectApp(appOption)}
+                    className={cn(
+                      'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center transition cursor-pointer active:scale-95',
+                      isSelected
+                        ? 'border-primary bg-primary/10 dark:bg-primary/20 shadow-xs ring-1 ring-primary'
+                        : 'border-ink-600 bg-ink-900 hover:border-slate-400 dark:hover:border-slate-600'
+                    )}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
+                      <AppOrUpiIcon app={appOption.key} className="h-5 w-5 shrink-0" />
+                    </span>
+                    <span className={cn('text-xs font-medium line-clamp-1', isSelected ? 'text-slate-100 font-semibold' : 'text-slate-300')}>
+                      {appOption.shortLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Token display box under token verification */}
           {payment.tokenVerificationEnabled && (
             <div className="w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-left shadow-xs">
               <div className="flex items-center justify-between">
-                <p className="text-overline uppercase tracking-wider text-slate-500 font-semibold text-xs">
-                  Your Payment Token{activeAppLabel ? ` • ${activeAppLabel}` : payment.appLabel ? ` • ${payment.appLabel}` : ''}
+                <p className="text-overline uppercase tracking-wider text-slate-400 font-semibold text-xs">
+                  Your Payment Token{activeAppLabel ? ` • ${activeAppLabel}` : ''}
                 </p>
-                <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
                   Verified
                 </span>
               </div>
               <p className="mt-1 font-mono text-xl font-bold tabular-nums tracking-wide text-slate-100">
                 {customerName ? `${customerName}: ${payment.token}` : payment.token}
               </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Quote this token or your name if asked by store staff to confirm receipt.
+              </p>
             </div>
           )}
 
-          <div className="flex items-center justify-center gap-1.5 text-caption text-slate-500">
-            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="flex items-center justify-center gap-1.5 text-caption text-slate-400">
+            <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
             <span>Secure 1-tap payment via official UPI intent</span>
           </div>
         </div>
@@ -382,32 +395,75 @@ export function ManualUpiPaymentView({
       {/* Mode 2: Scan QR Code */}
       {mode === 'qr' && (
         <div id="qr-panel" role="tabpanel" aria-labelledby={qrTabId} className="w-full space-y-3 pt-1 flex flex-col items-center">
-          <div className="relative rounded-2xl border border-ink-600 bg-white p-3 shadow-md">
+          {/* Dynamic App-Wise QR Code Box */}
+          <div className="relative rounded-2xl border border-ink-600 bg-white p-3 shadow-md flex flex-col items-center">
             <img
-              src={payment.qrDataUri}
+              src={effectiveQr}
               alt="Scan to pay via UPI"
               className="h-52 w-52 object-contain"
             />
             <div className="absolute inset-x-0 -bottom-3 flex justify-center">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-white px-3 py-0.5 text-[11px] font-semibold text-slate-800 shadow-xs">
-                <UpiIcon className="h-3.5 w-3.5" />
-                <span>Scan with any UPI app</span>
+                <AppOrUpiIcon app={activeAppKey} className="h-3.5 w-3.5" />
+                <span>{activeAppLabel ? `${activeAppLabel} QR Code` : 'Scan with any UPI app'}</span>
               </span>
             </div>
           </div>
 
-          <p className="text-body-sm text-slate-500 pt-2">
-            Scan using Google Pay, PhonePe, Paytm or any UPI app.
+          <p className="text-body-sm text-slate-400 pt-2">
+            {activeAppLabel
+              ? `Scan using ${activeAppLabel} to pay directly into merchant's account (${effectiveVpa}).`
+              : `Scan using Google Pay, PhonePe, Paytm or any UPI app to pay (${effectiveVpa}).`}
           </p>
+
+          {/* App Selector on QR tab too so user can choose which app's QR to view */}
+          <div className="w-full space-y-2 rounded-2xl border border-ink-600 bg-ink-850/50 p-3 text-left">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Change QR code by app
+              </p>
+              <span className="text-[11px] text-slate-400">Updates QR instantly</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-0.5" role="radiogroup" aria-label="UPI QR app selection">
+              {AVAILABLE_UPI_APPS.map((appOption) => {
+                const isSelected = activeAppKey === appOption.key;
+                return (
+                  <button
+                    key={appOption.key ?? 'ALL'}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => handleSelectApp(appOption)}
+                    className={cn(
+                      'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center transition cursor-pointer active:scale-95',
+                      isSelected
+                        ? 'border-primary bg-primary/10 dark:bg-primary/20 shadow-xs ring-1 ring-primary'
+                        : 'border-ink-600 bg-ink-900 hover:border-slate-400 dark:hover:border-slate-600'
+                    )}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
+                      <AppOrUpiIcon app={appOption.key} className="h-5 w-5 shrink-0" />
+                    </span>
+                    <span className={cn('text-xs font-medium line-clamp-1', isSelected ? 'text-slate-100 font-semibold' : 'text-slate-300')}>
+                      {appOption.shortLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Token display under verification */}
           {payment.tokenVerificationEnabled && (
             <div className="w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-left shadow-xs">
-              <p className="text-overline uppercase tracking-wider text-slate-500 font-semibold text-xs">
-                Your payment token{activeAppLabel ? ` • ${activeAppLabel}` : payment.appLabel ? ` • ${payment.appLabel}` : ''}
+              <p className="text-overline uppercase tracking-wider text-slate-400 font-semibold text-xs">
+                Your payment token{activeAppLabel ? ` • ${activeAppLabel}` : ''}
               </p>
               <p className="mt-1 font-mono text-xl font-bold tabular-nums text-slate-100">
                 {customerName ? `${customerName}: ${payment.token}` : payment.token}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Quote this token or your name if asked by store staff to confirm receipt.
               </p>
             </div>
           )}
@@ -417,7 +473,7 @@ export function ManualUpiPaymentView({
       {/* Action Footer: Confirming / Mark Payment Done */}
       <div className="w-full pt-2 border-t border-ink-700 space-y-2">
         {confirming ? (
-          <div className="flex items-center justify-center gap-2 text-body-sm text-slate-500 py-1">
+          <div className="flex items-center justify-center gap-2 text-body-sm text-slate-400 py-1">
             <Spinner className="h-4 w-4" />
             <span>Confirming your payment…</span>
           </div>
@@ -426,7 +482,7 @@ export function ManualUpiPaymentView({
             Mark payment done
           </Button>
         ) : (
-          <div className="text-caption text-slate-500">
+          <div className="text-caption text-slate-400">
             {appLaunched
               ? 'Complete the payment in your UPI app, then tap Mark payment done.'
               : mode === 'phone'

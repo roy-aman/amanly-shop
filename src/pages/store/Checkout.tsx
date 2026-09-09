@@ -954,6 +954,7 @@ export default function Checkout() {
         >
           <ManualUpiPaymentView
             payment={manualUpiOrder.manualUpiPayment}
+            orderId={manualUpiOrder.id}
             confirming={manualUpiConfirming}
             showMarkDone={showMarkDone}
             onMarkDone={finishManualUpiOrder}

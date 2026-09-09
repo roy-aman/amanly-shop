@@ -515,6 +515,14 @@ export interface UpiAppOption {
  *
  * Read `tokenVerificationEnabled` FIRST — it decides which of two screens this is.
  */
+export interface ManualUpiAppTarget {
+  app: UpiApp | null;
+  appLabel: string;
+  vpa: string;
+  upiUri: string;
+  qrDataUri: string;
+}
+
 export interface ManualUpiPayment {
   /** The order's payment reference; under verification also the customer's copy to quote. */
   token: string;
@@ -538,6 +546,8 @@ export interface ManualUpiPayment {
    * so show the token to quote alongside the QR.
    */
   tokenVerificationEnabled?: boolean;
+  /** App-specific QR and URI targets for each admin-configured app + common fallback. */
+  appTargets?: ManualUpiAppTarget[];
 }
 
 export interface OrderResponse {

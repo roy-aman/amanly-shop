@@ -398,6 +398,7 @@ export default function OrderDetail() {
           ) : (
             <ManualUpiPaymentView
               payment={order.manualUpiPayment}
+              orderId={order.id}
               confirming={confirming}
               showMarkDone={showMarkDone}
               onMarkDone={handleMarkPaymentDone}

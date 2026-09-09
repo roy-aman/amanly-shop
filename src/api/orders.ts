@@ -35,3 +35,7 @@ export function enableManualUpiForOrder(orderId: string, upiApp?: UpiApp | null)
 export function verifyRazorpayPayment(body: RazorpayVerifyRequest): Promise<OrderResponse> {
   return request('POST', '/api/v1/payments/razorpay/verify', { body, auth: true });
 }
+
+export function updateManualUpiApp(orderId: string, upiApp?: UpiApp | null): Promise<OrderResponse> {
+  return request('POST', `${P}/${orderId}/manual-upi-app`, { body: upiApp ? { upiApp } : undefined, auth: true });
+}

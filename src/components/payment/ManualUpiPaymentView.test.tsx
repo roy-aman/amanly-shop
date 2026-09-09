@@ -65,7 +65,7 @@ describe('ManualUpiPaymentView', () => {
     );
 
     expect(screen.getByText(/499/)).toBeInTheDocument();
-    expect(screen.getByText(/shopowner@upi/)).toBeInTheDocument();
+    expect(screen.getAllByText(/shopowner@upi/)[0]).toBeInTheDocument();
 
     // Segmented tabs
     expect(screen.getByRole('tab', { name: /pay on this phone/i })).toBeInTheDocument();
@@ -229,5 +229,67 @@ describe('ManualUpiPaymentView', () => {
     const markDoneBtn = screen.getByRole('button', { name: /mark payment done/i });
     await user.click(markDoneBtn);
     expect(onMarkDone).toHaveBeenCalledTimes(1);
+  });
+  it('switches QR code, VPA, and deep link dynamically when admin defines appTargets', async () => {
+    const user = userEvent.setup();
+    const targetedPayment: ManualUpiPayment = {
+      token: 'AMA-A7K42',
+      vpa: 'common@upi',
+      qrDataUri: 'data:image/png;base64,common_qr',
+      upiUri: 'upi://pay?pa=common@upi&pn=Store&am=499.00&cu=INR&tr=ORDER123',
+      amount: 499,
+      currency: 'INR',
+      tokenVerificationEnabled: true,
+      appTargets: [
+        {
+          app: null,
+          appLabel: 'Any UPI App',
+          vpa: 'common@upi',
+          upiUri: 'upi://pay?pa=common@upi&pn=Store&am=499.00&cu=INR&tr=ORDER123',
+          qrDataUri: 'data:image/png;base64,common_qr',
+        },
+        {
+          app: 'PHONEPE',
+          appLabel: 'PhonePe',
+          vpa: 'admin-phonepe@ybl',
+          upiUri: 'upi://pay?pa=admin-phonepe@ybl&pn=Store&am=499.00&cu=INR&tr=ORDER123',
+          qrDataUri: 'data:image/png;base64,phonepe_qr',
+        },
+        {
+          app: 'GOOGLE_PAY',
+          appLabel: 'Google Pay',
+          vpa: 'admin-gpay@okaxis',
+          upiUri: 'upi://pay?pa=admin-gpay@okaxis&pn=Store&am=499.00&cu=INR&tr=ORDER123',
+          qrDataUri: 'data:image/png;base64,gpay_qr',
+        },
+      ],
+    };
+
+    renderWithProviders(
+      <ManualUpiPaymentView
+        payment={targetedPayment}
+        defaultMode="qr"
+        onMarkDone={vi.fn()}
+      />
+    );
+
+    // Initial QR image is common_qr
+    const qrImg = screen.getByAltText(/scan to pay via upi/i);
+    expect(qrImg).toHaveAttribute('src', 'data:image/png;base64,common_qr');
+    expect(screen.getAllByText(/common@upi/)[0]).toBeInTheDocument();
+
+    // Select PhonePe on QR tab
+    const phonePeRadio = screen.getByRole('radio', { name: /phonepe/i });
+    await user.click(phonePeRadio);
+
+    // QR image immediately switches to PhonePe's admin-defined QR
+    expect(qrImg).toHaveAttribute('src', 'data:image/png;base64,phonepe_qr');
+    expect(screen.getAllByText(/admin-phonepe@ybl/)[0]).toBeInTheDocument();
+
+    // Select CRED (unconfigured by admin) -> falls back to common fallback VPA & QR
+    const credRadio = screen.getByRole('radio', { name: /cred/i });
+    await user.click(credRadio);
+    expect(qrImg).toHaveAttribute('src', 'data:image/png;base64,common_qr');
+    expect(screen.getAllByText(/common@upi/)[0]).toBeInTheDocument();
   });
 });
