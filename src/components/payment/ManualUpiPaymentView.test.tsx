@@ -28,11 +28,23 @@ describe('ManualUpiPaymentView', () => {
     tokenVerificationEnabled: true,
   };
 
+  const googlePayPayment: ManualUpiPayment = {
+    token: 'AMA-49BV8',
+    vpa: 'royaman78@axl',
+    qrDataUri: 'data:image/png;base64,mockqr',
+    upiUri: 'upi://pay?pa=royaman78@axl&pn=Amanly&am=1.00&cu=INR&tn=Aman%20Raj%3A%20AMA-49BV8%20via%20Google%20Pay&tr=ORDER124',
+    amount: 1,
+    currency: 'INR',
+    app: 'GOOGLE_PAY',
+    appLabel: 'Google Pay',
+    tokenVerificationEnabled: true,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders amount, payee VPA and two clear payment options (Scan QR and Pay on phone)', () => {
+  it('renders amount, payee VPA and both payment options (Pay on phone and Scan QR)', () => {
     renderWithProviders(
       <ManualUpiPaymentView
         payment={genericPayment}
@@ -43,12 +55,12 @@ describe('ManualUpiPaymentView', () => {
     expect(screen.getByText(/499/)).toBeInTheDocument();
     expect(screen.getByText(/shopowner@upi/)).toBeInTheDocument();
 
-    // Both payment methods are obvious
+    // Segmented tabs
     expect(screen.getByRole('tab', { name: /pay on this phone/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /scan qr code/i })).toBeInTheDocument();
   });
 
-  it('does NOT display raw upi:// URL text directly to the user', () => {
+  it('does NOT display raw upi:// URL text directly in visible copy', () => {
     const { container } = renderWithProviders(
       <ManualUpiPaymentView
         payment={genericPayment}
@@ -57,11 +69,10 @@ describe('ManualUpiPaymentView', () => {
       />
     );
 
-    // The raw text upi://pay should never appear in visible text
     expect(container.textContent).not.toContain('upi://pay');
   });
 
-  it('provides direct UPI app launch using the existing payment URI in phone mode', () => {
+  it('renders generic Pay via UPI button when no app is preselected', () => {
     renderWithProviders(
       <ManualUpiPaymentView
         payment={genericPayment}
@@ -70,19 +81,47 @@ describe('ManualUpiPaymentView', () => {
       />
     );
 
-    // Main universal intent button
-    const mainPayLink = screen.getByRole('link', { name: /pay via any upi app/i });
-    expect(mainPayLink).toBeInTheDocument();
-    expect(mainPayLink).toHaveAttribute('href', genericPayment.upiUri);
+    // Primary generic UPI button (UPI logo only, no cluttered extra app buttons)
+    const payLink = screen.getByRole('link', { name: /pay via upi/i });
+    expect(payLink).toBeInTheDocument();
+    expect(payLink).toHaveAttribute('href', genericPayment.upiUri);
+  });
 
-    // Popular app shortcuts
-    const phonePeLink = screen.getByRole('link', { name: /phonepe/i });
-    expect(phonePeLink).toBeInTheDocument();
-    expect(phonePeLink.getAttribute('href')).toContain('phonepe://pay');
+  it('renders app-specific button and icon when a UPI app is selected (e.g. Google Pay)', () => {
+    renderWithProviders(
+      <ManualUpiPaymentView
+        payment={googlePayPayment}
+        customerName="Aman Raj"
+        defaultMode="phone"
+        onMarkDone={vi.fn()}
+      />
+    );
 
-    const gpayLink = screen.getByRole('link', { name: /google pay/i });
-    expect(gpayLink).toBeInTheDocument();
-    expect(gpayLink.getAttribute('href')).toContain('tez://upi/pay');
+    // Shows "Pay with Google Pay"
+    const payLink = screen.getByRole('link', { name: /pay with google pay/i });
+    expect(payLink).toBeInTheDocument();
+    // Google Pay deep link tez://upi/pay
+    expect(payLink.getAttribute('href')).toContain('tez://upi/pay');
+
+    // Token displayed
+    expect(screen.getByText(/your payment token • google pay/i)).toBeInTheDocument();
+    expect(screen.getByText(/Aman Raj: AMA-49BV8/)).toBeInTheDocument();
+  });
+
+  it('renders app-specific button and deep link for PhonePe', () => {
+    renderWithProviders(
+      <ManualUpiPaymentView
+        payment={verifiedPayment}
+        customerName="Aman"
+        defaultMode="phone"
+        onMarkDone={vi.fn()}
+      />
+    );
+
+    const payLink = screen.getByRole('link', { name: /pay with phonepe/i });
+    expect(payLink).toBeInTheDocument();
+    expect(payLink.getAttribute('href')).toContain('phonepe://pay');
+    expect(screen.getByText(/Aman: AMA-A7K42/)).toBeInTheDocument();
   });
 
   it('switches seamlessly to QR code view when user chooses Scan QR Code', async () => {
@@ -99,27 +138,7 @@ describe('ManualUpiPaymentView', () => {
     await user.click(qrTab);
 
     expect(screen.getByAltText(/scan to pay via upi/i)).toBeInTheDocument();
-    expect(screen.getByText(/scan with any upi app to pay from another device/i)).toBeInTheDocument();
-  });
-
-  it('renders dedicated app launcher and payment token when token verification is active', () => {
-    renderWithProviders(
-      <ManualUpiPaymentView
-        payment={verifiedPayment}
-        customerName="Aman"
-        defaultMode="phone"
-        onMarkDone={vi.fn()}
-      />
-    );
-
-    // Dedicated button for preselected app
-    const payAppBtn = screen.getByRole('link', { name: /pay with phonepe/i });
-    expect(payAppBtn).toBeInTheDocument();
-    expect(payAppBtn.getAttribute('href')).toContain('phonepe://pay');
-
-    // Token displayed
-    expect(screen.getByText(/your payment token/i)).toBeInTheDocument();
-    expect(screen.getByText(/Aman: AMA-A7K42/)).toBeInTheDocument();
+    expect(screen.getByText(/scan with any upi app/i)).toBeInTheDocument();
   });
 
   it('copies UPI ID to clipboard when Copy button is pressed', async () => {
@@ -158,12 +177,10 @@ describe('ManualUpiPaymentView', () => {
       />
     );
 
-    const mainPayLink = screen.getByRole('link', { name: /pay via any upi app/i });
-    expect(mainPayLink).toHaveAttribute('href', genericPayment.upiUri);
-    // Opening or clicking intent link does not confirm payment
+    const payLink = screen.getByRole('link', { name: /pay via upi/i });
+    expect(payLink).toHaveAttribute('href', genericPayment.upiUri);
     expect(onMarkDone).not.toHaveBeenCalled();
 
-    // User explicitly marks payment done
     const markDoneBtn = screen.getByRole('button', { name: /mark payment done/i });
     await user.click(markDoneBtn);
     expect(onMarkDone).toHaveBeenCalledTimes(1);
