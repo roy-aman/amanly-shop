@@ -5,7 +5,7 @@
 **This document is your operating contract.** Read all of it before writing any code. It tells you how to run discovery, how to scope the store, what to reuse, what the backend guarantees, and — most importantly — the register of mistakes already made and fixed once (§7). Reintroducing a §7 mistake is the single worst outcome of your work.
 
 **The running backend is the source of truth, and it is reachable.** Production API:
-`https://royal-commerce-service-production.up.railway.app` — OpenAPI at `/api-docs`, browser UI at
+`https://royal-commerce-service-656285950117.asia-south1.run.app` — OpenAPI at `/api-docs`, browser UI at
 `/swagger-ui`. When this playbook, a doc, or your recollection disagrees with it, **it wins** (L21).
 Probe it before you design against a shape: `curl -H "Origin: <an attached origin>" <API>/api/v1/store`.
 Note that `Origin` is required — a bare request is `404 STORE_NOT_MAPPED`, because there is no
