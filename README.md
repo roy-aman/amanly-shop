@@ -90,6 +90,23 @@ new endpoint never involves the base URL.
 
 ## Deployment
 
+### Netlify
+
+`netlify.toml` builds with `npm run build` and publishes `dist`. It proxies `/api/*`,
+`/oauth2/*`, and `/login/oauth2/*` to the production Cloud Run backend before applying the
+React Router fallback to `index.html`. Netlify serves the static bundle; it does not run the
+Vite development proxy or the Caddy container.
+
+The Netlify build explicitly sets `VITE_API_BASE_URL` to an empty string so browser requests remain
+same-origin instead of bypassing the proxy through an inherited API-base override. The proxy rules supply
+`Origin: https://amanly.netlify.app` because the backend uses the storefront origin to resolve
+the store, including for same-origin GET requests that omit that header. These rules are specific
+to Amanly; update their origin when moving to a different registered storefront domain, and update
+all three destinations when changing the backend. `API_PROXY_TARGET` only configures Vite's local
+proxy and does not change the Netlify proxy destinations.
+
+### Docker / Railway
+
 `Dockerfile` builds the bundle and serves it with Caddy; `railway.json` points Railway at it. Set
 `API_UPSTREAM` as a **runtime** variable.
 
