@@ -1,0 +1,32 @@
+[build]
+command = "npm run build"
+publish = "dist"
+
+[build.environment]
+VITE_API_BASE_URL = ""
+
+[[redirects]]
+from = "/api/*"
+to = "https://royal-commerce-service-656285950117.asia-south1.run.app/api/:splat"
+status = 200
+force = true
+headers = { Origin = "https://amanly.netlify.app" }
+
+[[redirects]]
+from = "/oauth2/*"
+to = "https://royal-commerce-service-656285950117.asia-south1.run.app/oauth2/:splat"
+status = 200
+force = true
+headers = { Origin = "https://amanly.netlify.app" }
+
+[[redirects]]
+from = "/login/oauth2/*"
+to = "https://royal-commerce-service-656285950117.asia-south1.run.app/login/oauth2/:splat"
+status = 200
+force = true
+headers = { Origin = "https://amanly.netlify.app" }
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
