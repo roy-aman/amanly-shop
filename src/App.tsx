@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+﻿import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import StoreLayout from '@/components/layout/StoreLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
@@ -74,6 +74,7 @@ const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
 const AdminUserDetail = lazy(() => import('@/pages/admin/AdminUserDetail'));
 const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'));
 const StoreQrCode = lazy(() => import('@/pages/admin/StoreQrCode'));
+const AdminWhatsApp = lazy(() => import('@/pages/admin/AdminWhatsApp'));
 
 // Bookings console. Only rendered for stores the platform has entitled, but the
 // routes exist unconditionally: a merchant who is entitled mid-session should
@@ -237,6 +238,7 @@ export default function App() {
                 a poster for the shop window is counter work. */}
             <Route element={<RequireConsoleFeature feature="SYSTEM" />}>
               <Route path="qr-code" element={<Page title="Store QR code" fallback={<FormSkeleton />}><StoreQrCode /></Page>} />
+              <Route path="whatsapp" element={<Page title="WhatsApp Commerce" fallback={<FormSkeleton />}><AdminWhatsApp /></Page>} />
             </Route>
 
             <Route element={<RequireConsoleFeature feature="BOOKINGS" />}>

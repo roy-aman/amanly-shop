@@ -1,4 +1,4 @@
-/* ===================================================================
+﻿/* ===================================================================
    Amanly — API type contracts
    These mirror the backend DTOs and enums EXACTLY (verified against the
    Spring controllers/DTOs). Keep in sync with src/main/java/.../*.dto.
@@ -750,6 +750,9 @@ export interface PublicStoreResponse {
    * the platform's default everywhere else. Read it through `useLexicon()`,
    * which supplies this bundle's own defaults for any key a deploy predates.
    */
+  /** Customer WhatsApp support and ordering number. */
+  whatsappNumber?: string | null;
+  supportEmail?: string | null;
   lexicon?: Record<string, string>;
 }
 
@@ -931,6 +934,80 @@ export interface UpdateStoreUpiSettingsRequest {
   tokenVerificationEnabled: boolean;
   /** FULL REPLACE: an app left out is removed. `null` leaves the list untouched. */
   configs?: { app: UpiApp; upiId: string; enabled?: boolean }[] | null;
+}
+
+// â”€â”€ WhatsApp Commerce & Flows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export interface WhatsAppConnectionResponse {
+  id: string;
+  storeId: string;
+  phoneNumberId: string;
+  wabaId: string | null;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+  qualityRating: string | null;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'REVOKED' | 'PENDING_VERIFICATION' | string;
+  onboardingMethod: string;
+  connected: boolean;
+  hasAccessToken?: boolean;
+  hasAppSecret?: boolean;
+  verifyToken?: string | null;
+  createdAt?: string;
+}
+
+export interface ConnectWhatsAppNumberRequest {
+  phoneNumberId: string;
+  wabaId?: string | null;
+  displayPhoneNumber?: string | null;
+  accessToken?: string | null;
+  appSecret?: string | null;
+  verifyToken?: string | null;
+  onboardingMethod?: string | null;
+}
+
+export interface WhatsAppOperatorResponse {
+  id: string;
+  storeId: string;
+  phoneNumber: string;
+  userId: string | null;
+  displayName: string;
+  operatorRole: 'STORE_OWNER' | 'STAFF';
+  active: boolean;
+}
+
+export interface RegisterWhatsAppOperatorRequest {
+  phoneNumber: string;
+  displayName?: string | null;
+  role?: string | null;
+  userId?: string | null;
+}
+
+export interface WhatsAppFlowTemplateResponse {
+  id: string;
+  templateKey: string;
+  name: string;
+  description: string;
+  category: string;
+  flowVersion: string;
+  status?: string;
+  metaFlowJson: string;
+}
+
+export interface WhatsAppFlowDeploymentResponse {
+  id: string;
+  storeId: string;
+  wabaId: string;
+  templateKey: string;
+  metaFlowId: string;
+  deployedVersion: string;
+  metaFlowStatus: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DeployFlowRequest {
+  templateKey: string;
+  metaFlowId: string;
+  version: string;
 }
 
 export interface UpdateWhatsappSettingsRequest {

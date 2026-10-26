@@ -1,4 +1,4 @@
-import { buildQuery, request } from '@/lib/http';
+﻿import { buildQuery, request } from '@/lib/http';
 import type {
   AdminCouponResponse,
   AdminCreateUserRequest,
@@ -38,6 +38,13 @@ import type {
   UpdateStoreLexiconRequest,
   UpdateStoreUpiSettingsRequest,
   UpdateWhatsappSettingsRequest,
+  WhatsAppConnectionResponse,
+  ConnectWhatsAppNumberRequest,
+  WhatsAppOperatorResponse,
+  RegisterWhatsAppOperatorRequest,
+  WhatsAppFlowTemplateResponse,
+  WhatsAppFlowDeploymentResponse,
+  DeployFlowRequest,
   UserResponse,
 } from '@/lib/types';
 
@@ -288,5 +295,34 @@ export const adminStore = {
    *  nothing will ever render. */
   updateLexicon(body: UpdateStoreLexiconRequest): Promise<StoreSettingsResponse> {
     return request('PUT', `${A}/store/lexicon`, { body, auth: true });
+  },
+};
+
+
+export const adminWhatsApp = {
+  getStatus(): Promise<WhatsAppConnectionResponse | null> {
+    return request<WhatsAppConnectionResponse>('GET', `${A}/whatsapp/status`, { auth: true })
+      .catch((err: any) => {
+        if (err?.status === 204 || err?.status === 404) return null;
+        throw err;
+      });
+  },
+  connect(body: ConnectWhatsAppNumberRequest): Promise<WhatsAppConnectionResponse> {
+    return request<WhatsAppConnectionResponse>('POST', `${A}/whatsapp/connect`, { body, auth: true });
+  },
+  disconnect(): Promise<WhatsAppConnectionResponse> {
+    return request<WhatsAppConnectionResponse>('POST', `${A}/whatsapp/disconnect`, { auth: true });
+  },
+  getOperators(): Promise<WhatsAppOperatorResponse[]> {
+    return request<WhatsAppOperatorResponse[]>('GET', `${A}/whatsapp/operators`, { auth: true });
+  },
+  registerOperator(body: RegisterWhatsAppOperatorRequest): Promise<WhatsAppOperatorResponse> {
+    return request<WhatsAppOperatorResponse>('POST', `${A}/whatsapp/operators`, { body, auth: true });
+  },
+  getFlows(): Promise<WhatsAppFlowTemplateResponse[]> {
+    return request<WhatsAppFlowTemplateResponse[]>('GET', `${A}/whatsapp/flows`, { auth: true });
+  },
+  deployFlow(body: DeployFlowRequest): Promise<unknown> {
+    return request('POST', `${A}/whatsapp/flows/deploy`, { body, auth: true });
   },
 };

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from 'react';
+﻿import { useMemo, useState, type ComponentType } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -142,6 +142,7 @@ const NAV_GROUPS: NavGroup[] = [
       // Not adminOnly: the backend allows STAFF, and printing a poster for the
       // window is counter work rather than an owner's job.
       { to: '/admin/qr-code', label: 'nav.storeQr', icon: QrCode },
+      { to: '/admin/whatsapp', label: 'nav.whatsapp', icon: MessagesSquare, adminOnly: true },
     ],
   },
 ];
@@ -181,6 +182,7 @@ const CRUMB_KEYS: Record<string, LexiconKey> = {
   users: 'nav.users',
   settings: 'nav.settings',
   'qr-code': 'nav.storeQr',
+  whatsapp: 'nav.whatsapp',
   bookings: 'nav.diary',
   services: 'nav.services',
   'service-categories': 'nav.serviceGroups',

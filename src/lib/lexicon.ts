@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+﻿import { useQuery } from '@tanstack/react-query';
 
 import { getPublicStore } from '@/api/store';
 
@@ -85,6 +85,7 @@ export const LEXICON_DEFAULTS = {
   'nav.reports': 'Reports',
   'nav.system': 'System',
   'nav.storeQr': 'Store QR code',
+  'nav.whatsapp': 'WhatsApp Commerce',
   'nav.settings': 'Settings',
 } as const;
 
