@@ -1,3 +1,4 @@
+﻿import { Link } from 'react-router-dom';
 import { createContext, useRef, useContext, useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, CreditCard, MessageCircle, QrCode, Tag, Trash2, Truck, Type } from 'lucide-react';
@@ -770,6 +771,21 @@ function PaymentsCard({ store }: { store: StoreSettingsResponse }) {
       dirty={fold.dirty}
       onEdited={fold.markEdited}
     >
+      <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg flex items-center justify-between mb-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-100 flex items-center gap-1.5">
+            <MessageCircle className="h-4 w-4 text-emerald-400" />
+            WhatsApp Commerce &amp; Bot Hub
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Manage WABA credentials, authorized store operators, and Meta Flow templates.
+          </p>
+        </div>
+        <Link to="/admin/whatsapp" className="rc-btn rc-btn-secondary rc-btn-sm inline-flex items-center gap-1.5 text-xs text-emerald-400">
+          Open WhatsApp Hub &rarr;
+        </Link>
+      </div>
+
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input type="checkbox" checked={codEnabled} onChange={(e) => setCodEnabled(e.target.checked)} />
@@ -1154,6 +1170,21 @@ function WhatsappCard({ store }: { store: StoreSettingsResponse }) {
       dirty={fold.dirty}
       onEdited={fold.markEdited}
     >
+      <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg flex items-center justify-between mb-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-100 flex items-center gap-1.5">
+            <MessageCircle className="h-4 w-4 text-emerald-400" />
+            WhatsApp Commerce &amp; Bot Hub
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Manage WABA credentials, authorized store operators, and Meta Flow templates.
+          </p>
+        </div>
+        <Link to="/admin/whatsapp" className="rc-btn rc-btn-secondary rc-btn-sm inline-flex items-center gap-1.5 text-xs text-emerald-400">
+          Open WhatsApp Hub &rarr;
+        </Link>
+      </div>
+
       <form onSubmit={onSubmit} className="space-y-4">
         <label className="flex items-center gap-2 text-sm text-slate-300">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />

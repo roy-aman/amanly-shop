@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PackageX, Share2 } from 'lucide-react';
+import { MessageCircle, PackageX, Share2 } from 'lucide-react';
 import { getProduct, listProducts } from '@/api/catalog';
 import { getPublicStore } from '@/api/store';
 import { addToCart } from '@/api/cart';
@@ -604,6 +604,30 @@ export default function ProductDetail() {
                   ? 'Out of stock'
                   : 'Add to bag'}
             </Button>
+
+            {storeQuery.data?.whatsappNumber && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                className="w-full border-emerald-600/40 text-emerald-400 hover:bg-emerald-950/30 hover:border-emerald-500 flex items-center justify-center gap-2"
+                onClick={() => {
+                  const cleanPhone = (storeQuery.data.whatsappNumber ?? '').replace(/[^0-9]/g, '');
+                  if (!cleanPhone) return;
+                  const currentPrice = requiresVariant && selectedVariant ? selectedVariant.effectivePrice : product.price;
+                  const priceStr = money(currentPrice, product.currency);
+                  const isCommerce = storeQuery.data.features?.includes('WHATSAPP_COMMERCE') ?? false;
+                  const actionText = isCommerce ? 'order' : 'inquire about';
+                  const text = encodeURIComponent(
+                    `Hi ${storeQuery.data.name}! I would like to ${actionText}: ${product.name} (Qty: ${qty}, Price: ${priceStr})`
+                  );
+                  window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
+                }}
+              >
+                <MessageCircle className="h-5 w-5 text-emerald-400" />
+                {storeQuery.data.features?.includes('WHATSAPP_COMMERCE') ? 'Order via WhatsApp' : 'Inquire via WhatsApp'}
+              </Button>
+            )}
 
             <div className="flex items-center gap-6 pt-1">
               <WishlistButton

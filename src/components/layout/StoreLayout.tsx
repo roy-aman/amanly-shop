@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -17,6 +17,7 @@ import {
   Youtube,
 } from 'lucide-react';
 import { ThemeSegmented, ThemeToggle } from '@/components/ThemeToggle';
+import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -364,6 +365,7 @@ export default function StoreLayout() {
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 focus:outline-none sm:px-6 lg:px-8">
         <Outlet />
       </main>
+      <WhatsAppFloatingButton />
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <footer className="mt-20 border-t border-ink-700">
